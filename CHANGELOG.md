@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0a2
+
+Fix an intermittent Windows client request-spacing failure exposed by post-merge
+Python 3.12 CI. The bridge rechecks its monotonic deadline after early timer
+wakeups and starts the next interval after the HTTP attempt completes, including
+failed attempts. The existing one-shot/no-retry execution behavior is unchanged.
+Deterministic timing regressions cover early wakeups, dispatch overhead, failures
+and cancellation. Native JevEditor remains 0.4.0; this patch changes Python only.
+
 ## 0.4.0a1
 
 - Added **Window → Jev Review**, using the native inspect/preview/apply path for
