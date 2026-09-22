@@ -1,6 +1,7 @@
 """Exercise authentication, project binding and failures without a live editor."""
 
 import json
+import time
 
 import httpx
 import pytest
@@ -21,7 +22,21 @@ def status_response(project=PROJECT):
     return response({"project_file": project, "session": "test-session"})
 
 
-@pytest.mark.parametrize("action", ["status", "actors", "assets", "preview", "apply"])
+@pytest.mark.parametrize(
+    "action",
+    [
+        "status",
+        "actors",
+        "assets",
+        "preview",
+        "apply",
+        "context",
+        "asset_details",
+        "validate",
+        "capture",
+        "frame",
+    ],
+)
 async def test_authentication_and_project_identity_checked_before_each_operation(action):
     seen = []
 
@@ -47,7 +62,45 @@ async def test_authentication_and_project_identity_checked_before_each_operation
         assert len(seen) == 2
 
 
-@pytest.mark.parametrize("action", ["preview", "apply"])
+async def test_fast_requests_are_paced_including_identity_reads():
+    observed = []
+
+    def handler(request):
+        observed.append(time.monotonic())
+        return status_response()
+
+    bridge = UnrealBridge(Settings(bridge_token=TOKEN), httpx.MockTransport(handler))
+    try:
+        await bridge.call("actors")
+        await bridge.call("context")
+        assert len(observed) == 4
+        assert all(b - a >= 0.045 for a, b in zip(observed, observed[1:], strict=False))
+    finally:
+        await bridge.close()
+
+
+@pytest.mark.parametrize(
+    "http_status,code", [(429, "rate_limited"), (401, "unauthorized"), (403, "forbidden")]
+)
+async def test_native_http_rejections_are_distinct_and_never_retried(http_status, code):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(http_status, text="synthetic-private-diagnostic")
+
+    bridge = UnrealBridge(Settings(bridge_token=TOKEN), httpx.MockTransport(handler))
+    try:
+        with pytest.raises(JevError) as caught:
+            await bridge.call("apply", {"plan_id": "once"})
+        assert caught.value.code == code
+        assert "synthetic-private-diagnostic" not in str(caught.value)
+        assert len(calls) == 1
+    finally:
+        await bridge.close()
+
+
+@pytest.mark.parametrize("action", ["preview", "apply", "frame"])
 async def test_scene_edits_require_explicit_project_configuration(action):
     calls = []
 
@@ -65,7 +118,21 @@ async def test_scene_edits_require_explicit_project_configuration(action):
         await bridge.close()
 
 
-@pytest.mark.parametrize("action", ["status", "actors", "assets", "preview", "apply"])
+@pytest.mark.parametrize(
+    "action",
+    [
+        "status",
+        "actors",
+        "assets",
+        "preview",
+        "apply",
+        "context",
+        "asset_details",
+        "validate",
+        "capture",
+        "frame",
+    ],
+)
 async def test_wrong_project_blocks_reads_and_mutations(action):
     calls = []
 

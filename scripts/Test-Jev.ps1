@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([switch]$SmokeOnly)
+param([switch]$SmokeOnly, [switch]$WorkflowSmoke)
 $ErrorActionPreference = 'Stop'
+if ($SmokeOnly -and $WorkflowSmoke) { throw 'Choose SmokeOnly or WorkflowSmoke, not both.' }
 . "$PSScriptRoot/Import-JevSecurity.ps1"
 $jevRoot = Split-Path -Parent $PSScriptRoot
 $jevPriorKey = $env:OPENROUTER_API_KEY
@@ -15,7 +16,9 @@ try {
         $jevPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($jevSecureKey)
         $env:OPENROUTER_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($jevPointer)
     }
-    if ($SmokeOnly) {
+    if ($WorkflowSmoke) {
+        & uv --directory $jevRoot run --frozen python (Join-Path $PSScriptRoot 'smoke_semantics.py') --include-route --output (Join-Path $jevRoot 'artifacts\semantic-smoke.json')
+    } elseif ($SmokeOnly) {
         & uv --directory $jevRoot run --frozen jev-unreal smoke
     } else {
         & uv --directory $jevRoot run --frozen python (Join-Path $PSScriptRoot 'evaluate.py') --output (Join-Path $jevRoot 'artifacts\jev-evaluation.json')

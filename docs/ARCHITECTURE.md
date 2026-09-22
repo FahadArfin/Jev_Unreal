@@ -9,6 +9,9 @@ flowchart LR
     Jev -->|choice / probability / score| MCP
     MCP -->|authenticated loopback| Editor[JevEditor plugin]
     Editor -->|preview then one-shot apply| World[Unreal editor world]
+    MCP -->|initialize + tools/list only| Catalog[Explicit local MCP endpoints]
+    Catalog -->|exact schemas + descriptions| Index[Versioned local search index]
+    Index --> MCP
 ```
 
 There is no Jev-to-execution edge. A decision returns a candidate ID. The caller supplies operation arguments, reviews a preview, and chooses whether to execute within the user's authorization. The editor validates operations independently.
@@ -19,7 +22,7 @@ MCP uses the official Python SDK over stdio. Standard output carries only the pr
 
 The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{action,params}`, envelope `{ok:true,result}` or `{ok:false,error:{code,message}}`. Unreal owns scene validation, plan lifetime and transactions. Python repeats project identity validation before every call, and requires `JEV_EXPECTED_PROJECT` for preview/apply.
 
-The plugin has no runtime game module. Shipping games do not need Python, Jev credentials or this HTTP listener. Runtime NPC decisions require a separate server-authoritative design and are outside version 0.1.
+The plugin has no runtime game module. Shipping games do not need Python, Jev credentials or this HTTP listener. Runtime NPC decisions require a separate server-authoritative design and are outside version 0.2.
 
 ## Reliability and privacy
 
@@ -34,6 +37,12 @@ The plugin has no runtime game module. Shipping games do not need Python, Jev cr
 
 ## Extension points
 
-The `DecisionClient` does not depend on Unreal. `jev_route` accepts a shortlist of external tool IDs/descriptions, so a caller can route existing Unreal MCP tools today and Blender tools later. It does not automatically connect to or execute arbitrary MCP servers. Add adapters behind an explicit configuration boundary, preserve schemas, and benchmark against direct tool use before enabling automatic routing.
+The `DecisionClient`, tool catalog, asset selector and diagnostic grouper do not depend on Unreal. `ToolCatalog` discovers explicit loopback Streamable HTTP endpoints using initialization and `tools/list`; transport policy rejects external `tools/call`. It preserves schemas, derives bounded action presets, atomically caches a complete snapshot and searches locally. It never launches servers or automatically uploads catalogs. [Discovery contracts](TOOL_DISCOVERY.md).
 
-Useful next work: evaluate representative Unreal tool catalogs; improve asset candidate retrieval and ranking; add more bounded editor operations; support configurable per-project ports; add optional telemetry with explicit consent; test more engine/platform versions. None is advertised as implemented in this release.
+Asset filtering and log grouping default to local processing. Their explicit `use_jev` option sends only supplied bounded data; local results survive provider failures with distinct requested/attempted/used flags. Returned metadata is not automatically verified against Unreal, and logs are not automatically read. [Semantic helper contracts](SEMANTIC_TOOLS.md).
+
+Layout compilation is deterministic math, producing existing preview operations. `PreviewTracker` keeps at most 64 short-lived normalized expectations in memory and verifies identity/transform readbacks after native application. It checks quaternion orientation equivalence, not just Euler spelling. Verification failure preserves the applied result; it never silently retries or rolls back an already-applied operation. A process restart loses its verification records, which is reported explicitly.
+
+Native inspection reports independent truncation flags and exact object paths. Framing validates the requested actors and rejects piloted/locked viewports before moving the editor camera. Capture reads only that editor viewport and returns a bounded PNG directly as MCP image content, with no arbitrary file access. Capture structure/CRCs are validated before delivery. Rendering evidence, deterministic warning checks and gameplay acceptance remain separate. [Native contracts](NATIVE_TOOLS.md).
+
+Useful next work: representative held-out task evaluation, more measured operations, configurable per-project bridge ports, wider platform validation and a Blender adapter. Improvements in total task time/cost must be measured against direct tool use and deterministic retrieval before they are claimed.

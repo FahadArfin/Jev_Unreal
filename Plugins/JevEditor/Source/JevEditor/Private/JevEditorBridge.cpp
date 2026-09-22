@@ -13,6 +13,8 @@
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
 #include "ScopedTransaction.h"
+#include "Serialization/JsonSerializer.h"
+#include "UObject/StrongObjectPtr.h"
 
 namespace Jev
 {
@@ -95,6 +97,21 @@ TSharedRef<FJsonObject> FJevEditorBridge::Error(const FString& Code, const FStri
     return Response;
 }
 
+FString FJevEditorBridge::BoundedResponseBody(const TSharedRef<FJsonObject>& Response)
+{
+    FString Body;
+    auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body);
+    const bool bSerialized = FJsonSerializer::Serialize(Response, Writer);
+    const FTCHARToUTF8 Bytes(*Body);
+    if (!bSerialized || Bytes.Length() > 1048576)
+    {
+        Body.Reset();
+        auto ErrorWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Body);
+        FJsonSerializer::Serialize(Error(TEXT("response_too_large"), TEXT("The editor response exceeds 1 MiB. Reduce the requested limit or narrow the query.")), ErrorWriter);
+    }
+    return Body;
+}
+
 TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
 {
     auto Result = MakeShared<FJsonObject>();
@@ -105,6 +122,14 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
     const FRotator Rotation = Actor->GetActorRotation();
     Result->SetArrayField(TEXT("rotation"), Jev::Vector(FVector(Rotation.Pitch, Rotation.Yaw, Rotation.Roll)));
     Result->SetArrayField(TEXT("scale"), Jev::Vector(Actor->GetActorScale3D()));
+    if (const AStaticMeshActor* StaticActor = Cast<AStaticMeshActor>(Actor))
+    {
+        const UStaticMeshComponent* Component = StaticActor->GetStaticMeshComponent();
+        Result->SetStringField(TEXT("static_mesh_path"), GetPathNameSafe(Component->GetStaticMesh()));
+        Result->SetBoolField(TEXT("collision_enabled"), Component->GetCollisionEnabled() != ECollisionEnabled::NoCollision);
+        Result->SetStringField(TEXT("collision_profile"), Component->GetCollisionProfileName().ToString());
+        Result->SetNumberField(TEXT("material_slot_count"), Component->GetNumMaterials());
+    }
     return Result;
 }
 
@@ -149,29 +174,22 @@ TSharedRef<FJsonObject> FJevEditorBridge::Execute(const TSharedPtr<FJsonObject>&
     if (!GEditor || !GEditor->GetEditorWorldContext().World())
         return Error(TEXT("editor_unavailable"), TEXT("An editor world is required."));
     UWorld* World = GEditor->GetEditorWorldContext().World();
-    if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor)
-        return Error(TEXT("play_mode"), TEXT("Stop Play or Simulate before using the bridge."));
-
     if (Action == TEXT("status"))
     {
         if (!Params->Values.IsEmpty()) return Error(TEXT("bad_request"), TEXT("status has no parameters."));
-        auto Result = MakeShared<FJsonObject>();
-        Result->SetStringField(TEXT("engine_version"), FEngineVersion::Current().ToString());
-        Result->SetStringField(TEXT("project_file"), Jev::ProjectPath());
-        Result->SetStringField(TEXT("session_id"), SessionId);
-        Result->SetStringField(TEXT("world_path"), World->GetPathName());
-        Result->SetStringField(TEXT("revision"), Revision(World));
-        Result->SetStringField(TEXT("bridge_version"), TEXT("0.1.0"));
-        TArray<TSharedPtr<FJsonValue>> Capabilities;
-        for (const TCHAR* Capability : { TEXT("status"), TEXT("actors"), TEXT("assets"), TEXT("preview"), TEXT("apply") })
-            Capabilities.Add(MakeShared<FJsonValueString>(Capability));
-        Result->SetArrayField(TEXT("capabilities"), Capabilities);
-        return Jev::Success(Result);
+        return Jev::Success(StatusSnapshot(World));
     }
+    if (Action == TEXT("context")) return Context(World, Params);
+    if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor)
+        return Error(TEXT("play_mode"), TEXT("Stop Play or Simulate before this operation; status and context remain available."));
+    if (Action == TEXT("asset_details")) return AssetDetails(Params);
+    if (Action == TEXT("validate")) return Validate(World, Params);
+    if (Action == TEXT("capture")) return Capture(World, Params);
+    if (Action == TEXT("frame")) return Frame(World, Params);
     if (Action == TEXT("preview")) return Preview(World, Params);
     if (Action == TEXT("apply")) return Apply(World, Params);
     if (Action != TEXT("actors") && Action != TEXT("assets"))
-        return Error(TEXT("unknown_action"), TEXT("Supported actions: status, actors, assets, preview, apply."));
+        return Error(TEXT("unknown_action"), TEXT("Supported actions: status, context, actors, assets, asset_details, validate, capture, frame, preview, apply."));
 
     if (!Jev::OnlyFields(Params, Action == TEXT("assets") ? TArray<FString>{TEXT("limit"), TEXT("query"), TEXT("path")} : TArray<FString>{TEXT("limit"), TEXT("query")}))
         return Error(TEXT("bad_request"), TEXT("Unexpected inspection parameter."));
@@ -262,6 +280,17 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
                 return Error(TEXT("bad_request"), TEXT("spawn_primitive requires allowed shape and label (1 to 80 characters)."));
             for (TCHAR Character : Operation.Label) if (Character < 32 || Character == 127) return Error(TEXT("bad_request"), TEXT("Actor labels must not contain control characters."));
         }
+        else if (Operation.Op == TEXT("spawn_static_mesh"))
+        {
+            if (!Jev::OnlyFields(Object, {TEXT("op"), TEXT("asset_path"), TEXT("label"), TEXT("location"), TEXT("rotation"), TEXT("scale")}) ||
+                !Jev::ReadString(Object, TEXT("asset_path"), Operation.AssetPath) ||
+                !Jev::ReadString(Object, TEXT("label"), Operation.Label) || Operation.Label.TrimStartAndEnd().IsEmpty() || Operation.Label.Len() > 80)
+                return Error(TEXT("bad_request"), TEXT("spawn_static_mesh requires asset_path and label (1 to 80 characters), without shape or actor_path."));
+            for (TCHAR Character : Operation.Label) if (Character < 32 || Character == 127) return Error(TEXT("bad_request"), TEXT("Actor labels must not contain control characters."));
+            UStaticMesh* Mesh = nullptr;
+            if (const auto Failure = ResolveStaticMeshAsset(Operation.AssetPath, Mesh)) return Failure.ToSharedRef();
+            Operation.MeshAsset = Mesh;
+        }
         else if (Operation.Op == TEXT("set_transform"))
         {
             if (!Jev::OnlyFields(Object, {TEXT("op"), TEXT("actor_path"), TEXT("location"), TEXT("rotation"), TEXT("scale")}) ||
@@ -270,7 +299,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
                 return Error(TEXT("bad_request"), TEXT("set_transform requires actor_path and at least one transform field."));
             AActor* Actor = FindActor(World, Operation.ActorPath);
             if (!Actor || !Actor->GetRootComponent()) return Error(TEXT("actor_not_found"), TEXT("Transform target must be an existing actor with a root component in the editor world."));
-            if (!Jev::IsSafeTransformTarget(Actor)) return Error(TEXT("actor_unsupported"), TEXT("Version 0.1 transforms only exact native StaticMeshActor objects without attached parents, children, or child-actor ownership."));
+            if (!Jev::IsSafeTransformTarget(Actor)) return Error(TEXT("actor_unsupported"), TEXT("The bridge transforms only exact native StaticMeshActor objects without attached parents, children, or child-actor ownership."));
             Operation.Target = Actor;
             if (Actor->IsLockLocation() || FLevelUtils::IsLevelLocked(Actor->GetLevel())) return Error(TEXT("actor_locked"), TEXT("Transform target or its level is locked in the editor."));
             if (TransformTargets.Contains(Operation.ActorPath)) return Error(TEXT("bad_request"), TEXT("A plan may transform each actor only once."));
@@ -280,13 +309,14 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
             Rotation = FVector(ActorRotation.Pitch, ActorRotation.Yaw, ActorRotation.Roll);
             Scale = Actor->GetActorScale3D();
         }
-        else return Error(TEXT("bad_request"), TEXT("Only spawn_primitive and set_transform are allowed."));
+        else return Error(TEXT("bad_request"), TEXT("Only spawn_primitive, spawn_static_mesh, and set_transform are allowed."));
         if (!Jev::ReadVector(Object, TEXT("location"), Location, 1000000.0) || !Jev::ReadVector(Object, TEXT("rotation"), Rotation, 36000.0) || !Jev::ReadVector(Object, TEXT("scale"), Scale, 1000.0, true))
             return Error(TEXT("bad_request"), TEXT("Transforms must be three finite numbers: location +/-1000000 cm, rotation +/-36000 degrees, scale 0.001 to 1000."));
         Operation.Transform = FTransform(FRotator(Rotation.X, Rotation.Y, Rotation.Z), Location, Scale);
         auto Summary = MakeShared<FJsonObject>();
         Summary->SetStringField(TEXT("op"), Operation.Op);
         if (Operation.Op == TEXT("spawn_primitive")) { Summary->SetStringField(TEXT("shape"), Operation.Shape); Summary->SetStringField(TEXT("label"), Operation.Label); }
+        else if (Operation.Op == TEXT("spawn_static_mesh")) { Summary->SetStringField(TEXT("asset_path"), Operation.AssetPath); Summary->SetStringField(TEXT("label"), Operation.Label); }
         else Summary->SetStringField(TEXT("actor_path"), Operation.ActorPath);
         Summary->SetArrayField(TEXT("location"), Jev::Vector(Location));
         Summary->SetArrayField(TEXT("rotation"), Jev::Vector(Rotation));
@@ -320,7 +350,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
         return Error(TEXT("level_locked"), TEXT("The current editor level must be editable."));
 
     // Resolve every asset and actor before opening the undo transaction.
-    TMap<FString, UStaticMesh*> Meshes;
+    TMap<FString, TStrongObjectPtr<UStaticMesh>> Meshes;
     TMap<FString, TWeakObjectPtr<AActor>> Targets;
     for (const FOperation& Operation : Plan.Operations)
     {
@@ -328,7 +358,15 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
         {
             UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Jev::MeshPath(Operation.Shape));
             if (!Mesh) return Error(TEXT("asset_unavailable"), TEXT("An engine primitive mesh could not be loaded."));
-            Meshes.Add(Operation.Shape, Mesh);
+            Meshes.Add(Operation.Shape, TStrongObjectPtr<UStaticMesh>(Mesh));
+        }
+        else if (Operation.Op == TEXT("spawn_static_mesh"))
+        {
+            if (!Operation.MeshAsset.IsValid()) return Error(TEXT("stale_plan"), TEXT("The selected mesh asset is no longer the live object reviewed in preview."));
+            UStaticMesh* Mesh = nullptr;
+            if (const auto Failure = ResolveStaticMeshAsset(Operation.AssetPath, Mesh)) return Failure.ToSharedRef();
+            if (Operation.MeshAsset.Get() != Mesh) return Error(TEXT("stale_plan"), TEXT("The selected mesh asset was replaced after preview."));
+            Meshes.Add(Operation.AssetPath, TStrongObjectPtr<UStaticMesh>(Mesh));
         }
         else
         {
@@ -348,8 +386,11 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
         for (const FOperation& Operation : Plan.Operations)
         {
             AActor* Actor = nullptr;
-            if (Operation.Op == TEXT("spawn_primitive"))
+            if (Operation.Op == TEXT("spawn_primitive") || Operation.Op == TEXT("spawn_static_mesh"))
             {
+                const FString& MeshKey = Operation.Op == TEXT("spawn_primitive") ? Operation.Shape : Operation.AssetPath;
+                UStaticMesh* Mesh = Meshes[MeshKey].Get();
+                if (!IsValid(Mesh)) { bFailed = true; break; }
                 FActorSpawnParameters SpawnParameters;
                 SpawnParameters.OverrideLevel = World->GetCurrentLevel();
                 SpawnParameters.ObjectFlags |= RF_Transactional;
@@ -360,7 +401,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
                 Spawned.Add(Actor);
                 Actor->Modify();
                 StaticActor->GetStaticMeshComponent()->Modify();
-                StaticActor->GetStaticMeshComponent()->SetStaticMesh(Meshes[Operation.Shape]);
+                if (!StaticActor->GetStaticMeshComponent()->SetStaticMesh(Mesh)) { bFailed = true; break; }
                 Actor->SetActorLabel(Operation.Label);
             }
             else

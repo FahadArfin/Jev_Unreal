@@ -1,9 +1,10 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 from jev_unreal.errors import JevError
-from jev_unreal.workflows import Candidate, gate, route, triage
+from jev_unreal.workflows import Candidate, Operation, gate, route, triage
 
 
 @pytest.mark.parametrize(
@@ -85,3 +86,100 @@ async def test_triage_batches_questions_in_one_request():
     assert result["outcome"] == "defer"
     client.decide.assert_awaited_once()
     assert set(client.decide.call_args.args[1]) == {"category", "blocking"}
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("location", ["100", 0, 0]),
+        ("location", [True, 0, 0]),
+        ("rotation", [False, 0, 0]),
+        ("scale", ["1", 1, 1]),
+        ("location", [1000001, 0, 0]),
+        ("rotation", [0, 36001, 0]),
+        ("scale", [0, 1, 1]),
+        ("scale", [1001, 1, 1]),
+        ("scale", [-1, 1, 1]),
+        ("location", [float("nan"), 0, 0]),
+        ("rotation", [float("inf"), 0, 0]),
+        ("label", "   "),
+        ("label", "line\nbreak"),
+        ("label", "null\x00character"),
+        ("label", "delete\x7fcharacter"),
+        ("label", "\U0001f600" * 41),
+    ],
+)
+def test_operation_rejects_coercion_and_native_limit_violations(field, value):
+    with pytest.raises(ValidationError):
+        Operation.model_validate(
+            {
+                "op": "spawn_primitive",
+                "shape": "Cube",
+                "label": "Box",
+                field: value,
+            }
+        )
+
+
+def test_operation_accepts_json_lists_with_exact_numeric_native_boundaries():
+    operation = Operation.model_validate(
+        {
+            "op": "spawn_primitive",
+            "shape": "Cube",
+            "label": "Box",
+            "location": [-1000000, 0, 1000000],
+            "rotation": [-36000, 0, 36000],
+            "scale": [0.001, 1, 1000],
+        }
+    )
+    assert operation.model_dump(mode="json")["location"] == [-1000000, 0, 1000000]
+    assert (
+        Operation.model_validate(
+            {
+                "op": "set_transform",
+                "actor_path": "/Temp/World.Box",
+                "scale": [1, 2, 3],
+            }
+        ).shape
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        {"op": "spawn_primitive", "shape": "Cube"},
+        {"op": "spawn_primitive", "label": "Box"},
+        {"op": "spawn_primitive", "shape": "Cube", "label": "Box", "actor_path": "/Temp/Box"},
+        {"op": "set_transform", "location": [1, 2, 3]},
+        {"op": "set_transform", "actor_path": "/Temp/Box"},
+        {"op": "set_transform", "actor_path": " ", "scale": [1, 1, 1]},
+        {"op": "set_transform", "actor_path": "/Temp/Box", "label": "Box", "scale": [1, 1, 1]},
+        {"op": "set_transform", "actor_path": "/Temp/Box", "shape": "Cube", "scale": [1, 1, 1]},
+    ],
+)
+def test_operation_requires_only_fields_for_its_native_action(operation):
+    with pytest.raises(ValidationError):
+        Operation.model_validate(operation)
+
+
+def test_static_mesh_spawn_requires_exact_asset_and_no_cross_operation_fields():
+    valid = {
+        "op": "spawn_static_mesh",
+        "asset_path": "/Engine/BasicShapes/Cube.Cube",
+        "label": "ExistingMesh",
+        "location": [0, 0, 50],
+    }
+    assert Operation.model_validate(valid).asset_path == valid["asset_path"]
+    for replacement in [
+        {"asset_path": None},
+        {"asset_path": "/Game/NoObject"},
+        {"asset_path": "/Game/Bad.Bad:Subobject"},
+        {"asset_path": "/Game/../Bad.Bad"},
+        {"asset_path": "C:/Private/Bad.Bad"},
+        {"shape": "Cube"},
+        {"actor_path": "/Temp/Actor"},
+        {"label": None},
+    ]:
+        with pytest.raises(ValidationError):
+            Operation.model_validate({**valid, **replacement})

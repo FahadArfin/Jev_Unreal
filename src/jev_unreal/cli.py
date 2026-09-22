@@ -6,16 +6,71 @@ from pathlib import Path
 
 from . import __version__
 from .bridge import UnrealBridge
+from .catalog import ToolCatalog
 from .config import Settings
 from .decision import DecisionClient
 from .errors import JevError
+from .layouts import LAYOUT_CATALOG
 
 
 async def run_command(args, settings: Settings) -> dict:
-    if args.command == "status":
+    if args.command == "layouts":
+        return LAYOUT_CATALOG
+    if args.command == "catalog":
+        catalog = ToolCatalog(Path(settings.catalog_file) if settings.catalog_file else None)
+        await catalog.refresh()
+        if args.catalog_command == "search":
+            return {
+                "catalog": catalog.status(),
+                "hits": [
+                    hit.model_dump(mode="json")
+                    for hit in catalog.search(args.query, limit=args.limit)
+                ],
+            }
+        if args.catalog_command == "get":
+            return catalog.get(args.tool_id).model_dump(mode="json")
+        return catalog.status()
+    if args.command == "doctor":
         bridge = UnrealBridge(settings)
         try:
-            return await bridge.call("status")
+            status = await bridge.call("status")
+            editor = {"ready": True, "identity": status}
+        except JevError as exc:
+            editor = {"ready": False, "error": exc.as_dict()["error"]}
+        finally:
+            await bridge.close()
+        catalog = ToolCatalog(Path(settings.catalog_file) if settings.catalog_file else None)
+        return {
+            "version": __version__,
+            "ready": editor["ready"] and bool(settings.expected_project),
+            "editor": editor,
+            "project_bound": bool(settings.expected_project),
+            "provider": {
+                "configured": bool(settings.api_key),
+                "model": settings.model,
+                "tested": False,
+                "required_for_local_tools": False,
+            },
+            "catalog": catalog.status(),
+            "next_steps": (
+                []
+                if editor["ready"]
+                else [
+                    "Initialize the bridge environment, build and launch the intended editor.",
+                ]
+            )
+            + (
+                []
+                if settings.expected_project
+                else [
+                    "Set JEV_EXPECTED_PROJECT to the intended absolute .uproject before edits.",
+                ]
+            ),
+        }
+    if args.command in {"status", "context"}:
+        bridge = UnrealBridge(settings)
+        try:
+            return await bridge.call(args.command)
         finally:
             await bridge.close()
     client = DecisionClient(settings)
@@ -49,6 +104,18 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("serve", help="Run the MCP stdio server")
     commands.add_parser("status", help="Inspect the configured Unreal editor")
+    commands.add_parser("context", help="Read compact editor context without a model key")
+    commands.add_parser("doctor", help="Check editor connectivity/configuration; no cloud calls")
+    commands.add_parser("layouts", help="Show available measured blockout recipes")
+    catalog = commands.add_parser("catalog", help="Discover explicitly configured local MCP tools")
+    catalog_commands = catalog.add_subparsers(dest="catalog_command", required=True)
+    catalog_commands.add_parser("status", help="Refresh and summarize the configured catalog")
+    search = catalog_commands.add_parser("search", help="Refresh and search tool descriptions")
+    search.add_argument("query")
+    search.add_argument("--limit", type=int, default=8)
+    catalog_commands.add_parser("get", help="Refresh and retrieve an exact schema").add_argument(
+        "tool_id"
+    )
     commands.add_parser("smoke", help="Make one small real provider request")
     commands.add_parser("decide", help="Evaluate a JSON state/questions file").add_argument("file")
     args = parser.parse_args()
@@ -59,7 +126,10 @@ def main():
 
             create_server(settings).run(transport="stdio")
         else:
-            print(json.dumps(asyncio.run(run_command(args, settings)), indent=2, allow_nan=False))
+            result = asyncio.run(run_command(args, settings))
+            print(json.dumps(result, indent=2, allow_nan=False))
+            if args.command == "doctor" and not result["ready"]:
+                raise SystemExit(1)
     except JevError as exc:
         print(json.dumps(exc.as_dict()), file=sys.stderr)
         raise SystemExit(1) from None

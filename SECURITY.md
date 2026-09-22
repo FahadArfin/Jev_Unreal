@@ -30,6 +30,21 @@ Keep an independent backup or version-controlled copy before allowing editor
 mutations. Structured model output still requires deterministic validation; model
 responses are untrusted input. Only explicitly supported operations should run.
 
+Catalog discovery is restricted to explicitly configured literal loopback HTTP(S)
+endpoints, with redirects, compression and external `tools/call` rejected. Exact
+schemas and annotations remain untrusted metadata, not authorization. A discovered
+tool may target a different editor; use its existing client and identity checks.
+Credential environment-variable names may be stored in catalog configuration;
+credential values may not. Failed refreshes preserve the prior snapshot and expose
+their failure status.
+
+Asset selection and diagnostic grouping stay local unless `use_jev` is explicitly
+enabled. Redaction is best effort and does not make an arbitrary private log safe
+to upload. Viewport images are returned to the requesting MCP client. That client
+may forward them to its own model/provider for visual review; Jev_Unreal does not
+control the client's data policy. This server sends no images to Jev.
+PNG structure validation is not a general-purpose image-decoder security audit.
+
 Provider API keys belong in the local process environment or supported local secret
 storage. The Windows helper uses Windows DPAPI tied to the current user account;
 this protects the stored file but does not protect against malware running as that
