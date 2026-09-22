@@ -4,7 +4,7 @@ Release **0.2.0a1**, validated on **2026-09-22 UTC** (2026-09-21 US Eastern). Th
 
 | Layer | Result | What it establishes |
 | --- | --- | --- |
-| Python suite | 511 passed locally on Python 3.13.2 in 26.98 seconds | Wire contracts, bounded discovery, strict inputs, credentials, local ranking/grouping, layout geometry, readback, PNG validation and MCP integration; synthetic transports are not live accuracy evidence |
+| Python suite | 513 passed locally on Python 3.13.2 in 28.46 seconds | Wire contracts, bounded discovery, strict inputs, credentials, local ranking/grouping, layout geometry, readback, PNG validation and MCP integration; synthetic transports are not live accuracy evidence |
 | Dependency and lint checks | `uv sync --locked --all-extras` and Ruff passed | Locked dependency installation and configured static checks |
 | Packaging | `uv build` produced wheel and source distribution | Python package can be constructed; not a public PyPI publication |
 | PowerShell scripts | Syntax checked; DPAPI and launcher credential flow tested with synthetic values | Local credential handling without plaintext arguments |
@@ -17,6 +17,8 @@ Release **0.2.0a1**, validated on **2026-09-22 UTC** (2026-09-21 US Eastern). Th
 | Live 0.2 semantic smoke | 3 valid provider responses; 4/4 authored labels matched | Actual asset selection, batched diagnostics and one unsupported-action deferral; not production accuracy |
 
 The repository's GitHub Actions workflow runs Python 3.12/3.13 checks on Windows and Ubuntu. Inspect the check associated with the commit you use; cloud CI does not compile proprietary Unreal Engine or run the local editor tests.
+
+The first PR matrix exposed an intermittent Windows Python 3.12 test-server failure: sse-starlette's process-global shutdown state could leak between synthetic Uvicorn server lifecycles. It was reproduced locally and corrected with the upstream test lifecycle reset. Fresh-state and previous-shutdown variants cover both JSON and SSE; 48 consecutive real-socket lifecycles then passed on Python 3.12. Client deadlines and production behavior were unchanged.
 
 ## Network/editor evidence
 

@@ -33,8 +33,8 @@ Grid origin is its starting bottom corner. Stair treads rise along local positiv
 each tread is solid down to the base. Room origin is the interior floor corner;
 walls grow outward so the requested inner dimensions stay clear. A room has no
 door opening. Yaw rotates geometry around its origin. All dimensions are cm.
-Recipes contain at most 20 cubes; they are blockout geometry, not a building-code,
-accessibility, navigation or gameplay guarantee.
+Recipes contain at most 20 cubes of blockout geometry. Validate navigation and
+gameplay separately in the engine.
 
 Native Undo covers supported scene changes. Framing only changes the current
 editor camera. Neither operation saves project packages. No implicit retry occurs

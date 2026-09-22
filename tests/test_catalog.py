@@ -693,9 +693,45 @@ async def test_smoke_requires_configuration_and_search_hits(tmp_path, monkeypatc
     assert caught.value.code == "catalog_query_empty"
 
 
+@pytest.fixture
+def isolated_sse_shutdown_state(request):
+    """Give each synthetic server the shutdown state of a fresh server process.
+
+    sse-starlette's Uvicorn watcher sets a process-global should_exit flag. It may
+    catch the previous fixture shutting down just before pytest closes its loop;
+    the next loop then inherits that flag and terminates every SSE response.
+    Match the upstream test lifecycle reset, without changing client deadlines:
+    https://github.com/sysid/sse-starlette/blob/main/tests/conftest.py
+    """
+    from sse_starlette.sse import AppStatus, _thread_state
+
+    if request.param:
+        # Deterministically cover the state left by a previous server's shutdown.
+        AppStatus.should_exit = True
+    AppStatus.should_exit = False
+    AppStatus.enable_automatic_graceful_drain = True
+    if hasattr(_thread_state, "shutdown_state"):
+        del _thread_state.shutdown_state
+    try:
+        yield
+    finally:
+        # Let watchers stop; pytest also closes this test's event loop. Clear its
+        # thread-local event references before another server creates a new loop.
+        AppStatus.should_exit = True
+        AppStatus.enable_automatic_graceful_drain = True
+        if hasattr(_thread_state, "shutdown_state"):
+            del _thread_state.shutdown_state
+
+
+@pytest.mark.parametrize(
+    "isolated_sse_shutdown_state",
+    [False, True],
+    indirect=True,
+    ids=["fresh-state", "previous-server-shutdown"],
+)
 @pytest.mark.parametrize("json_response", [True, False], ids=["http-json", "http-sse"])
 async def test_real_loopback_metadata_server_smoke_and_protocol_cleanup(
-    tmp_path, monkeypatch, json_response
+    tmp_path, monkeypatch, json_response, isolated_sse_shutdown_state
 ):
     """Real sockets and SDK server, synthetic metadata only; no tools/call handler exists."""
     metadata_server = Server("synthetic-metadata-only")
