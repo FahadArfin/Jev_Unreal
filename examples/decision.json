@@ -1,0 +1,19 @@
+{
+  "state": {"goal": "Find the wooden door asset already imported into this Unreal project"},
+  "questions": {
+    "next_step": {
+      "type": "choice",
+      "instructions": "Which next step best serves this goal?",
+      "criteria": {
+        "inspect_actors": "Look at actors already in the level",
+        "search_assets": "Search existing project assets",
+        "preview_spawn": "Prepare a new primitive blockout object",
+        "defer": "None of these actions serves the goal"
+      }
+    },
+    "needs_existing_asset": {
+      "type": "noul",
+      "instructions": "Does the goal ask for an asset already present in the project?"
+    }
+  }
+}
