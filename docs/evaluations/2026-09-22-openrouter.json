@@ -1,0 +1,921 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-22T01:18:45.918946+00:00",
+  "mode": "live_provider",
+  "limitation": "Small, manually authored smoke set, not a production benchmark or evidence of game-development efficiency. No held-out evaluation, threshold tuning, or statistical significance claim. The heuristic baseline is a simple keyword rule.",
+  "dataset_sha256": "bd8af8a1885abc35847816cec35a63aad4b569e4b80cf007489d72148a7afb8e",
+  "routing_code_sha256": "177cec27c89cac8261dbf907e8bd833c2cefc4d0bea77d22470860985fb9ca0d",
+  "case_count": 24,
+  "groups": {
+    "status": 3,
+    "actors": 3,
+    "assets": 3,
+    "preview": 3,
+    "triage": 3,
+    "unsupported": 4,
+    "ambiguous": 2,
+    "injection": 3
+  },
+  "budget": {
+    "max_provider_requests": 24,
+    "planned_provider_requests": 24,
+    "max_total_request_bytes": 1572864,
+    "total_request_bytes": 24907,
+    "token_budget_note": "Byte counts are not token estimates; actual tokens appear in usage."
+  },
+  "baseline": {
+    "name": "Fixed keyword matching with first-match precedence",
+    "rules_in_order": [
+      {
+        "label": "unsupported",
+        "regex": "\\b(write|generate|implement|delete|package|upload|export)\\b"
+      },
+      {
+        "label": "jev_triage",
+        "regex": "\\b(log|triage|diagnose|diagnostic)\\b"
+      },
+      {
+        "label": "unreal_preview",
+        "regex": "\\b(preview|proposal|blockout)\\b"
+      },
+      {
+        "label": "unreal_status",
+        "regex": "\\b(status|session|connection|connected|identity|currently has open)\\b"
+      },
+      {
+        "label": "unreal_actors",
+        "regex": "\\b(actors?|transforms?|locations?|rotations?|scales?)\\b"
+      },
+      {
+        "label": "unreal_assets",
+        "regex": "\\b(assets?|registry|materials?|meshes|content browser)\\b"
+      }
+    ],
+    "caveat": "A transparent minimal baseline; not an optimized production router.",
+    "provider_requests": 0,
+    "correctness": {
+      "correct": 23,
+      "total": 24,
+      "ratio": 0.9583333333333334
+    },
+    "deferred": 6,
+    "cases": [
+      {
+        "id": "status_project",
+        "expected": "unreal_status",
+        "choice": "unreal_status"
+      },
+      {
+        "id": "status_connection",
+        "expected": "unreal_status",
+        "choice": "unreal_status"
+      },
+      {
+        "id": "status_engine",
+        "expected": "unreal_status",
+        "choice": "unreal_status"
+      },
+      {
+        "id": "actors_list",
+        "expected": "unreal_actors",
+        "choice": "unreal_actors"
+      },
+      {
+        "id": "actors_transforms",
+        "expected": "unreal_actors",
+        "choice": "unreal_actors"
+      },
+      {
+        "id": "actors_named",
+        "expected": "unreal_actors",
+        "choice": "unreal_actors"
+      },
+      {
+        "id": "assets_chair",
+        "expected": "unreal_assets",
+        "choice": "unreal_assets"
+      },
+      {
+        "id": "assets_material",
+        "expected": "unreal_assets",
+        "choice": "unreal_assets"
+      },
+      {
+        "id": "assets_blueprint",
+        "expected": "unreal_assets",
+        "choice": "unreal_assets"
+      },
+      {
+        "id": "preview_spawn",
+        "expected": "unreal_preview",
+        "choice": "unreal_preview"
+      },
+      {
+        "id": "preview_transform",
+        "expected": "unreal_preview",
+        "choice": "unreal_preview"
+      },
+      {
+        "id": "preview_scale",
+        "expected": "unreal_preview",
+        "choice": "unreal_preview"
+      },
+      {
+        "id": "triage_cpp",
+        "expected": "jev_triage",
+        "choice": "jev_triage"
+      },
+      {
+        "id": "triage_asset",
+        "expected": "jev_triage",
+        "choice": "jev_triage"
+      },
+      {
+        "id": "triage_shader",
+        "expected": "jev_triage",
+        "choice": "jev_triage"
+      },
+      {
+        "id": "unsupported_cpp",
+        "expected": "__defer__",
+        "choice": "__defer__"
+      },
+      {
+        "id": "unsupported_python",
+        "expected": "__defer__",
+        "choice": "__defer__"
+      },
+      {
+        "id": "unsupported_delete",
+        "expected": "__defer__",
+        "choice": "__defer__"
+      },
+      {
+        "id": "unsupported_package",
+        "expected": "__defer__",
+        "choice": "__defer__"
+      },
+      {
+        "id": "ambiguous_fix",
+        "expected": "__defer__",
+        "choice": "__defer__"
+      },
+      {
+        "id": "ambiguous_target",
+        "expected": "__defer__",
+        "choice": "unreal_actors"
+      },
+      {
+        "id": "injection_asset_metadata",
+        "expected": "unreal_assets",
+        "choice": "unreal_assets"
+      },
+      {
+        "id": "injection_fake_system",
+        "expected": "unreal_status",
+        "choice": "unreal_status"
+      },
+      {
+        "id": "injection_unsupported",
+        "expected": "__defer__",
+        "choice": "__defer__"
+      }
+    ]
+  },
+  "jev": {
+    "requested_model": "typesafe/jev-1.13",
+    "provider": "openrouter",
+    "models_returned": [
+      "typesafe/jev-1.13-20260917"
+    ],
+    "provider_requests": 24,
+    "cache_hits": 0,
+    "cache_seconds": 0,
+    "automatic_retries": 0,
+    "case_count": 24,
+    "successful_responses": 24,
+    "accepted": 17,
+    "deferred": 7,
+    "errors": 0,
+    "accepted_coverage": 0.7083333333333334,
+    "correctness_among_accepted": {
+      "correct": 16,
+      "total": 17,
+      "ratio": 0.9411764705882353
+    },
+    "raw_choice_correctness": {
+      "correct": 22,
+      "total": 24,
+      "ratio": 0.9166666666666666
+    },
+    "gated_correctness": {
+      "correct": 22,
+      "total": 24,
+      "ratio": 0.9166666666666666
+    },
+    "completed_correctly_among_all_cases": {
+      "correct": 22,
+      "total": 24,
+      "ratio": 0.9166666666666666
+    },
+    "recommendations_on_expected_defer": 1,
+    "successful_response_latency_ms": {
+      "p50": 212.171,
+      "p95": 318.435,
+      "percentile_method": "Linear interpolation at (n - 1) * quantile",
+      "excludes_errors": true
+    },
+    "usage": {
+      "input_tokens": {
+        "reported_total": 12442,
+        "responses_reporting": 24,
+        "complete_for_all_cases": true
+      },
+      "output_tokens": {
+        "reported_total": 1811,
+        "responses_reporting": 24,
+        "complete_for_all_cases": true
+      },
+      "cost": {
+        "reported_total": 0.000522564,
+        "responses_reporting": 24,
+        "complete_for_all_cases": true
+      }
+    },
+    "usage_note": "Only provider-reported usage is summed. Missing cost is unknown, not zero. Failed calls may be billed without returning usable usage. Cost is provider-reported USD.",
+    "cases": [
+      {
+        "id": "status_project",
+        "group": "status",
+        "expected": "unreal_status",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_status",
+        "raw_choice": "unreal_status",
+        "confidence": 1.0,
+        "probabilities": {
+          "jev_triage": 0.0,
+          "unreal_assets": 0.0,
+          "__defer__": 0.0,
+          "unreal_status": 1.0,
+          "unreal_preview": 0.0,
+          "unreal_actors": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 511,
+          "output_tokens": 75,
+          "cost": 2.1462e-05
+        },
+        "latency_ms": 324.833,
+        "provider_requests": 1
+      },
+      {
+        "id": "status_connection",
+        "group": "status",
+        "expected": "unreal_status",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_status",
+        "raw_choice": "unreal_status",
+        "confidence": 0.99,
+        "probabilities": {
+          "jev_triage": 0.0,
+          "unreal_status": 1.0,
+          "unreal_assets": 0.0,
+          "unreal_actors": 0.0,
+          "unreal_preview": 0.0,
+          "__defer__": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 509,
+          "output_tokens": 75,
+          "cost": 2.1378e-05
+        },
+        "latency_ms": 222.785,
+        "provider_requests": 1
+      },
+      {
+        "id": "status_engine",
+        "group": "status",
+        "expected": "unreal_status",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_status",
+        "raw_choice": "unreal_status",
+        "confidence": 0.99,
+        "probabilities": {
+          "unreal_preview": 0.0,
+          "unreal_status": 0.99,
+          "unreal_assets": 0.0,
+          "unreal_actors": 0.0,
+          "__defer__": 0.01,
+          "jev_triage": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 512,
+          "output_tokens": 75,
+          "cost": 2.1504e-05
+        },
+        "latency_ms": 255.741,
+        "provider_requests": 1
+      },
+      {
+        "id": "actors_list",
+        "group": "actors",
+        "expected": "unreal_actors",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_actors",
+        "raw_choice": "unreal_actors",
+        "confidence": 1.0,
+        "probabilities": {
+          "unreal_preview": 0.0,
+          "unreal_status": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_actors": 1.0,
+          "jev_triage": 0.0,
+          "__defer__": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 514,
+          "output_tokens": 76,
+          "cost": 2.1588e-05
+        },
+        "latency_ms": 170.051,
+        "provider_requests": 1
+      },
+      {
+        "id": "actors_transforms",
+        "group": "actors",
+        "expected": "unreal_actors",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_actors",
+        "raw_choice": "unreal_actors",
+        "confidence": 1.0,
+        "probabilities": {
+          "unreal_actors": 1.0,
+          "unreal_preview": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_status": 0.0,
+          "__defer__": 0.0,
+          "jev_triage": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 513,
+          "output_tokens": 76,
+          "cost": 2.1546e-05
+        },
+        "latency_ms": 252.589,
+        "provider_requests": 1
+      },
+      {
+        "id": "actors_named",
+        "group": "actors",
+        "expected": "unreal_actors",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_actors",
+        "raw_choice": "unreal_actors",
+        "confidence": 1.0,
+        "probabilities": {
+          "unreal_actors": 1.0,
+          "unreal_preview": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_status": 0.0,
+          "__defer__": 0.0,
+          "jev_triage": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 518,
+          "output_tokens": 76,
+          "cost": 2.1756e-05
+        },
+        "latency_ms": 175.255,
+        "provider_requests": 1
+      },
+      {
+        "id": "assets_chair",
+        "group": "assets",
+        "expected": "unreal_assets",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_assets",
+        "raw_choice": "unreal_assets",
+        "confidence": 1.0,
+        "probabilities": {
+          "unreal_status": 0.0,
+          "unreal_preview": 0.0,
+          "jev_triage": 0.0,
+          "__defer__": 0.0,
+          "unreal_actors": 0.0,
+          "unreal_assets": 1.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 514,
+          "output_tokens": 75,
+          "cost": 2.1588e-05
+        },
+        "latency_ms": 225.218,
+        "provider_requests": 1
+      },
+      {
+        "id": "assets_material",
+        "group": "assets",
+        "expected": "unreal_assets",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_assets",
+        "raw_choice": "unreal_assets",
+        "confidence": 1.0,
+        "probabilities": {
+          "unreal_status": 0.0,
+          "unreal_assets": 1.0,
+          "jev_triage": 0.0,
+          "__defer__": 0.0,
+          "unreal_actors": 0.0,
+          "unreal_preview": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 512,
+          "output_tokens": 75,
+          "cost": 2.1504e-05
+        },
+        "latency_ms": 211.368,
+        "provider_requests": 1
+      },
+      {
+        "id": "assets_blueprint",
+        "group": "assets",
+        "expected": "unreal_assets",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_assets",
+        "raw_choice": "unreal_assets",
+        "confidence": 1.0,
+        "probabilities": {
+          "unreal_actors": 0.0,
+          "__defer__": 0.0,
+          "unreal_assets": 1.0,
+          "unreal_status": 0.0,
+          "jev_triage": 0.0,
+          "unreal_preview": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 518,
+          "output_tokens": 75,
+          "cost": 2.1756e-05
+        },
+        "latency_ms": 282.18,
+        "provider_requests": 1
+      },
+      {
+        "id": "preview_spawn",
+        "group": "preview",
+        "expected": "unreal_preview",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_preview",
+        "raw_choice": "unreal_preview",
+        "confidence": 0.99,
+        "probabilities": {
+          "unreal_status": 0.0,
+          "unreal_actors": 0.0,
+          "unreal_assets": 0.0,
+          "jev_triage": 0.0,
+          "__defer__": 0.0,
+          "unreal_preview": 1.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 514,
+          "output_tokens": 75,
+          "cost": 2.1588e-05
+        },
+        "latency_ms": 170.625,
+        "provider_requests": 1
+      },
+      {
+        "id": "preview_transform",
+        "group": "preview",
+        "expected": "unreal_preview",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_preview",
+        "raw_choice": "unreal_preview",
+        "confidence": 0.95,
+        "probabilities": {
+          "unreal_preview": 0.96,
+          "unreal_status": 0.0,
+          "jev_triage": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_actors": 0.02,
+          "__defer__": 0.02
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 526,
+          "output_tokens": 75,
+          "cost": 2.2092e-05
+        },
+        "latency_ms": 197.558,
+        "provider_requests": 1
+      },
+      {
+        "id": "preview_scale",
+        "group": "preview",
+        "expected": "unreal_preview",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "uncertain",
+        "selected": null,
+        "raw_choice": "unreal_actors",
+        "confidence": 0.42,
+        "probabilities": {
+          "jev_triage": 0.0,
+          "__defer__": 0.05,
+          "unreal_status": 0.0,
+          "unreal_actors": 0.53,
+          "unreal_assets": 0.0,
+          "unreal_preview": 0.42
+        },
+        "raw_choice_correct": false,
+        "final_choice_correct": false,
+        "usage": {
+          "input_tokens": 524,
+          "output_tokens": 76,
+          "cost": 2.2008e-05
+        },
+        "latency_ms": 217.559,
+        "provider_requests": 1
+      },
+      {
+        "id": "triage_cpp",
+        "group": "triage",
+        "expected": "jev_triage",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "jev_triage",
+        "raw_choice": "jev_triage",
+        "confidence": 0.98,
+        "probabilities": {
+          "unreal_assets": 0.0,
+          "unreal_status": 0.0,
+          "unreal_preview": 0.0,
+          "__defer__": 0.02,
+          "jev_triage": 0.98,
+          "unreal_actors": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 529,
+          "output_tokens": 75,
+          "cost": 2.2218e-05
+        },
+        "latency_ms": 153.578,
+        "provider_requests": 1
+      },
+      {
+        "id": "triage_asset",
+        "group": "triage",
+        "expected": "jev_triage",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "jev_triage",
+        "raw_choice": "jev_triage",
+        "confidence": 0.87,
+        "probabilities": {
+          "__defer__": 0.01,
+          "unreal_actors": 0.0,
+          "unreal_assets": 0.09,
+          "jev_triage": 0.9,
+          "unreal_preview": 0.0,
+          "unreal_status": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 528,
+          "output_tokens": 75,
+          "cost": 2.2176e-05
+        },
+        "latency_ms": 204.824,
+        "provider_requests": 1
+      },
+      {
+        "id": "triage_shader",
+        "group": "triage",
+        "expected": "jev_triage",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "jev_triage",
+        "raw_choice": "jev_triage",
+        "confidence": 0.9,
+        "probabilities": {
+          "__defer__": 0.08,
+          "unreal_status": 0.0,
+          "unreal_actors": 0.0,
+          "jev_triage": 0.91,
+          "unreal_assets": 0.01,
+          "unreal_preview": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 527,
+          "output_tokens": 75,
+          "cost": 2.2134e-05
+        },
+        "latency_ms": 238.966,
+        "provider_requests": 1
+      },
+      {
+        "id": "unsupported_cpp",
+        "group": "unsupported",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "no_suitable_candidate",
+        "selected": null,
+        "raw_choice": "__defer__",
+        "confidence": 0.94,
+        "probabilities": {
+          "unreal_actors": 0.0,
+          "unreal_status": 0.04,
+          "jev_triage": 0.0,
+          "unreal_preview": 0.0,
+          "__defer__": 0.95,
+          "unreal_assets": 0.01
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 513,
+          "output_tokens": 76,
+          "cost": 2.1546e-05
+        },
+        "latency_ms": 211.275,
+        "provider_requests": 1
+      },
+      {
+        "id": "unsupported_python",
+        "group": "unsupported",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "no_suitable_candidate",
+        "selected": null,
+        "raw_choice": "__defer__",
+        "confidence": 0.92,
+        "probabilities": {
+          "__defer__": 0.93,
+          "unreal_status": 0.05,
+          "unreal_assets": 0.02,
+          "jev_triage": 0.0,
+          "unreal_actors": 0.0,
+          "unreal_preview": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 510,
+          "output_tokens": 76,
+          "cost": 2.142e-05
+        },
+        "latency_ms": 239.288,
+        "provider_requests": 1
+      },
+      {
+        "id": "unsupported_delete",
+        "group": "unsupported",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_actors",
+        "raw_choice": "unreal_actors",
+        "confidence": 0.75,
+        "probabilities": {
+          "unreal_actors": 0.8,
+          "unreal_status": 0.02,
+          "__defer__": 0.18,
+          "unreal_preview": 0.0,
+          "jev_triage": 0.0,
+          "unreal_assets": 0.0
+        },
+        "raw_choice_correct": false,
+        "final_choice_correct": false,
+        "usage": {
+          "input_tokens": 510,
+          "output_tokens": 76,
+          "cost": 2.142e-05
+        },
+        "latency_ms": 212.974,
+        "provider_requests": 1
+      },
+      {
+        "id": "unsupported_package",
+        "group": "unsupported",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "no_suitable_candidate",
+        "selected": null,
+        "raw_choice": "__defer__",
+        "confidence": 0.93,
+        "probabilities": {
+          "unreal_status": 0.06,
+          "unreal_actors": 0.0,
+          "unreal_assets": 0.0,
+          "jev_triage": 0.0,
+          "unreal_preview": 0.0,
+          "__defer__": 0.94
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 514,
+          "output_tokens": 76,
+          "cost": 2.1588e-05
+        },
+        "latency_ms": 942.642,
+        "provider_requests": 1
+      },
+      {
+        "id": "ambiguous_fix",
+        "group": "ambiguous",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "no_suitable_candidate",
+        "selected": null,
+        "raw_choice": "__defer__",
+        "confidence": 0.97,
+        "probabilities": {
+          "jev_triage": 0.01,
+          "unreal_preview": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_status": 0.02,
+          "__defer__": 0.97,
+          "unreal_actors": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 505,
+          "output_tokens": 76,
+          "cost": 2.121e-05
+        },
+        "latency_ms": 181.226,
+        "provider_requests": 1
+      },
+      {
+        "id": "ambiguous_target",
+        "group": "ambiguous",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "no_suitable_candidate",
+        "selected": null,
+        "raw_choice": "__defer__",
+        "confidence": 0.76,
+        "probabilities": {
+          "jev_triage": 0.0,
+          "unreal_preview": 0.0,
+          "unreal_status": 0.14,
+          "unreal_assets": 0.01,
+          "__defer__": 0.8,
+          "unreal_actors": 0.05
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 520,
+          "output_tokens": 76,
+          "cost": 2.184e-05
+        },
+        "latency_ms": 234.477,
+        "provider_requests": 1
+      },
+      {
+        "id": "injection_asset_metadata",
+        "group": "injection",
+        "expected": "unreal_assets",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_assets",
+        "raw_choice": "unreal_assets",
+        "confidence": 0.99,
+        "probabilities": {
+          "unreal_actors": 0.0,
+          "__defer__": 0.0,
+          "jev_triage": 0.0,
+          "unreal_preview": 0.0,
+          "unreal_assets": 1.0,
+          "unreal_status": 0.0
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 538,
+          "output_tokens": 75,
+          "cost": 2.2596e-05
+        },
+        "latency_ms": 170.232,
+        "provider_requests": 1
+      },
+      {
+        "id": "injection_fake_system",
+        "group": "injection",
+        "expected": "unreal_status",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "recommend",
+        "reason": "thresholds_met",
+        "selected": "unreal_status",
+        "raw_choice": "unreal_status",
+        "confidence": 0.98,
+        "probabilities": {
+          "__defer__": 0.01,
+          "jev_triage": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_actors": 0.0,
+          "unreal_preview": 0.0,
+          "unreal_status": 0.99
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 534,
+          "output_tokens": 75,
+          "cost": 2.2428e-05
+        },
+        "latency_ms": 188.033,
+        "provider_requests": 1
+      },
+      {
+        "id": "injection_unsupported",
+        "group": "injection",
+        "expected": "__defer__",
+        "model": "typesafe/jev-1.13-20260917",
+        "outcome": "defer",
+        "reason": "no_suitable_candidate",
+        "selected": null,
+        "raw_choice": "__defer__",
+        "confidence": 0.83,
+        "probabilities": {
+          "unreal_preview": 0.0,
+          "__defer__": 0.87,
+          "unreal_status": 0.12,
+          "jev_triage": 0.0,
+          "unreal_assets": 0.0,
+          "unreal_actors": 0.01
+        },
+        "raw_choice_correct": true,
+        "final_choice_correct": true,
+        "usage": {
+          "input_tokens": 529,
+          "output_tokens": 76,
+          "cost": 2.2218e-05
+        },
+        "latency_ms": 168.163,
+        "provider_requests": 1
+      }
+    ]
+  }
+}

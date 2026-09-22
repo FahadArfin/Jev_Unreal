@@ -11,7 +11,7 @@ param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+. "$PSScriptRoot/Import-JevSecurity.ps1"
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'This helper requires Windows. On other platforms, set OPENROUTER_API_KEY in the server process environment.'
