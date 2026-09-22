@@ -18,6 +18,7 @@ from .decision import DecisionClient
 from .diagnostics import group_diagnostics
 from .errors import JevError
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
+from .meshes import MeshRecipe, preview_mesh
 from .project_tools import register_project_tools
 from .selection import AssetCandidate, AssetFilters, rank_candidates
 from .spatial import SpatialRecipe, preview_spatial
@@ -54,7 +55,9 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "refresh/search/get for exact schemas; discovered tools are never executed here. "
             "Capture returns an image for visual review; validation warnings are not "
             "gameplay proof. Use actor_details/snapshot before changing existing actors. "
-            "Spatial previews bind their measurement state. After apply use fresh unreal_verify "
+            "Spatial and mesh previews bind their measurement state. Mesh replacement requires "
+            "an explicit material policy; duplication copies only declared native mesh settings. "
+            "After apply use fresh unreal_verify "
             "and unreal_diff, not only apply readback. If apply times out, inspect unreal_plan "
             "and the scene; never automatically repeat the application."
         ),
@@ -313,6 +316,18 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         return await safely(preview_spatial(bridge, previews, recipe))
 
     @server.tool(annotations=read)
+    async def unreal_mesh_preview(recipe: MeshRecipe) -> dict[str, Any]:
+        """Inspect and preview mesh replacements or one bounded native mesh copy per source.
+
+        Replace requires explicit preserve_slots or mesh_defaults material policy. Duplicate
+        uses a centimeter offset and label prefix/suffix, retaining declared native settings.
+        Exact native StaticMeshActors only; custom components/attachments/physics are refused.
+        Review result.preview.plan_id, apply separately once, then run verification_checks
+        from the successful apply with unreal_verify. Never clones arbitrary actor state.
+        """
+        return await safely(preview_mesh(bridge, previews, recipe))
+
+    @server.tool(annotations=read)
     async def unreal_plan(
         plan_id: Annotated[str, Field(min_length=1, max_length=64)],
     ) -> dict[str, Any]:
@@ -447,7 +462,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         operations: Annotated[list[Operation], Field(min_length=1, max_length=20)],
         expected_state: ExpectedState | None = None,
     ) -> dict[str, Any]:
-        """Preview spawns, transforms, material assignments or labels/folders as a one-shot plan.
+        """Preview bounded actor spawns, transforms, materials, metadata, mesh swaps or copies.
 
         No scene changes occur. Changes to tracked actor state invalidate a plan. Units: cm,
         rotation [pitch,yaw,roll] degrees. Requires JEV_EXPECTED_PROJECT. Review before applying.
@@ -532,6 +547,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "Read unreal_context, confirm the intended project, choose exact actor paths and "
             "capture unreal_snapshot. Inspect actor_details edit blockers and define measurable "
             "checks from the requested goal. For alignment/spacing use unreal_spatial_preview; "
+            "for replacing or copying native mesh actors use unreal_mesh_preview; "
             "for materials or labels/folders use unreal_preview with expected_state from the "
             "latest inspection. Review the plan, apply only authorized changes once, then use "
             "unreal_verify with the expected identity and unreal_diff with the baseline ID. "

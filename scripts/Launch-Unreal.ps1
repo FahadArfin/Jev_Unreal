@@ -4,6 +4,7 @@ param(
     [switch]$Headless,
     [switch]$AutomationTests,
     [switch]$RenderedReviewTest,
+    [switch]$Unattended,
     [ValidateRange(1024, 65535)][int]$Port = 9845
 )
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,7 @@ if (-not $AutomationTests -and ($env:JEV_BRIDGE_TOKEN.Length -lt 32 -or $env:JEV
 }
 $editorArguments = @(('"' + $projectFile + '"'), '-NoSplash', '-NoSound', '-NoLiveCoding', '-NoSourceControl')
 if ($Headless -or $AutomationTests) { $editorArguments += @('-NullRHI', '-Unattended', '-NoPause') }
+elseif ($Unattended -and -not $RenderedReviewTest) { $editorArguments += @('-Unattended', '-NoPause') }
 if ($AutomationTests) {
     $reportPath = Join-Path $repositoryRoot 'artifacts\unreal-automation'
     $editorArguments += @('-ExecCmds="Automation RunTests Jev.Editor"', '-TestExit="Automation Test Queue Empty"', ('-ReportExportPath="' + $reportPath + '"'))
@@ -49,8 +51,8 @@ if ($AutomationTests -or $RenderedReviewTest) {
         Write-Output 'Rendered review-panel automation passed. Inspect Saved/Automation/Jev/ReviewPanel.png for visual acceptance.'
         return
     }
-    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 21) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
-    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs')) {
+    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 25) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
+    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback')) {
         $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
         if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected Unreal automation test did not pass: $expectedTest" }
     }

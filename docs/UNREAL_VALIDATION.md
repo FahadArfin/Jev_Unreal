@@ -1,8 +1,56 @@
 # Unreal validation
 
-Jev Editor **0.4.0a1** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
+Jev Editor **0.5.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
 
-## Current 0.4 native automation
+## Current 0.5 native automation
+
+The licensed build compiled and linked successfully. Visual Studio 14.51 still
+emits Unreal's compiler-preference warning and engine-header deprecation warnings.
+The final `artifacts/unreal-automation/index.json` report is timestamped
+**`2026.09.22-04.28.42`**: **25 passed, 0 failed, 0 not run, 0 in progress**.
+There are 23 clean suites and two warning-bearing suites with three warnings,
+the same empty-bounds/typed-element fixture warnings described in the 0.4 section.
+
+All 21 previous suites ran again. The four new suites passed without warnings:
+
+| Test | Coverage |
+| --- | --- |
+| `Jev.Editor.MeshReplacement` | Both material policies, original identity/placement, exact materials, reviewed mesh metadata and settings, replay rejection and native Undo. |
+| `Jev.Editor.MeshDuplicate` | Default and explicitly customized collision configuration, inheritance flag, disabled-actor/raw collision mode, nondefault visibility/tags/mobility, explicit location, distinct new identity, unchanged source and Undo. |
+| `Jev.Editor.MeshGuards` | Unsupported components/settings/attachments/tags and active physics overrides; collision inheritance mismatch; asset/settings mutation, stale identities and notification-free default collision changes. |
+| `Jev.Editor.MeshRollback` | Mixed replace/copy failure, earlier Undo preservation, transacted source/unrelated changes, actual actor destruction during callback and identity restoration; isolated transient-world switch returns unknown without using another world's Undo stack. |
+
+The world-switch fixture restores its original editor context on the same game
+thread, explicitly undoes only its retained transaction and destroys its temporary
+world. The production bridge exposes no world-switch, actor-destruction, test-hook
+or arbitrary-code operation. Runtime failures were fixed before this final report:
+collision-profile assignment had cleared mesh inheritance, and an inactive physics
+cache differed from class defaults after component registration. Unsupported active
+overrides still refuse copying.
+
+## Current 0.5 live acceptance
+
+The official stdio client discovered **40 tools** against bridge **0.5.0** in the
+exact repository sandbox. The new mesh smoke passed both replacement policies,
+controlled copying, six fresh checks, source-preservation diff, separate new actor
+identity, stale source material/transform refusal and one-shot replay rejection.
+Four native 1014 × 479 viewport captures record the fixture changes. Existing
+blockout, measured-edit and roadmap/reconnect smokes passed again. The saved
+encrypted-key launcher also authenticated the correct native editor and discovered
+all 40 tools. These tests made zero provider calls and requested no saves.
+
+Separate rendered automation passed **1/1 `Jev.Rendered.ReviewPanel`**, zero
+warnings, report **`2026.09.22-04.29.18`**. Its fresh
+[1000 × 567 capture](images/review-panel-v0.5.png) was viewed: controls are arranged
+and readable, with initial Apply disabled. The new mesh review text's before/after
+content is tested through the native controller, not a representative user study.
+
+This is bounded fixture evidence. It does not certify arbitrary prop cloning,
+collision simulation, representative game projects, accessibility or production
+reliability. [Full evidence](VALIDATION.md) separates these observations from the
+historical installer, multiple-editor and live-provider runs below.
+
+## Historical 0.4 native automation
 
 The fresh `artifacts/unreal-automation/index.json` report is timestamped
 **`2026.09.22-03.35.34`**. All **21 `Jev.Editor` suites passed: 19 clean and two
@@ -34,7 +82,7 @@ workflow, or correctness of another project's validators and gameplay tests.
 Raw reports and logs remain local under `artifacts/unreal-automation/` and the
 sandbox's `Saved/Logs/`; those directories are not release contents.
 
-## Current 0.4 live and rendered acceptance
+## Historical 0.4 live and rendered acceptance
 
 Both repository-owned sandbox projects compiled against UE 5.8.2. The second
 project used the reviewed installer rather than the repository's additional plugin

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .bridge import UnrealBridge
 from .errors import JevError
 from .journal import PlanJournal
+from .mesh_state import mesh_checks, mesh_state, valid_mesh_identity
 
 Coordinate = Annotated[float, Field(ge=-900000, le=900000, strict=True)]
 Dimension = Annotated[float, Field(ge=0.1, le=50000, strict=True)]
@@ -229,6 +230,17 @@ def verify_readback(expected: object, actors: object) -> dict:
     if len(expected) != len(actors):
         issues.append({"code": "actor_count_mismatch"})
     seen_paths = set()
+    seen_instances = set()
+    source_paths = {
+        op.get("actor_path")
+        for op in expected
+        if isinstance(op, dict) and isinstance(op.get("actor_path"), str)
+    }
+    source_instances = {
+        op.get("source_instance_id")
+        for op in expected
+        if isinstance(op, dict) and isinstance(op.get("source_instance_id"), str)
+    }
     for index, (operation, actor) in enumerate(zip(expected, actors, strict=False)):
         if (
             not isinstance(operation, dict)
@@ -240,6 +252,8 @@ def verify_readback(expected: object, actors: object) -> dict:
                 "set_transform",
                 "set_material",
                 "set_metadata",
+                "replace_mesh",
+                "duplicate_mesh",
             }
         ):
             issues.append({"index": index, "code": "invalid_expected_operation"})
@@ -247,6 +261,42 @@ def verify_readback(expected: object, actors: object) -> dict:
         if not isinstance(actor, dict):
             issues.append({"index": index, "code": "invalid_actor_readback"})
             continue
+        if operation["op"] in {"replace_mesh", "duplicate_mesh"}:
+            if (
+                not valid_mesh_identity(operation.get("actor_path"), actor_path=True)
+                or not valid_mesh_identity(actor.get("path"), actor_path=True)
+                or actor.get("class") != "/Script/Engine.StaticMeshActor"
+            ):
+                issues.append({"index": index, "code": "invalid_mesh_actor_identity"})
+            try:
+                expected_mesh = mesh_state(operation).model_dump(mode="json")
+                actual_mesh = mesh_state(actor, actor=True).model_dump(mode="json")
+                for state in (expected_mesh, actual_mesh):
+                    state["materials"].sort(key=lambda item: item["slot"])
+                if expected_mesh != actual_mesh:
+                    issues.append({"index": index, "code": "mesh_state_mismatch"})
+            except (ValueError, TypeError):
+                issues.append({"index": index, "code": "invalid_mesh_state"})
+            source_id, instance_id = operation.get("source_instance_id"), actor.get("instance_id")
+            if (
+                not valid_mesh_identity(source_id)
+                or not valid_mesh_identity(instance_id)
+                or instance_id in seen_instances
+            ):
+                issues.append({"index": index, "code": "invalid_actor_instance"})
+            elif operation["op"] == "duplicate_mesh":
+                if (
+                    not isinstance(operation.get("actor_path"), str)
+                    or not operation["actor_path"].strip()
+                    or operation.get("source_actor_path") != operation.get("actor_path")
+                    or not isinstance(actor.get("path"), str)
+                    or actor.get("path") in source_paths
+                    or instance_id in source_instances
+                ):
+                    issues.append({"index": index, "code": "duplicate_identity_mismatch"})
+            elif instance_id != source_id:
+                issues.append({"index": index, "code": "actor_instance_mismatch"})
+            seen_instances.add(instance_id if isinstance(instance_id, str) else None)
         if operation["op"] in {"spawn_primitive", "spawn_static_mesh"}:
             label = operation.get("label")
             if not isinstance(label, str) or not label.strip():
@@ -278,6 +328,7 @@ def verify_readback(expected: object, actors: object) -> dict:
             "set_transform",
             "set_material",
             "set_metadata",
+            "replace_mesh",
         } and path != operation.get("actor_path"):
             issues.append({"index": index, "code": "actor_identity_mismatch"})
         seen_paths.add(path if isinstance(path, str) else None)
@@ -314,6 +365,20 @@ def verify_readback(expected: object, actors: object) -> dict:
                     {"index": index, "code": "invalid_expected_transform", "field": field}
                 )
                 continue
+            if operation["op"] in {"replace_mesh", "duplicate_mesh"}:
+                # Native mesh edits promise the same bounded transforms as their input schema.
+                lower, upper = {
+                    "location": (-1_000_000, 1_000_000),
+                    "rotation": (-36000, 36000),
+                    "scale": (0.001, 1000),
+                }[field]
+                if not all(
+                    lower <= value <= upper for vector in (actual, target) for value in vector
+                ):
+                    issues.append(
+                        {"index": index, "code": "invalid_mesh_transform", "field": field}
+                    )
+                    continue
             if field == "rotation":
                 a, b = _quat(actual), _quat(target)
                 matches = (
@@ -457,6 +522,10 @@ class PreviewTracker:
                     "saved": False,
                 },
             }
+        # These fields are derived here from retained reviewed expectations, never
+        # accepted as independently verified requirements from a native payload.
+        result.pop("verification_checks", None)
+        result.pop("verification_checks_note", None)
         if result.get("applied") is not True:
             result["verification"] = {
                 "status": "unavailable",
@@ -466,6 +535,17 @@ class PreviewTracker:
             }
         elif expectation:
             result["verification"] = verify_readback(expectation[1], result.get("actors", []))
+            if result["verification"]["status"] == "passed":
+                checks = []
+                for operation, actor in zip(expectation[1], result["actors"], strict=True):
+                    if operation["op"] in {"replace_mesh", "duplicate_mesh"}:
+                        checks.extend(mesh_checks(operation, actor["path"], actor["instance_id"]))
+                if checks:
+                    result["verification_checks"] = checks
+                    result["verification_checks_note"] = (
+                        "Run unreal_verify for fresh evidence; these requirements bind the "
+                        "reviewed mesh state to the confirmed actor instances."
+                    )
         else:
             result["verification"] = {
                 "status": "unavailable",

@@ -40,6 +40,14 @@ See [workflows](WORKFLOWS.md), [spatial editing](SPATIAL_WORKFLOWS.md),
 support and completed checks. These foundations do not complete this roadmap,
 certify a whole game or establish support for a large user population.
 
+Version 0.5 adds [reviewed mesh replacement and controlled prop copies](MESH_WORKFLOWS.md).
+Replacement preserves actor placement/identity and requires an explicit material
+policy. Copies carry a bounded set of native mesh settings; unsupported customized
+properties are refused. Both use fresh inspection, state-bound one-shot previews,
+Undo and fresh mesh/material/settings verification. General actor cloning,
+attachment hierarchies, physics simulation, automatic pivot compensation and
+representative game collision/play acceptance remain outside this release.
+
 ## Next priorities
 
 | Priority | Feature/workflow | Why it matters | Evidence required before calling it ready |
@@ -52,7 +60,7 @@ certify a whole game or establish support for a large user population.
 | Next | Independent real workflow study | Determine when Jev improves routing, completion quality, correction time and total cost using the implemented benchmark harness. | Separately held answer keys; direct-agent, keyword and Jev baselines; representative tasks; full-workflow evidence and all failures. |
 | Later | Reviewed Blueprint edits | Add bounded graph operations with compile checks and before/after diffs. | Transaction recovery, pin/type validation and semantic tests; project-specific construction side effects considered. |
 | Later | Material parameter workflows | Inspect instances, change exposed parameters, compare rendered results. | Known parameter types, parent/asset identity, dependency checks and visual regression tests. |
-| Later | Mesh replacement and duplication | Replace placeholders or make repeated prop arrangements while preserving intentional settings. | Pivot/material/collision handling, attachments and undo/rollback acceptance. |
+| Later | Broader mesh copy compatibility | Extend the implemented replacement/copy workflow to additional intentional actor settings and approved hierarchies. | Representative props, explicit attachment semantics, collision/play acceptance and further undo/rollback fixtures. |
 | Later | Terrain-aware placement | Trace to approved surfaces, align to normals and verify overlap rules. | Explicit collision channel/filter semantics, slopes, missing geometry, streamed worlds and physics tests. |
 | Later | DCC import and dependency diagnosis | Build on direct registry/provenance inspection to identify broken references, import scale, missing textures, LOD and collision problems. | Source availability, measured unit/pivot contracts, bounded traversal and representative DCC imports. |
 | Later | Lighting and camera workflows | Inspect lights, propose bounded adjustments, capture repeatable viewpoints and compare results. | Stable exposure/time/view settings; render comparisons and performance measurements. |

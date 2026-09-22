@@ -25,6 +25,12 @@ scene information to a model. Controls use standard Slate buttons, text fields
 and numeric entries; broad keyboard/accessibility and artist usability acceptance
 still require representative user testing.
 
+MCP-created mesh plans also appear here. Replacement review names the old/new
+mesh and material policy; copy review names its source, new label and transform.
+Scrollable technical detail retains every reviewed material slot,
+override, collision response and mesh setting. Mesh recipes are currently created
+through MCP; the panel's own creation controls remain translation and metadata.
+
 ## Outcomes after reconnecting MCP
 
 `unreal_pending_plans` lists current native previews. `unreal_plan(plan_id)` first

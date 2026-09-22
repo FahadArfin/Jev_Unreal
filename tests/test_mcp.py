@@ -53,6 +53,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_diff",
                 "unreal_verify",
                 "unreal_spatial_preview",
+                "unreal_mesh_preview",
                 "unreal_plan",
                 "unreal_pending_plans",
                 "unreal_blueprint_inspect",
@@ -68,6 +69,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_functional_cancel",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
+            assert len(by_name) == 40
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
             assert set(by_name["unreal_frame"].inputSchema["properties"]["view"]["enum"]) == {
                 "current",
@@ -160,6 +162,22 @@ async def test_stdio_protocol_and_offline_failure():
                 },
             )
             assert spatial.structuredContent["error"]["code"] == "missing_bridge_token"
+            mesh = await session.call_tool(
+                "unreal_mesh_preview",
+                {"recipe": {"kind": "duplicate", "actor_paths": ["/Temp/A.A"]}},
+            )
+            assert mesh.structuredContent["error"]["code"] == "missing_bridge_token"
+            missing_policy = await session.call_tool(
+                "unreal_mesh_preview",
+                {
+                    "recipe": {
+                        "kind": "replace",
+                        "actor_paths": ["/Temp/A.A"],
+                        "asset_path": "/Engine/BasicShapes/Cube.Cube",
+                    }
+                },
+            )
+            assert missing_policy.isError
             record = await session.call_tool("unreal_plan", {"plan_id": "missing"})
             assert record.structuredContent["error"]["code"] == "missing_bridge_token"
             checks_resource = await session.read_resource("jev://checks")
@@ -170,6 +188,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_diff",
                 "unreal_verify",
                 "unreal_spatial_preview",
+                "unreal_mesh_preview",
                 "unreal_plan",
             ):
                 assert by_name[name].annotations.readOnlyHint is True

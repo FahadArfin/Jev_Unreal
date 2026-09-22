@@ -29,6 +29,7 @@ Bounds may be explicitly unavailable (`bounds_available: false`, `bounds_cm: nul
 | `material_slot` | `actor_path`, `slot`, `expected_path: string or null` | Exact assigned path at an existing reported slot; null means unassigned |
 | `label` | `actor_path`, `expected` | Exact actor label |
 | `folder` | `actor_path`, `expected` | Exact editor folder; `""` is the root folder |
+| `mesh` | `actor_path`, complete reviewed `expected` mesh state | Mesh path, label/folder, complete effective/override materials and declared mesh settings; unavailable fields remain unverifiable |
 | `min_gap` | `first_actor_path`, `second_actor_path`, `axis: "x"/"y"/"z"`, `minimum_cm` | Symmetric separation between two world AABB intervals on one axis |
 
 Spatial checks use `tolerance_cm`, default **0.1 cm**, bounded to **0–100 cm**. Transform checks instead expose `location_tolerance_cm` with those same limits, `rotation_tolerance_degrees` default **0.1**, bounded **0–5**, and `scale_tolerance` default **0.001**, bounded **0–0.1**. Tolerances are absolute. Numeric strings, booleans and non-finite values are rejected. Material slot indices are 0–63. Expected positions/sizes are bounded to magnitude 1e12 cm; minimum gaps must be nonnegative.
@@ -55,5 +56,12 @@ Example checks for one native block:
 Replace the example path with the exact current editor path. A supplied result alone is not evidence of freshness; use the fresh helper for current observations. Native revision coverage still does not fingerprint every property or asset byte. Snapshot equality cannot certify unreported state.
 
 ## Validation scope
+
+Mesh previews/applies produce `verification_checks` with the complete expected
+mesh state and a separate transform check. Copies resolve a fresh actor identity
+only after successful apply readback. Use these checks as shown in
+[mesh workflows](MESH_WORKFLOWS.md); missing override or setting fields from an
+older plugin never become matching defaults. Snapshot diffs also retain declared
+mesh settings and material overrides separately from effective assignments.
 
 Synthetic tests cover strict fields, unknown/truncated records, duplicate identities/material slots, malformed and non-finite numbers, snapshot isolation/expiry/eviction/byte limits, changed project/session/world, same-path actor replacement, missing actors, explicit absent bounds, null versus absent material slots, declared material counts, gimbal-equivalent rotations, AABB anchors/gaps, tolerance limits and mixed failed/unverifiable results. These are implementation tests with injected bridge results; actual editor and gameplay evidence must be recorded separately in the release validation documents.

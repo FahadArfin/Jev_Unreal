@@ -216,6 +216,8 @@ class UnrealBridge:
                     if isinstance(operation, dict) and operation.get("op") in {
                         "set_material",
                         "set_metadata",
+                        "replace_mesh",
+                        "duplicate_mesh",
                     }:
                         required_capabilities.add(operation["op"])
             capabilities = status.get("capabilities", [])

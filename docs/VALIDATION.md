@@ -1,6 +1,70 @@
 # Validation evidence
 
-## Current 0.4.0a2 client pacing correction
+## Current 0.5 mesh workflow acceptance
+
+The 0.5 alpha adds reviewed mesh replacement and controlled prop copies. Validation
+uses only the repository's isolated JevSandbox, public engine meshes and synthetic
+fixtures on Windows 11 / Unreal **5.8.2**. It does not establish broad project
+compatibility, gameplay correctness, user productivity or production readiness.
+
+The full Python suite passed **1,273 tests** on Python 3.13.2 in **47.64 seconds**.
+Locked extras sync, Ruff and wheel/source builds passed. The new cases cover strict
+recipes, old-plugin capability refusal, complete mesh state, collision inheritance,
+material overrides, actor identities, stale measurements, 20-source/40-check
+workflows and malformed readback. Missing observations remain unverifiable.
+These are primarily injected/synthetic contract tests; native evidence is separate.
+
+The licensed native build passed on UE **5.8.2**. All **25 `Jev.Editor` suites
+passed: 23 clean and two with three warning entries, with zero failed, skipped or
+incomplete suites. The final report is timestamped **`2026.09.22-04.28.42`**.
+The warnings are the existing empty-bounds and typed-element fixture warnings.
+Four new suites exercise replacement, controlled copies, guards and rollback,
+including true/false collision inheritance, customized settings, Undo, actor
+destruction callbacks and an actual isolated editor-world context switch.
+The changed-world case reports `rollback_failed`/unknown without undoing a
+different world; the fixture restores its context and explicitly cleans up.
+
+The separate rendered **`Jev.Rendered.ReviewPanel` test passed 1/1**, zero warnings,
+at **`2026.09.22-04.29.18`**. Its fresh [panel image](images/review-panel-v0.5.png)
+was viewed: the initial controls fit and are legible, with Apply disabled until a
+plan is reviewed. Mesh before/after text is covered by native controller tests;
+this empty-panel capture does not establish mesh-review usability or accessibility.
+
+Real official-SDK stdio acceptance discovered **40 tools**. The mesh workflow
+exercised both replacement policies, explicit material assignments, a controlled
+copy, six fresh checks, unchanged source records, different new actor identity,
+stale source material/transform rejection and one-shot replay rejection. Four
+native viewport captures were inspected: the replacement retained its white
+material; mesh defaults restored the checker material; the copy image shows two
+separate props. Geometry/readback and image observations do not simulate collision.
+
+Published captures show the [original prop](images/mesh-v0.5-before.png),
+[retained-material replacement](images/mesh-v0.5-preserve-slots.png),
+[mesh defaults](images/mesh-v0.5-mesh-defaults.png) and
+[controlled copy](images/mesh-v0.5-duplicated.png).
+
+The existing blockout, measured-edit and roadmap/reconnect smoke paths also passed.
+The encrypted-key launcher independently discovered 40 tools and authenticated the
+0.5 sandbox editor; the stored provider key was available and zero provider
+requests were made. This release makes no new live Jev accuracy or cost claim.
+
+The live test initially exposed that Unreal's profile setter disables mesh-default
+collision inheritance. The implementation now retains that flag explicitly and
+refuses incompatible inherited defaults during replacement preview. A separate
+fixture issue selected a material equal to the mesh default; the smoke now uses a
+distinct inspected engine material. Failures were diagnosed rather than counted
+as passes. No smoke requested a map save or edited another game.
+
+Raw local evidence is ignored under `artifacts/mesh-pytest.xml`,
+`mesh-native-build.log`, `unreal-automation/`, `unreal-rendered/`,
+`mesh-workflows-v0.5.json`, `editor-smoke-v0.5.json`,
+`verified-workflows-v0.5.json`, `roadmap-smoke-v0.5.json` and
+`saved-launcher-v0.5.json`. Native details are in [Unreal validation](UNREAL_VALIDATION.md).
+The two-editor, installer lifecycle and provider benchmark evidence below remains
+historical 0.4 evidence; those layers were not repeated for 0.5. Fresh-machine,
+representative artist/accessibility and wider engine/platform acceptance remain open.
+
+## Historical 0.4.0a2 client pacing correction
 
 The first 0.4 release's feature and pull-request matrices passed, but a subsequent
 Windows Python 3.12 [main run](https://github.com/FahadArfin/Jev_Unreal/actions/runs/35684098069)

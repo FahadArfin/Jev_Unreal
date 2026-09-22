@@ -76,7 +76,7 @@ async def test_doctor_reports_connected_but_outdated_native_plugin(monkeypatch):
     assert "Rebuild" in result["next_steps"][0]
 
 
-async def test_doctor_old_03_bridge_retains_core_compatibility_but_requires_04_upgrade(monkeypatch):
+async def test_doctor_old_03_bridge_retains_core_compatibility_but_requires_05_upgrade(monkeypatch):
     bridge = AsyncMock()
     bridge.call.return_value = {
         "project_file": "test.uproject",
@@ -95,7 +95,7 @@ async def test_doctor_old_03_bridge_retains_core_compatibility_but_requires_04_u
     assert set(project["missing_capabilities"]) == PROJECT_WORKFLOW_CAPABILITIES
     assert set(project["features"]) == set(PROJECT_WORKFLOW_FEATURES)
     assert all(not feature["ready"] for feature in project["features"].values())
-    assert any("0.4" in step and "Native plan review" in step for step in result["next_steps"])
+    assert any("0.5" in step and "Native plan review" in step for step in result["next_steps"])
     bridge.call.assert_awaited_once_with("status")
 
 
@@ -104,7 +104,7 @@ async def test_doctor_identifies_each_missing_project_capability(monkeypatch, mi
     bridge = AsyncMock()
     bridge.call.return_value = {
         "project_file": "test.uproject",
-        "bridge_version": "0.4.0",
+        "bridge_version": "0.5.0",
         "capabilities": sorted((WORKFLOW_CAPABILITIES | PROJECT_WORKFLOW_CAPABILITIES) - {missing}),
     }
     monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
@@ -121,13 +121,13 @@ async def test_doctor_identifies_each_missing_project_capability(monkeypatch, mi
     assert failed_features[0]["label"] in result["next_steps"][0]
 
 
-async def test_doctor_current_04_bridge_is_ready_without_running_or_enabling_project_code(
+async def test_doctor_current_05_bridge_is_ready_without_running_or_enabling_project_code(
     monkeypatch,
 ):
     bridge = AsyncMock()
     bridge.call.return_value = {
         "project_file": "test.uproject",
-        "bridge_version": "0.4.0",
+        "bridge_version": "0.5.0",
         "capabilities": sorted(WORKFLOW_CAPABILITIES | PROJECT_WORKFLOW_CAPABILITIES),
     }
     monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
@@ -146,6 +146,31 @@ async def test_doctor_current_04_bridge_is_ready_without_running_or_enabling_pro
     assert result["next_steps"] == []
     bridge.call.assert_awaited_once_with("status")
     bridge.close.assert_awaited_once()
+
+
+async def test_doctor_old_04_bridge_reports_only_new_mesh_features_missing(monkeypatch):
+    bridge = AsyncMock()
+    bridge.call.return_value = {
+        "project_file": "test.uproject",
+        "bridge_version": "0.4.0",
+        "capabilities": sorted(
+            (WORKFLOW_CAPABILITIES | PROJECT_WORKFLOW_CAPABILITIES)
+            - {"replace_mesh", "duplicate_mesh"}
+        ),
+    }
+    monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
+    result = await run_command(
+        Namespace(command="doctor"), Settings(expected_project="test.uproject")
+    )
+    assert result["ready"] is False
+    assert result["workflow_compatibility"]["ready"] is True
+    report = result["project_workflow_compatibility"]
+    assert report["missing_capabilities"] == ["duplicate_mesh", "replace_mesh"]
+    assert not report["features"]["mesh_editing"]["ready"]
+    assert all(
+        value["ready"] for name, value in report["features"].items() if name != "mesh_editing"
+    )
+    assert "0.5" in result["next_steps"][0]
 
 
 def test_cli_verification_file_is_bounded_and_has_no_arbitrary_options(tmp_path):

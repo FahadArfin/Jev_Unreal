@@ -22,6 +22,7 @@ WORKFLOW_CAPABILITIES = {
 }
 
 PROJECT_WORKFLOW_FEATURES = {
+    "mesh_editing": ("Mesh replacement and duplication", {"replace_mesh", "duplicate_mesh"}),
     "plan_review": ("Native plan review", {"pending_plans", "plan_status"}),
     "blueprint_inspection": ("Blueprint inspection", {"blueprint_inspect"}),
     "asset_dependencies": ("Asset dependencies", {"asset_dependencies"}),
@@ -175,7 +176,7 @@ async def run_command(args, settings: Settings) -> dict:
             )
             + (
                 [
-                    "Rebuild and relaunch the matching JevEditor 0.4 or later for: "
+                    "Rebuild and relaunch the matching JevEditor 0.5 or later for: "
                     + ", ".join(
                         feature["label"]
                         for feature in project_features.values()

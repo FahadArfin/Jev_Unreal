@@ -22,6 +22,7 @@ from pydantic import (
 
 from .bridge import UnrealBridge, project_identity
 from .errors import JevError
+from .mesh_state import MeshSettings, MeshState, mesh_state
 
 MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
 SCOPE = (
@@ -94,6 +95,7 @@ class _Material(BaseModel):
     model_config = ConfigDict(extra="ignore", strict=True)
     slot: int = Field(ge=0, le=63)
     path: Text | None
+    override_path: Text | None = None
 
 
 class _Actor(BaseModel):
@@ -110,6 +112,8 @@ class _Actor(BaseModel):
     collision_enabled: bool | None
     materials: list[_Material] = Field(max_length=64)
     material_slot_count: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    material_override_count: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    mesh_settings: MeshSettings | None = None
     materials_truncated: bool
     bounds_available: bool
     bounds_cm: _Bounds | None
@@ -179,7 +183,13 @@ def _normalize(
             raise ValueError("Snapshots and diffs require complete material records.")
         normalized = details.model_dump(by_alias=True, mode="json")
         # Material order is not semantic; slot identity is. Blocker ordering is also not semantic.
-        for actor in normalized["actors"]:
+        for actor, parsed_actor in zip(normalized["actors"], details.actors, strict=True):
+            actor["mesh_state_available"] = (
+                parsed_actor.mesh_settings is not None
+                and parsed_actor.material_override_count is not None
+                and parsed_actor.material_slot_count is not None
+                and all("override_path" in item.model_fields_set for item in parsed_actor.materials)
+            )
             actor["materials"].sort(key=lambda item: item["slot"])
             actor["edit_blockers"] = sorted(set(actor["edit_blockers"]))
         encoded = json.dumps(normalized, allow_nan=False, ensure_ascii=False).encode("utf-8")
@@ -396,6 +406,21 @@ class SceneSnapshots:
                             removed.append(item)
                         elif previous[slot] != now[slot]:
                             changed.append(item)
+                    previous_overrides = {
+                        item["slot"]: item["override_path"] for item in before[field]
+                    }
+                    now_overrides = {item["slot"]: item["override_path"] for item in after[field]}
+                    for slot in sorted(previous_overrides.keys() & now_overrides.keys()):
+                        if previous_overrides[slot] != now_overrides[slot]:
+                            changed.append(
+                                {
+                                    "actor_path": before["path"],
+                                    "field": "material_overrides",
+                                    "slot": slot,
+                                    "before": previous_overrides[slot],
+                                    "after": now_overrides[slot],
+                                }
+                            )
                 elif before[field] != after[field]:
                     changed.append(
                         {
@@ -508,6 +533,13 @@ class FolderEquals(_ActorCheck):
     expected: Text
 
 
+class MeshEquals(_ActorCheck):
+    """Exact reviewed mesh, effective/override slots, declared settings and metadata."""
+
+    kind: Literal["mesh"]
+    expected: MeshState
+
+
 class MinimumGap(_CheckBase):
     kind: Literal["min_gap"]
     first_actor_path: ActorPath
@@ -533,6 +565,7 @@ Check = Annotated[
     | MaterialSlot
     | LabelEquals
     | FolderEquals
+    | MeshEquals
     | MinimumGap,
     Field(discriminator="kind"),
 ]
@@ -688,6 +721,26 @@ def _check_one(check: Check, actors: dict[str, dict]) -> dict:
         else:
             actual = actor["bounds_cm"]["min"][2]
             passed = abs(actual - expected) <= check.tolerance_cm
+    elif isinstance(check, MeshEquals):
+        expected = check.expected.model_dump(mode="json")
+        if not actor["mesh_state_available"]:
+            return {
+                "status": "unverifiable",
+                "reason": "mesh_state_unavailable",
+                "expected": expected,
+                "actual": None,
+            }
+        try:
+            actual = mesh_state(actor, actor=True).model_dump(mode="json")
+        except (ValueError, TypeError):
+            return {
+                "status": "unverifiable",
+                "reason": "mesh_state_incomplete",
+                "expected": expected,
+                "actual": None,
+            }
+        expected["materials"].sort(key=lambda item: item["slot"])
+        passed = actual == expected
     elif isinstance(check, MaterialSlot):
         expected = {"slot": check.slot, "path": check.expected_path}
         slot = next((item for item in actor["materials"] if item["slot"] == check.slot), None)
@@ -698,7 +751,7 @@ def _check_one(check: Check, actors: dict[str, dict]) -> dict:
                 "expected": expected,
                 "actual": {"slot": check.slot, "exists": False},
             }
-        actual = slot
+        actual = {key: slot[key] for key in ("slot", "path")}
         passed = slot["path"] == check.expected_path
     else:
         expected, actual = check.expected, actor[check.kind]
