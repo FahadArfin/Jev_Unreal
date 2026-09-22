@@ -8,7 +8,8 @@ public class JevEditor : ModuleRules
         PrivateDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "UnrealEd", "Json", "HTTPServer",
             "AssetRegistry", "Sockets", "PhysicsCore", "RenderCore", "RHI",
-            "Slate", "SlateCore", "InputCore", "ToolMenus", "DataValidation", "BlueprintGraph", "KismetCompiler", "FunctionalTesting"
+            "Slate", "SlateCore", "InputCore", "ToolMenus", "DataValidation", "BlueprintGraph", "KismetCompiler", "FunctionalTesting",
+            "UMG", "UMGEditor", "NavigationSystem"
         });
     }
 }

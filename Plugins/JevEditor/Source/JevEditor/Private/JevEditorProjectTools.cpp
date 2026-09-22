@@ -1,5 +1,9 @@
 #include "JevEditorProjectTools.h"
 #include "JevEditorBridge.h"
+#include "JevEditorBlueprintTools.h"
+#include "Animation/AnimBlueprint.h"
+#include "Animation/Skeleton.h"
+#include "WidgetBlueprint.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorValidatorBase.h"
@@ -115,14 +119,18 @@ TSharedRef<FJsonObject> Blueprint(const TSharedPtr<FJsonObject>& Params, const T
     if (!Only(Params, {TEXT("asset_path"), TEXT("graph_limit"), TEXT("node_limit"), TEXT("pin_limit")}) || !Text(Params, TEXT("asset_path"), Path) || !AssetPath(Path) || !Integer(Params, TEXT("graph_limit"), 1, 32, GraphLimit) || !Integer(Params, TEXT("node_limit"), 1, 256, NodeLimit) || !Integer(Params, TEXT("pin_limit"), 1, 1024, PinLimit)) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Blueprint inspection requires one exact /Game or /Engine object path and bounded integer graph/node/pin limits."));
     const FAssetData Data = RegistryAsset(Path);
     if (!Data.IsValid()) return FJevEditorBridge::Error(TEXT("asset_not_found"), TEXT("The exact asset is absent from the asset registry."));
-    if (Data.AssetClassPath != UBlueprint::StaticClass()->GetClassPathName()) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Inspection currently supports exact native UBlueprint assets only."));
+    if (Data.AssetClassPath != UBlueprint::StaticClass()->GetClassPathName() && Data.AssetClassPath != UWidgetBlueprint::StaticClass()->GetClassPathName() && Data.AssetClassPath != UAnimBlueprint::StaticClass()->GetClassPathName()) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Inspection supports exact native Blueprint, WidgetBlueprint and AnimBlueprint assets only."));
     UBlueprint* BP = FindObject<UBlueprint>(nullptr, *Path);
     if (!BP) return FJevEditorBridge::Error(TEXT("asset_not_loaded"), TEXT("Open this Blueprint in Unreal first. Inspection never loads or compiles a Blueprint implicitly."));
-    if (BP->GetClass() != UBlueprint::StaticClass() || BP->GetPathName() != Path) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Loaded Blueprint identity does not match the requested native asset."));
+    if (!FJevBlueprintTools::IsSupportedClass(BP->GetClass()) || BP->GetClass()->GetClassPathName() != Data.AssetClassPath || BP->GetPathName() != Path) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Loaded Blueprint identity does not match the requested native asset."));
     auto Result = Base(Identity);
     bool bTruncated = false;
     Result->SetStringField(TEXT("asset_path"), Path);
     Result->SetStringField(TEXT("compile_status"), BlueprintStatus(BP->Status));
+    Result->SetStringField(TEXT("asset_class"), BP->GetClass()->GetPathName());
+    Result->SetStringField(TEXT("blueprint_kind"), BP->GetClass() == UWidgetBlueprint::StaticClass() ? TEXT("widget") : BP->GetClass() == UAnimBlueprint::StaticClass() ? TEXT("animation") : TEXT("blueprint"));
+    if (const auto* Anim = Cast<UAnimBlueprint>(BP)) Result->SetStringField(TEXT("target_skeleton"), GetPathNameSafe(Anim->TargetSkeleton));
+    if (const auto* Widget = Cast<UWidgetBlueprint>(BP)) Result->SetNumberField(TEXT("widget_animation_count"), Widget->Animations.Num());
     Result->SetStringField(TEXT("parent_class"), GetPathNameSafe(BP->ParentClass));
     Result->SetStringField(TEXT("generated_class"), GetPathNameSafe(BP->GeneratedClass));
     Result->SetBoolField(TEXT("package_dirty"), BP->GetOutermost()->IsDirty());
@@ -431,6 +439,9 @@ TSharedRef<FJsonObject> FJevProjectTools::ValidationRules(const TSharedRef<FJson
     Result->SetNumberField(TEXT("max_job_seconds"), bValid ? Timeout : 0);
     Result->SetStringField(TEXT("configuration_section"), TEXT("JevEditor.Validation in project DefaultGame.ini"));
     Result->SetStringField(TEXT("execution_scope"), TEXT("Only explicitly configured loaded native UEditorValidatorBase classes. Validators and asset loading execute trusted project code and may have side effects. No automatic fixes or saves are requested."));
+    Result->SetStringField(TEXT("instance_lifetime"), TEXT("fresh_transient_instance_per_asset_rule"));
+    Result->SetBoolField(TEXT("post_asset_validation_called"), false);
+    Result->SetStringField(TEXT("compatibility_requirement"), TEXT("Rules must complete their verdict and release resources within ValidateLoadedAsset. Rules requiring a shared subsystem instance, changelist setup, cross-asset accumulation or PostAssetValidation cleanup are unsupported."));
     TArray<TSharedPtr<FJsonValue>> Rows;
     for (const auto& Rule : Rules)
     {
@@ -467,6 +478,8 @@ TSharedRef<FJsonObject> FJevProjectTools::JobSnapshot(const FJob& Job) const
     Result->SetBoolField(TEXT("save_requested"), false);
     Result->SetField(TEXT("saved"), MakeShared<FJsonValueNull>());
     Result->SetBoolField(TEXT("callback_side_effects_tracked"), false);
+    Result->SetStringField(TEXT("instance_lifetime"), TEXT("fresh_transient_instance_per_asset_rule"));
+    Result->SetBoolField(TEXT("post_asset_validation_called"), false);
     Result->SetStringField(TEXT("cancellation"), TEXT("Cooperative between asset/rule calls. Loading or a running validator cannot be interrupted; elapsed time can exceed the configured limit."));
     Result->SetStringField(TEXT("scope"), TEXT("Selected rules only; no global validation, recursive dependencies, UObject::IsDataValid, automatic fixes or saves."));
     return JevProject::Success(Result);
@@ -572,6 +585,7 @@ void FJevProjectTools::Tick(const TSharedRef<FJsonObject>& Identity)
         Job.State = State; Job.StopReason = Reason; Job.Finished = FPlatformTime::Seconds(); if (ActiveJob == Job.Id) ActiveJob.Empty();
     };
     if (!JevProject::SameIdentity(Job.Identity, Identity)) { Finish(TEXT("cancelled"), TEXT("identity_changed")); return; }
+    if (Job.State == TEXT("queued") && Job.Identity->GetStringField(TEXT("revision")) != Identity->GetStringField(TEXT("revision"))) { Finish(TEXT("cancelled"), TEXT("revision_changed_before_start")); return; }
     bool bPIE = false, bSimulating = false;
     Identity->TryGetBoolField(TEXT("play_in_editor"), bPIE); Identity->TryGetBoolField(TEXT("simulating"), bSimulating);
     if (bPIE || bSimulating) { Finish(TEXT("cancelled"), TEXT("editor_playing")); return; }
@@ -599,11 +613,15 @@ void FJevProjectTools::Tick(const TSharedRef<FJsonObject>& Identity)
     if (ActiveJob != Job.Id || Job.State != TEXT("running")) return;
     FDataValidationContext Context(!bWasLoaded, EDataValidationUsecase::Manual, {});
     const double Started = FPlatformTime::Seconds();
-    const auto Outcome = Validator.IsValid() && Validator->IsEnabled() ? Validator->ValidateLoadedAsset(Data, Asset.Get(), Context) : EDataValidationResult::NotValidated;
+    const bool bValidatorEnabled = Validator.IsValid() && Validator->IsEnabled();
+    const auto Outcome = bValidatorEnabled ? Validator->ValidateLoadedAsset(Data, Asset.Get(), Context) : EDataValidationResult::NotValidated;
     if (ActiveJob != Job.Id || Job.State != TEXT("running")) return;
     auto Row = MakeShared<FJsonObject>();
     Row->SetStringField(TEXT("asset_path"), Path);
     Row->SetStringField(TEXT("rule_id"), Rule.Id);
+    Row->SetStringField(TEXT("validator_class"), Rule.ClassPath);
+    Row->SetBoolField(TEXT("validator_enabled"), bValidatorEnabled);
+    Row->SetStringField(TEXT("not_validated_reason"), Outcome != EDataValidationResult::NotValidated ? TEXT("") : bValidatorEnabled ? TEXT("not_applicable_or_no_verdict") : TEXT("validator_disabled"));
     Row->SetStringField(TEXT("result"), Outcome == EDataValidationResult::Invalid || Context.GetNumErrors() > 0 ? TEXT("invalid") : Outcome == EDataValidationResult::Valid ? TEXT("valid") : TEXT("not_validated"));
     Row->SetNumberField(TEXT("elapsed_seconds"), FPlatformTime::Seconds() - Started);
     Row->SetNumberField(TEXT("error_count"), Context.GetNumErrors());
@@ -611,6 +629,7 @@ void FJevProjectTools::Tick(const TSharedRef<FJsonObject>& Identity)
     Row->SetBoolField(TEXT("loaded_for_validation"), !bWasLoaded);
     Row->SetBoolField(TEXT("package_dirty_before"), bDirtyBefore);
     Row->SetBoolField(TEXT("package_dirty_after"), Asset->GetOutermost()->IsDirty());
+    Row->SetBoolField(TEXT("package_dirty_changed"), bDirtyBefore != Asset->GetOutermost()->IsDirty());
     TArray<TSharedPtr<FJsonValue>> Messages;
     bool bTruncated = false;
     for (const auto& Issue : Context.GetIssues())

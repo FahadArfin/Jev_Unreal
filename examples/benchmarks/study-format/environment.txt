@@ -1,0 +1,1 @@
+FORMAT EXAMPLE ONLY. No measured host. Replace with engine/plugin/OS/hardware versions and controlled environment.

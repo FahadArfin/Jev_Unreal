@@ -1,0 +1,1 @@
+FORMAT EXAMPLE ONLY. Replace with the exact frozen tool catalog, versions and permissions for all methods.

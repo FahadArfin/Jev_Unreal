@@ -1,0 +1,1 @@
+FORMAT EXAMPLE ONLY. Criterion transform is automated. Replace with exact measured target and tolerance before any study.

@@ -7,6 +7,7 @@
 #include "Misc/App.h"
 #include "HAL/PlatformTime.h"
 #include "InputCoreTypes.h"
+#include "Layout/Children.h"
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -21,6 +22,9 @@
 #include "Widgets/Layout/SExpandableArea.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#if WITH_ACCESSIBILITY
+#include "Widgets/Accessibility/SlateAccessibleMessageHandler.h"
+#endif
 
 #define LOCTEXT_NAMESPACE "JevEditorReviewPanel"
 
@@ -28,6 +32,10 @@ struct FJevReviewAccess
 {
     FJevEditorBridge* Bridge = nullptr;
     FString DisabledReason = LOCTEXT("DisabledBridge", "Bridge disabled. Set JEV_BRIDGE_TOKEN before launching Unreal; see Jev_Unreal setup instructions.").ToString();
+#if WITH_DEV_AUTOMATION_TESTS
+    bool bExpandLabelsForTesting = false;
+    TFunction<void(const FString&)> OnAnnouncementForTesting;
+#endif
 };
 
 namespace JevReview
@@ -153,24 +161,26 @@ public:
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
                     [ Heading(LOCTEXT("InspectHeading", "1. Inspect and prepare")) ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
-                    [ SNew(SButton).Tag(TEXT("Jev.Review.Inspect")).Text(LOCTEXT("Inspect", "Inspect selected actors")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; }).OnClicked(this, &SJevReviewWidget::Inspect) ]
+                    [ SNew(SButton).Tag(TEXT("Jev.Review.Inspect")).AccessibleText(LOCTEXT("Inspect", "Inspect selected actors")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; }).OnClicked(this, &SJevReviewWidget::Inspect)
+                        [ WrappedLabel(LOCTEXT("Inspect", "Inspect selected actors")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 10)
                     [ SNew(SBox).MaxDesiredHeight(160)
                         [ ReadOnly(SelectionBox, TEXT("Jev.Review.Selection"), LOCTEXT("SelectionName", "Selection inspection"),
                             LOCTEXT("SelectionHint", "Select actors in the World Outliner, then inspect. Only supported native static mesh actors can be edited.")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 4)
-                    [ SNew(STextBlock).Text(LOCTEXT("Translation", "Translate selection (centimeters)")) ]
+                    [ WrappedLabel(LOCTEXT("Translation", "Translate selection (centimeters)")) ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
                     [ SNew(SHorizontalBox)
                         + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 6, 0) [ Coordinate(0, TEXT("X")) ]
                         + SHorizontalBox::Slot().FillWidth(1).Padding(0, 0, 6, 0) [ Coordinate(1, TEXT("Y")) ]
                         + SHorizontalBox::Slot().FillWidth(1) [ Coordinate(2, TEXT("Z")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 12)
-                    [ SNew(SButton).Tag(TEXT("Jev.Review.PreviewTranslation")).Text(LOCTEXT("PreviewTranslation", "Preview translation")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; }).OnClicked_Lambda([this] { return Preview(true); }) ]
+                    [ SNew(SButton).Tag(TEXT("Jev.Review.PreviewTranslation")).AccessibleText(LOCTEXT("PreviewTranslation", "Preview translation")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; }).OnClicked_Lambda([this] { return Preview(true); })
+                        [ WrappedLabel(LOCTEXT("PreviewTranslation", "Preview translation")) ] ]
                     + SVerticalBox::Slot().AutoHeight()
-                    [ SNew(SCheckBox).Tag(TEXT("Jev.Review.ChangeLabel")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
+                    [ SNew(SCheckBox).CheckBoxContentUsesAutoWidth(false).Tag(TEXT("Jev.Review.ChangeLabel")).AccessibleText(LOCTEXT("ChangeLabel", "Change label — select exactly one actor")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
                         .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { bLabel = State == ECheckBoxState::Checked; })
-                        [ SNew(STextBlock).Text(LOCTEXT("ChangeLabel", "Change label — select exactly one actor")) ] ]
+                        [ WrappedLabel(LOCTEXT("ChangeLabel", "Change label — select exactly one actor")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 8)
                     [ SNew(SEditableTextBox).Tag(TEXT("Jev.Review.Label")).AccessibleText(LOCTEXT("LabelName", "New actor label"))
                         .ToolTipText(LOCTEXT("LabelHelp", "New actor label, 1 to 80 characters. Enable Change label to include it in the preview."))
@@ -178,9 +188,9 @@ public:
                         .IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
                         .OnTextChanged_Lambda([this](const FText& Text) { Label = Text.ToString(); }) ]
                     + SVerticalBox::Slot().AutoHeight()
-                    [ SNew(SCheckBox).Tag(TEXT("Jev.Review.ChangeFolder")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
+                    [ SNew(SCheckBox).CheckBoxContentUsesAutoWidth(false).Tag(TEXT("Jev.Review.ChangeFolder")).AccessibleText(LOCTEXT("ChangeFolder", "Change folder — leave empty to move to root")).IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
                         .OnCheckStateChanged_Lambda([this](ECheckBoxState State) { bFolder = State == ECheckBoxState::Checked; })
-                        [ SNew(STextBlock).Text(LOCTEXT("ChangeFolder", "Change folder — leave empty to move to root")) ] ]
+                        [ WrappedLabel(LOCTEXT("ChangeFolder", "Change folder — leave empty to move to root")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 6)
                     [ SNew(SEditableTextBox).Tag(TEXT("Jev.Review.Folder")).AccessibleText(LOCTEXT("FolderName", "New actor folder"))
                         .ToolTipText(LOCTEXT("FolderHelp", "Relative folder path. An empty value moves actors to root when Change folder is enabled."))
@@ -188,14 +198,16 @@ public:
                         .IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
                         .OnTextChanged_Lambda([this](const FText& Text) { Folder = Text.ToString(); }) ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 14)
-                    [ SNew(SButton).Tag(TEXT("Jev.Review.PreviewMetadata")).Text(LOCTEXT("PreviewMetadata", "Preview label / folder"))
-                        .IsEnabled_Lambda([this] { return Access->Bridge && (bLabel || bFolder); }).OnClicked_Lambda([this] { return Preview(false); }) ]
+                    [ SNew(SButton).Tag(TEXT("Jev.Review.PreviewMetadata")).AccessibleText(LOCTEXT("PreviewMetadata", "Preview label / folder"))
+                        .IsEnabled_Lambda([this] { return Access->Bridge && (bLabel || bFolder); }).OnClicked_Lambda([this] { return Preview(false); })
+                        [ WrappedLabel(LOCTEXT("PreviewMetadata", "Preview label / folder")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
                     [ Heading(LOCTEXT("ReviewHeading", "2. Review exact changes")) ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
-                    [ SNew(SButton).Tag(TEXT("Jev.Review.Refresh")).Text(LOCTEXT("RefreshPlans", "Refresh pending plans"))
+                    [ SNew(SButton).Tag(TEXT("Jev.Review.Refresh")).AccessibleText(LOCTEXT("RefreshPlans", "Refresh pending plans"))
                         .IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
-                        .OnClicked_Lambda([this] { if (!SelectedPlanId.IsEmpty()) Review(SelectedPlanId, false, true); RefreshPlans(true); return FReply::Handled(); }) ]
+                        .OnClicked_Lambda([this] { if (!SelectedPlanId.IsEmpty()) Review(SelectedPlanId, false, true); RefreshPlans(true); return FReply::Handled(); })
+                        [ WrappedLabel(LOCTEXT("RefreshPlans", "Refresh pending plans")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 10)
                     [ SNew(SBox).MaxDesiredHeight(140) [ SNew(SScrollBox).ScrollWhenFocusChanges(EScrollWhenFocusChanges::InstantScroll)
                         + SScrollBox::Slot() [ SAssignNew(PendingBox, SVerticalBox) ] ] ]
@@ -209,7 +221,7 @@ public:
                             LOCTEXT("NoReview", "Choose a pending plan, or preview an edit to the current selection.")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 10)
                     [ SNew(SExpandableArea).Tag(TEXT("Jev.Review.TechnicalToggle")).InitiallyCollapsed(true)
-                        .HeaderContent()[ SNew(STextBlock).Text(LOCTEXT("TechnicalHeading", "Technical details — exact reviewed records")) ]
+                        .HeaderContent()[ WrappedLabel(LOCTEXT("TechnicalHeading", "Technical details — exact reviewed records")) ]
                         .BodyContent()[ SNew(SBox).MaxDesiredHeight(260)
                             [ ReadOnly(TechnicalBox, TEXT("Jev.Review.Technical"), LOCTEXT("TechnicalName", "Complete reviewed technical details"),
                                 LOCTEXT("NoTechnical", "Choose a plan to inspect its complete technical details.")) ] ] ]
@@ -218,10 +230,12 @@ public:
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
                     [ SNew(STextBlock).Text(LOCTEXT("ApplyHelp", "Apply uses the exact reviewed plan, even if preparation inputs change. Scene changes or expiry can reject it. Edits use Unreal Undo; Apply requests no save.")).AutoWrapText(true) ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 6)
-                    [ SNew(SButton).Tag(TEXT("Jev.Review.Apply")).Text(LOCTEXT("Apply", "Apply reviewed plan once")).IsEnabled(this, &SJevReviewWidget::CanApply).OnClicked(this, &SJevReviewWidget::Apply) ]
+                    [ SNew(SButton).Tag(TEXT("Jev.Review.Apply")).AccessibleText(LOCTEXT("Apply", "Apply reviewed plan once")).IsEnabled(this, &SJevReviewWidget::CanApply).OnClicked(this, &SJevReviewWidget::Apply)
+                        [ WrappedLabel(LOCTEXT("Apply", "Apply reviewed plan once")) ] ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
-                    [ SNew(SButton).Tag(TEXT("Jev.Review.InspectApplied")).Text(LOCTEXT("InspectApplied", "Inspect applied actors now"))
-                        .IsEnabled_Lambda([this] { return Access->Bridge && !AppliedActorPaths.IsEmpty(); }).OnClicked(this, &SJevReviewWidget::InspectApplied) ]
+                    [ SNew(SButton).Tag(TEXT("Jev.Review.InspectApplied")).AccessibleText(LOCTEXT("InspectApplied", "Inspect applied actors now"))
+                        .IsEnabled_Lambda([this] { return Access->Bridge && !AppliedActorPaths.IsEmpty(); }).OnClicked(this, &SJevReviewWidget::InspectApplied)
+                        [ WrappedLabel(LOCTEXT("InspectApplied", "Inspect applied actors now")) ] ]
                     + SVerticalBox::Slot().AutoHeight()
                     [ SNew(SBox).MaxDesiredHeight(240)
                         [ ReadOnly(ResultBox, TEXT("Jev.Review.Result"), LOCTEXT("ResultName", "Action result and next step"),
@@ -229,19 +243,48 @@ public:
                 ]
             ]
         ];
+        NameTextInputs(ChildSlot.GetWidget());
         RefreshPlans();
         RegisterActiveTimer(2.0f, FWidgetActiveTimerDelegate::CreateSP(this, &SJevReviewWidget::RefreshTimer));
     }
 
 private:
+    TSharedRef<SWidget> WrappedLabel(const FText& Text) const
+    {
+        FText Display = Text;
+#if WITH_DEV_AUTOMATION_TESTS
+        if (Access->bExpandLabelsForTesting) Display = FText::FromString(TEXT("[pseudo] ") + Text.ToString() + TEXT(" — ") + Text.ToString());
+#endif
+        return SNew(STextBlock).Text(Display).AutoWrapText(true).WrappingPolicy(ETextWrappingPolicy::AllowPerCharacterWrapping);
+    }
+
     static TSharedRef<SWidget> Heading(const FText& Text)
     {
-        return SNew(STextBlock).Text(Text).Font(FAppStyle::GetFontStyle("HeadingExtraSmall"));
+        return SNew(STextBlock).Text(Text).Font(FAppStyle::GetFontStyle("HeadingExtraSmall")).AutoWrapText(true).WrappingPolicy(ETextWrappingPolicy::AllowPerCharacterWrapping);
+    }
+
+    static void NameFocusableChildren(const TSharedRef<SWidget>& Widget, const FText& Name)
+    {
+#if WITH_ACCESSIBILITY
+        if (Widget->SupportsKeyboardFocus()) Widget->SetAccessibleBehavior(EAccessibleBehavior::Custom, Name);
+        FChildren* Children = Widget->GetChildren();
+        for (int32 Index = 0; Index < Children->Num(); ++Index) NameFocusableChildren(Children->GetChildAt(Index), Name);
+#endif
+    }
+
+    static void NameTextInputs(const TSharedRef<SWidget>& Widget)
+    {
+#if WITH_ACCESSIBILITY
+        if (Widget->GetTag() == FName(TEXT("Jev.Review.Label")) || Widget->GetTag() == FName(TEXT("Jev.Review.Folder")))
+            NameFocusableChildren(Widget, Widget->GetAccessibleText());
+        FChildren* Children = Widget->GetChildren();
+        for (int32 Index = 0; Index < Children->Num(); ++Index) NameTextInputs(Children->GetChildAt(Index));
+#endif
     }
 
     TSharedRef<SWidget> ReadOnly(TSharedPtr<SMultiLineEditableTextBox>& Box, FName WidgetTag, const FText& Name, const FText& Text)
     {
-        return SAssignNew(Box, SMultiLineEditableTextBox).Tag(WidgetTag).AccessibleText(Name).ToolTipText(Name)
+        SAssignNew(Box, SMultiLineEditableTextBox).Tag(WidgetTag).AccessibleText(Name).ToolTipText(Name)
             .Text(Text).IsReadOnly(true).AutoWrapText(true).WrappingPolicy(ETextWrappingPolicy::AllowPerCharacterWrapping)
             .ClearKeyboardFocusOnCommit(false).ClearTextSelectionOnFocusLoss(false).IsCaretMovedWhenGainFocus(false)
             .Padding(8).OnKeyDownHandler_Lambda([](const FGeometry&, const FKeyEvent& Event)
@@ -249,6 +292,8 @@ private:
                 // Reading or copying never dispatches an action, commits a field or moves focus to Apply.
                 return Event.GetKey() == EKeys::Enter ? FReply::Handled() : FReply::Unhandled();
             });
+        NameFocusableChildren(Box.ToSharedRef(), Name);
+        return Box.ToSharedRef();
     }
 
     void Focus(const TSharedPtr<SMultiLineEditableTextBox>& Box)
@@ -261,12 +306,14 @@ private:
     TSharedRef<SWidget> Coordinate(int32 Axis, const TCHAR* Name)
     {
         const FText AccessibleName = FText::Format(LOCTEXT("CoordinateName", "Translate {0}, centimeters"), FText::FromString(Name));
-        return SNew(SNumericEntryBox<double>).Tag(FName(*FString::Printf(TEXT("Jev.Review.Translate.%s"), Name)))
+        const auto Entry = SNew(SNumericEntryBox<double>).Tag(FName(*FString::Printf(TEXT("Jev.Review.Translate.%s"), Name)))
             .AccessibleText(AccessibleName).ToolTipText(AccessibleName).AllowSpin(true).MinValue(-1000000).MaxValue(1000000)
             .IsEnabled_Lambda([this] { return Access->Bridge != nullptr; })
             .Value_Lambda([this, Axis] { return TOptional<double>(Translation[Axis]); })
             .OnValueChanged_Lambda([this, Axis](double Value) { Translation[Axis] = Value; })
             .Label()[ SNew(STextBlock).Text(FText::FromString(Name)) ];
+        NameFocusableChildren(Entry, AccessibleName);
+        return Entry;
     }
 
     FText DescribeActors(const TSharedPtr<FJsonObject>& Details) const
@@ -297,7 +344,18 @@ private:
 
     void ShowResult(const FText& Text, bool bFocus)
     {
-        if (!ResultBox->GetText().EqualTo(Text)) ResultBox->SetText(Text);
+        if (!ResultBox->GetText().EqualTo(Text))
+        {
+            ResultBox->SetText(Text);
+            // Only explicit actions call ShowResult. Passive polling never announces status/countdowns.
+            const FString Announcement = Text.ToString().Left(512);
+#if WITH_ACCESSIBILITY
+            FSlateApplication::Get().GetAccessibleMessageHandler()->MakeAccessibleAnnouncement(Announcement);
+#endif
+#if WITH_DEV_AUTOMATION_TESTS
+            if (Access->OnAnnouncementForTesting) Access->OnAnnouncementForTesting(Announcement);
+#endif
+        }
         if (bFocus) Focus(ResultBox);
     }
 
@@ -461,14 +519,15 @@ private:
             const FString Id = Plan->GetStringField(TEXT("plan_id"));
             PendingBox->AddSlot().AutoHeight().Padding(0, 2)
             [ SNew(SButton).Tag(FName(*(FString(TEXT("Jev.Review.Pending.")) + Id)))
-                .Text_Lambda([this, Id]
+                .AccessibleText(FText::Format(LOCTEXT("PendingAccessible", "Review plan {0}"), FText::FromString(Id.Left(8))))
+                .ToolTipText(FText::FromString(Plan->GetStringField(TEXT("world_path")) + TEXT("\n") + Id))
+                .OnClicked_Lambda([this, Id] { Review(Id, true, true); return FReply::Handled(); })
+                [ SNew(STextBlock).AutoWrapText(true).WrappingPolicy(ETextWrappingPolicy::AllowPerCharacterWrapping).Text_Lambda([this, Id]
                 {
                     const auto* Current = PendingSummaries.Find(Id);
                     return Current ? FText::Format(LOCTEXT("PendingButton", "Review {0} · {1} changes · {2}s"), FText::FromString(Id.Left(8)),
                         FText::AsNumber(static_cast<int32>((*Current)->GetNumberField(TEXT("operation_count")))), FText::AsNumber(FMath::CeilToInt((*Current)->GetNumberField(TEXT("expires_in_seconds"))))) : LOCTEXT("MissingPlan", "Plan unavailable");
-                })
-                .ToolTipText(FText::FromString(Plan->GetStringField(TEXT("world_path")) + TEXT("\n") + Id))
-                .OnClicked_Lambda([this, Id] { Review(Id, true, true); return FReply::Handled(); }) ];
+                }) ] ];
         }
         if (Result->GetBoolField(TEXT("truncated"))) PendingBox->AddSlot().AutoHeight()[ SNew(STextBlock).Text(LOCTEXT("PendingTruncated", "Showing the newest 20 pending plans. Additional plans remain accessible by MCP plan ID.")).AutoWrapText(true) ];
     }
@@ -531,10 +590,13 @@ private:
 };
 
 #if WITH_DEV_AUTOMATION_TESTS
-TSharedRef<SWidget> FJevEditorReviewPanel::CreateForTesting(FJevEditorBridge& Bridge)
+TSharedRef<SWidget> FJevEditorReviewPanel::CreateForTesting(FJevEditorBridge& Bridge, bool bExpandLabels,
+    TFunction<void(const FString&)> OnAnnouncement)
 {
     auto TestAccess = MakeShared<FJevReviewAccess>();
     TestAccess->Bridge = &Bridge;
+    TestAccess->bExpandLabelsForTesting = bExpandLabels;
+    TestAccess->OnAnnouncementForTesting = MoveTemp(OnAnnouncement);
     return SNew(SJevReviewWidget).Access(TestAccess);
 }
 #endif

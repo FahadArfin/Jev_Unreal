@@ -4,6 +4,8 @@ import copy
 import json
 import os
 import socket
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -593,3 +595,288 @@ def test_network_share_paths_are_rejected_before_any_filesystem_probe(monkeypatc
             _absolute(path)
         with pytest.raises(JevError, match="local"):
             _safe_path(PureWindowsPath(path))
+
+
+def crash_setup(project, source, destination, *, operation="install", completed=False):
+    """Exit after a real atomic replacement; no exception handler can roll back."""
+    script = """
+import json, os, sys
+from pathlib import Path
+from jev_unreal import setup
+project, source, destination = map(Path, sys.argv[1:4])
+operation, completed = sys.argv[4:6]
+plan = (setup.plan_uninstall(project) if operation == 'uninstall'
+        else setup.plan_install(project, source))
+original = setup._atomic_write
+def interrupted(path, data):
+    original(path, data)
+    if completed == 'yes':
+        stop = path.name == 'receipt.json' and json.loads(data)['status'] == 'complete'
+    else:
+        stop = path == (project if operation == 'uninstall' else destination / setup.MANIFEST)
+    if stop:
+        os._exit(83)
+setup._atomic_write = interrupted
+setup.apply_plan(plan)
+sys.exit(84)
+"""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(project),
+            str(source),
+            str(destination),
+            operation,
+            "yes" if completed else "no",
+        ],
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 83, result.stderr.decode(errors="replace")
+    return (destination.parent / ".JevEditor.install.lock").read_text()
+
+
+@pytest.mark.parametrize("operation", ["install", "upgrade", "uninstall"])
+@pytest.mark.parametrize("completed", [False, True])
+def test_process_exit_recovery_preserves_exact_original_or_committed_bytes(
+    project_source, operation, completed
+):
+    project, source, destination = project_source
+    if operation != "install":
+        setup.apply_plan(setup.plan_install(project, source))
+    if operation == "upgrade":
+        (source / "Source/JevEditor/Private/Example.cpp").write_bytes(b"// upgraded\n")
+    targets = [
+        project,
+        destination / setup.MANIFEST,
+        destination / "JevEditor.uplugin",
+        destination / "Source/JevEditor/Private/Example.cpp",
+    ]
+    before = {path: path.read_bytes() if path.exists() else None for path in targets}
+    operation_id = crash_setup(
+        project,
+        source,
+        destination,
+        operation="uninstall" if operation == "uninstall" else "install",
+        completed=completed,
+    )
+    interrupted = {path: path.read_bytes() if path.exists() else None for path in targets}
+    plan = setup.plan_recovery(project, operation_id)
+    assert plan["can_apply"]
+    assert plan["mode"] == ("finish_committed_install" if completed else "restore_original_bytes")
+    # Planning must leave both targets and the retained lock unchanged.
+    assert all(
+        (p.read_bytes() if p.exists() else None) == value for p, value in interrupted.items()
+    )
+    result = setup.apply_recovery_plan(plan)
+    assert result["status"] == "recovered"
+    expected = interrupted if completed else before
+    assert all((p.read_bytes() if p.exists() else None) == value for p, value in expected.items())
+    assert not (destination.parent / ".JevEditor.install.lock").exists()
+    with pytest.raises(JevError) as exc:
+        setup.apply_recovery_plan(plan)
+    assert exc.value.code == "stale_setup_plan"
+    # A new install plan is possible after rollback and the original backup is retained.
+    assert Path(result["backup_directory"]).is_dir()
+    assert setup.plan_install(project, source)["can_apply"]
+
+
+def test_recovery_blocks_external_edits_and_restores_nothing(project_source):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    changed = destination / "JevEditor.uplugin"
+    changed.write_bytes(b"external private edit")
+    before = project.read_bytes()
+    plan = setup.plan_recovery(project, operation_id)
+    assert not plan["can_apply"]
+    assert plan["conflicts"] == [{"path": str(changed), "reason": "externally_modified"}]
+    with pytest.raises(JevError, match="external edits"):
+        setup.apply_recovery_plan(plan)
+    assert project.read_bytes() == before
+    assert changed.read_bytes() == b"external private edit"
+
+
+@pytest.mark.parametrize("change", ["target", "backup", "receipt", "lock", "payload"])
+def test_recovery_rejects_changed_review_evidence(project_source, change):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    plan = setup.plan_recovery(project, operation_id)
+    directory = destination.parent / ".JevEditorBackups" / operation_id
+    if change == "target":
+        (destination / "JevEditor.uplugin").write_bytes(b"external edit")
+    elif change == "backup":
+        next(directory.glob("*.original")).write_bytes(b"changed backup")
+    elif change == "receipt":
+        receipt = directory / "receipt.json"
+        receipt.write_bytes(receipt.read_bytes() + b" ")
+    elif change == "lock":
+        (destination.parent / ".JevEditor.install.lock").write_text("f" * 32)
+    else:
+        plan["actions"][0]["path"] = str(project.parent / "Unrelated.cpp")
+    before = project.read_bytes()
+    with pytest.raises(JevError):
+        setup.apply_recovery_plan(plan)
+    assert project.read_bytes() == before
+
+
+def test_recovery_refuses_active_setup_kernel_lease(project_source):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    plan = setup.plan_recovery(project, operation_id)
+    with setup._setup_lease(project), pytest.raises(JevError) as exc:
+        setup.apply_recovery_plan(plan)
+    assert exc.value.code == "setup_busy"
+    assert setup.apply_recovery_plan(plan)["status"] == "recovered"
+
+
+def test_interrupted_recovery_can_resume_from_new_plan(project_source, monkeypatch):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    original = setup._atomic_write
+
+    def locked_project(path, data):
+        if path == project:
+            raise PermissionError("Synthetic locked project")
+        original(path, data)
+
+    monkeypatch.setattr(setup, "_atomic_write", locked_project)
+    with pytest.raises(PermissionError):
+        setup.apply_recovery_plan(setup.plan_recovery(project, operation_id))
+    assert not (destination / setup.MANIFEST).exists()
+    assert (destination.parent / ".JevEditor.install.lock").exists()
+    monkeypatch.setattr(setup, "_atomic_write", original)
+    assert (
+        setup.apply_recovery_plan(setup.plan_recovery(project, operation_id))["status"]
+        == "recovered"
+    )
+    assert "Plugins" not in read_json(project)
+
+
+@pytest.mark.parametrize("mutation", ["outside", "duplicate", "hash", "backup", "owner", "project"])
+def test_recovery_does_not_trust_malformed_receipt_paths(project_source, tmp_path, mutation):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    receipt_path = destination.parent / ".JevEditorBackups" / operation_id / "receipt.json"
+    receipt = read_json(receipt_path)
+    external = tmp_path / "unrelated.txt"
+    external.write_bytes(b"preserve")
+    if mutation == "outside":
+        receipt["files"][0]["path"] = str(external)
+    elif mutation == "duplicate":
+        receipt["files"][1]["path"] = receipt["files"][0]["path"]
+    elif mutation == "hash":
+        receipt["files"][0]["after"]["sha256"] = "X" * 64
+    elif mutation == "backup":
+        next(item for item in receipt["files"] if item["backup"])["backup"] = "../unrelated.txt"
+    elif mutation == "owner":
+        receipt["owner"] = "unknown"
+    else:
+        receipt["project_file"] = str(tmp_path / "Other.uproject")
+    write_json(receipt_path, receipt)
+    with pytest.raises(JevError):
+        setup.plan_recovery(project, operation_id)
+    assert external.read_bytes() == b"preserve"
+
+
+def test_legacy_receipt_requires_manual_recovery(project_source):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    path = destination.parent / ".JevEditorBackups" / operation_id / "receipt.json"
+    receipt = read_json(path)
+    receipt["schema"] = 1
+    write_json(path, receipt)
+    with pytest.raises(JevError) as exc:
+        setup.plan_recovery(project, operation_id)
+    assert exc.value.code == "legacy_setup_receipt"
+    assert not setup.list_recovery(project)["receipts"][0]["reviewed_recovery_supported"]
+
+
+def test_python_dependency_metadata_reports_missing_and_prerelease(monkeypatch):
+    def version(name):
+        if name == "httpx":
+            raise setup.importlib.metadata.PackageNotFoundError(name)
+        return "1.26.0rc1" if name == "mcp" else "2.11.4"
+
+    monkeypatch.setattr(setup.importlib.metadata, "version", version)
+    report = setup._python_dependencies()
+    assert report["packages"]["httpx"]["compatible_release"] is False
+    assert report["packages"]["mcp"]["compatible_release"] is None
+    assert report["packages"]["pydantic"]["compatible_release"] is True
+    assert not report["dependency_imports_tested"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows file sharing behavior")
+def test_windows_locked_project_rolls_back_plugin_changes(project_source):
+    import ctypes
+    from ctypes import wintypes
+
+    project, source, destination = project_source
+    original = project.read_bytes()
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateFileW(str(project), 0x80000000, 1, None, 3, 0, None)
+    assert handle != wintypes.HANDLE(-1).value
+    try:
+        with pytest.raises(PermissionError):
+            setup.apply_plan(setup.plan_install(project, source))
+    finally:
+        kernel.CloseHandle(handle)
+    assert project.read_bytes() == original
+    assert not (destination / "JevEditor.uplugin").exists()
+    assert not (destination / setup.MANIFEST).exists()
+
+
+def test_closed_rollback_cannot_rewind_later_successful_install(project_source, monkeypatch):
+    project, source, destination = project_source
+    original = setup._atomic_write
+
+    def fail_manifest(path, data):
+        if path == destination / setup.MANIFEST:
+            raise OSError("Synthetic first attempt failure")
+        original(path, data)
+
+    monkeypatch.setattr(setup, "_atomic_write", fail_manifest)
+    with pytest.raises(OSError):
+        setup.apply_plan(setup.plan_install(project, source))
+    old = setup.list_recovery(project)["receipts"][0]
+    assert old["status"] == "rolled_back"
+    monkeypatch.setattr(setup, "_atomic_write", original)
+    setup.apply_plan(setup.plan_install(project, source))
+    before = project.read_bytes()
+    plan = setup.plan_recovery(project, old["operation_id"])
+    assert not plan["can_apply"]
+    assert any(item["reason"] == "operation_not_pending" for item in plan["conflicts"])
+    with pytest.raises(JevError):
+        setup.apply_recovery_plan(plan)
+    assert project.read_bytes() == before
+    assert (destination / setup.MANIFEST).exists()
+
+
+@pytest.mark.parametrize("field", ["operation", "status"])
+@pytest.mark.parametrize("value", [[], {}, None, True])
+def test_malformed_receipt_enums_are_structured_errors(project_source, field, value):
+    project, source, destination = project_source
+    operation_id = crash_setup(project, source, destination)
+    path = destination.parent / ".JevEditorBackups" / operation_id / "receipt.json"
+    receipt = read_json(path)
+    receipt[field] = value
+    write_json(path, receipt)
+    with pytest.raises(JevError):
+        setup.plan_recovery(project, operation_id)
+    report = setup.inspect_setup(project)
+    assert len(report["installer_recovery"]["receipts"]) == 1
+    if field == "status":
+        assert report["installer_recovery"]["receipts"][0]["status"] == "unknown"

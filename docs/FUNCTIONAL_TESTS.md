@@ -1,5 +1,9 @@
 # Project-owned gameplay checks
 
+For ready-to-adapt source examples covering doors, interaction, damage and
+navigation, see [gameplay recipes](GAMEPLAY_RECIPES.md). They use this same adapter
+and require explicit project policy and an existing standalone PIE session.
+
 `unreal_functional_tests`, `unreal_functional_start`, `unreal_functional_job` and
 `unreal_functional_cancel` expose a bounded part of Unreal's native
 `AFunctionalTest` lifecycle. They run a named project-owned test in **one already
@@ -108,11 +112,17 @@ fixture session with `FEndPlayMapCommand` and check interruption evidence.
 It also replaces a run on the same actor on a later frame and verifies that
 cancelling the old job leaves the replacement running.
 
+`Jev.Editor.GameplayRecipes` adds source-only project-owned subjects for door
+orientation/collision, range-limited single-use interaction, damage/armor/death,
+and actual complete navigation paths. It uses an unsaved native navigation fixture
+and exact configured aliases to exercise positive and deliberately broken cases
+through this adapter, including repeated cleanup. See the
+[recipe guide](GAMEPLAY_RECIPES.md) for the precise observations and scope.
+
 The production tool never starts or stops PIE; those actions belong solely to the
-isolated automation fixture. This verifies a real native gameplay lifecycle but
-does not prove a project's door, navigation or combat behavior. Those require
-project-authored tests and their own evidence. See [validation evidence](VALIDATION.md)
-for completed runs and remaining limitations.
+isolated automation fixtures. The sample recipes do not prove another game's
+behavior; adapted project-authored tests need their own evidence. See
+[validation evidence](VALIDATION.md) for completed runs and remaining limitations.
 
 Epic documents the existing setup, completion and cleanup model in
 [Functional Testing](https://dev.epicgames.com/documentation/en-us/unreal-engine/functional-testing-in-unreal-engine).

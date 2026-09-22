@@ -57,6 +57,10 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_plan",
                 "unreal_pending_plans",
                 "unreal_blueprint_inspect",
+                "unreal_blueprint_compile_targets",
+                "unreal_blueprint_compile_preview",
+                "unreal_blueprint_compile",
+                "unreal_blueprint_compile_receipt",
                 "unreal_asset_dependencies",
                 "unreal_asset_import_info",
                 "unreal_validation_rules",
@@ -69,7 +73,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_functional_cancel",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
-            assert len(by_name) == 40
+            assert len(by_name) == 44
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
             assert set(by_name["unreal_frame"].inputSchema["properties"]["view"]["enum"]) == {
                 "current",

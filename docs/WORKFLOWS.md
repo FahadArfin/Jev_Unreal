@@ -1,7 +1,7 @@
 # Practical workflows
 
 All examples are MCP tool arguments. Start with `unreal_context` and confirm the
-intended project. The 0.5 alpha exposes 40 tools. Local editor, discovery search,
+intended project. The 0.7 alpha exposes 44 tools. Local editor, discovery search,
 layout/spatial recipes, snapshots, verification, asset filtering and diagnostic
 grouping require no provider key. Optional Jev requests are explicit, bounded
 judgments; they do not execute an operation. Replace every example actor/asset

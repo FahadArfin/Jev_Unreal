@@ -6,13 +6,16 @@ retained in the selected project's Plugins directory, including on failed attemp
 """
 
 import hashlib
+import importlib.metadata
 import json
 import os
 import platform
 import shutil
 import socket
 import stat
+import sys
 import uuid
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 from .errors import JevError
@@ -415,8 +418,65 @@ def _atomic_write(path: Path, data: bytes) -> None:
             temporary.unlink()
 
 
+@contextmanager
+def _setup_lease(project_path: Path):
+    """A kernel lease survives neither a crash nor process exit; no PID guessing.
+
+    The small lease file is retained. Deleting it would let two processes lock
+    different inodes on POSIX. The separate operation lock identifies the receipt.
+    """
+    path = project_path.parent / "Plugins/.JevEditor.setup.lease"
+    _safe_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as handle:
+        if handle.seek(0, os.SEEK_END) == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            _error("Another setup operation is active; wait until it exits.", "setup_busy")
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def apply_plan(plan: dict) -> dict:
     """Apply an unchanged plan once. Does not close editors, compile, or launch anything."""
+    if (
+        not isinstance(plan, dict)
+        or plan.get("schema") != 1
+        or plan.get("operation") not in {"install", "uninstall"}
+        or not isinstance(plan.get("project_file"), str)
+        or (plan["operation"] == "install" and not isinstance(plan.get("source_plugin"), str))
+    ):
+        _error("The setup plan is malformed.", "invalid_request")
+    project_path, _ = _project(plan["project_file"])
+    fresh = _make_plan(
+        project_path, plan.get("source_plugin"), uninstall=plan["operation"] == "uninstall"
+    )
+    if fresh != plan:
+        _error("Setup changed. Generate and review a fresh plan.", "stale_setup_plan")
+    if not plan["can_apply"]:
+        _error("Resolve every listed setup conflict before applying this plan.")
+    with _setup_lease(project_path):
+        return _apply_plan(plan)
+
+
+def _apply_plan(plan: dict) -> dict:
     if (
         not isinstance(plan, dict)
         or plan.get("schema") != 1
@@ -450,6 +510,7 @@ def apply_plan(plan: dict) -> dict:
         handle.write(operation_id)
     backup = parent / ".JevEditorBackups" / operation_id
     changed: list[tuple[Path, bytes | None, bytes | None]] = []
+    retain_lock = False
     try:
         # Revalidate under the cooperative project lock, before creating backups.
         if (
@@ -494,7 +555,7 @@ def apply_plan(plan: dict) -> dict:
         backup.mkdir(parents=True, exist_ok=False)
         records = []
         total = 0
-        for index, (path, _data, expected) in enumerate(writes):
+        for index, (path, data, expected) in enumerate(writes):
             if _record(path) != expected:
                 _error("A destination file changed after planning.", "stale_setup_plan")
             before = _read(path) if expected is not None else None
@@ -508,6 +569,9 @@ def apply_plan(plan: dict) -> dict:
                 {
                     "path": str(path),
                     "before": expected,
+                    "after": {"sha256": _digest(data), "bytes": len(data)}
+                    if data is not None
+                    else None,
                     "backup": backup_name if before is not None else None,
                 }
             )
@@ -515,8 +579,9 @@ def apply_plan(plan: dict) -> dict:
             backup / "receipt.json",
             _json_bytes(
                 {
-                    "schema": 1,
+                    "schema": 2,
                     "owner": OWNER,
+                    "operation_id": operation_id,
                     "project_file": str(project_path),
                     "plan_id": plan["plan_id"],
                     "operation": plan["operation"],
@@ -578,7 +643,15 @@ def apply_plan(plan: dict) -> dict:
                     _atomic_write(path, before)
             except (OSError, JevError):
                 rollback_failed = True
+        # Keep exact crash-recovery evidence even when ordinary rollback succeeds.
+        try:
+            receipt = _json(backup / "receipt.json")
+            receipt["status"] = "rollback_failed" if rollback_failed else "rolled_back"
+            _atomic_write(backup / "receipt.json", _json_bytes(receipt))
+        except (OSError, JevError):
+            pass
         if rollback_failed:
+            retain_lock = True
             _error(
                 "Setup could not fully restore files. Inspect the retained backup receipts.",
                 "setup_rollback_failed",
@@ -586,8 +659,302 @@ def apply_plan(plan: dict) -> dict:
         raise
     finally:
         _safe_path(lock)
-        if lock.exists() and _read(lock, 128).decode() == operation_id:
+        if not retain_lock and lock.exists() and _read(lock, 128).decode() == operation_id:
             lock.unlink()
+
+
+def _operation_id(value: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 32
+        or any(c not in "0123456789abcdef" for c in value)
+    ):
+        _error(
+            "An operation ID must be exactly 32 lowercase hexadecimal characters.",
+            "invalid_request",
+        )
+    return value
+
+
+def _valid_record(value: dict | None) -> bool:
+    return value is None or (
+        isinstance(value, dict)
+        and set(value) == {"sha256", "bytes"}
+        and isinstance(value["sha256"], str)
+        and len(value["sha256"]) == 64
+        and all(c in "0123456789abcdef" for c in value["sha256"])
+        and type(value["bytes"]) is int
+        and 0 <= value["bytes"] <= MAX_FILE_BYTES
+    )
+
+
+def _recovery_receipt(project_path: Path, operation_id: str) -> tuple[Path, dict]:
+    directory = project_path.parent / "Plugins/.JevEditorBackups" / _operation_id(operation_id)
+    receipt = _json(directory / "receipt.json")
+    if receipt.get("schema") == 1:
+        _error(
+            "Legacy receipts have no after hashes; inspect and restore them manually.",
+            "legacy_setup_receipt",
+        )
+    expected = {
+        "schema",
+        "owner",
+        "project_file",
+        "plan_id",
+        "operation",
+        "operation_id",
+        "status",
+        "files",
+    }
+    if (
+        set(receipt) != expected
+        or receipt.get("schema") != 2
+        or receipt.get("owner") != OWNER
+        or receipt.get("project_file") != str(project_path)
+        or receipt.get("operation_id") != operation_id
+        or not isinstance(receipt.get("operation"), str)
+        or receipt["operation"] not in {"install", "uninstall"}
+        or not isinstance(receipt.get("status"), str)
+        or receipt.get("status")
+        not in {"prepared", "complete", "rolled_back", "rollback_failed", "recovered"}
+        or not isinstance(receipt.get("plan_id"), str)
+        or len(receipt["plan_id"]) != 64
+        or any(c not in "0123456789abcdef" for c in receipt["plan_id"])
+        or not isinstance(receipt.get("files"), list)
+        or not 1 <= len(receipt["files"]) <= MAX_FILES + 2
+    ):
+        _error("The interrupted operation receipt is malformed or belongs to another project.")
+    destination = project_path.parent / "Plugins/JevEditor"
+    seen, total = set(), 0
+    for index, item in enumerate(receipt["files"]):
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"path", "before", "after", "backup"}
+            or not isinstance(item["path"], str)
+            or not _valid_record(item["before"])
+            or not _valid_record(item["after"])
+            or item["before"] == item["after"]
+            or item["backup"] != (f"{index:04d}.original" if item["before"] else None)
+        ):
+            _error("An interrupted operation file record is invalid.")
+        target = _absolute(item["path"])
+        if str(target) != item["path"] or str(target).casefold() in seen:
+            _error("An interrupted operation has ambiguous target paths.")
+        seen.add(str(target).casefold())
+        if target not in {project_path, destination / MANIFEST}:
+            try:
+                _relative(target.relative_to(destination).as_posix())
+            except ValueError:
+                _error("Recovery target is outside the selected plugin and project.")
+        if item["before"] is not None:
+            if _record(directory / item["backup"]) != item["before"]:
+                _error("A recovery backup is missing or its original hash has changed.")
+            total += item["before"]["bytes"]
+    if total > MAX_TOTAL_BYTES + MAX_JSON_BYTES * 2:
+        _error("Recovery backups exceed the total size limit.")
+    return directory, receipt
+
+
+def plan_recovery(project_file: str | Path, operation_id: str) -> dict:
+    """Read-only preview of exact restoration, or cleanup after a committed install.
+
+    Files with unrelated edits block the entire recovery. A matching prepared
+    receipt is not a signature; use only the selected project's trusted backups.
+    """
+    project_path, _ = _project(project_file)
+    directory, receipt = _recovery_receipt(project_path, operation_id)
+    lock = project_path.parent / "Plugins/.JevEditor.install.lock"
+    lock_record = _record(lock)
+    conflicts, actions, unchanged = [], [], []
+    if lock_record is not None and _read(lock, 128) != operation_id.encode():
+        conflicts.append({"path": lock.name, "reason": "different_operation_lock"})
+    if lock_record is None:
+        # A closed receipt must never rewind a later successful installation
+        # whose files happen to have the same after hashes.
+        conflicts.append({"path": lock.name, "reason": "operation_not_pending"})
+    committed = receipt["status"] == "complete"
+    for item in reversed(receipt["files"]):
+        current = _record(Path(item["path"]))
+        wanted = item["after"] if committed else item["before"]
+        if current == wanted:
+            unchanged.append(item["path"])
+        elif not committed and current == item["after"]:
+            actions.append(
+                {
+                    "path": item["path"],
+                    "before": current,
+                    "after": wanted,
+                    "backup": item["backup"],
+                    "action": "restore" if wanted else "remove",
+                }
+            )
+        else:
+            conflicts.append({"path": item["path"], "reason": "externally_modified"})
+    if committed and lock_record is None:
+        conflicts.append({"path": "receipt.json", "reason": "operation_already_complete"})
+    if receipt["status"] == "recovered" and lock_record is None:
+        conflicts.append({"path": "receipt.json", "reason": "operation_already_recovered"})
+    plan = {
+        "schema": 1,
+        "operation": "recover",
+        "project_file": str(project_path),
+        "operation_id": operation_id,
+        "receipt_before": _record(directory / "receipt.json"),
+        "receipt_status": receipt["status"],
+        "lock_before": lock_record,
+        "mode": "finish_committed_install" if committed else "restore_original_bytes",
+        "actions": actions,
+        "unchanged": unchanged,
+        "conflicts": conflicts,
+        "can_apply": not conflicts,
+        "requires_editor_closed": True,
+        "requires_no_active_setup": True,
+        "build_performed": False,
+    }
+    plan["plan_id"] = _digest(_json_bytes(plan))
+    return plan
+
+
+def apply_recovery_plan(plan: dict) -> dict:
+    """Recover under the OS lease, rechecking every target and backup before writing."""
+    if (
+        not isinstance(plan, dict)
+        or plan.get("schema") != 1
+        or plan.get("operation") != "recover"
+        or not isinstance(plan.get("project_file"), str)
+    ):
+        _error("The recovery plan is malformed.", "invalid_request")
+    operation_id = _operation_id(plan.get("operation_id"))
+    project_path, _ = _project(plan["project_file"])
+    with _setup_lease(project_path):
+        fresh = plan_recovery(project_path, operation_id)
+        if plan != fresh:
+            _error(
+                "Recovery targets, receipt, backups or lock changed; review a fresh plan.",
+                "stale_setup_plan",
+            )
+        if not fresh["can_apply"]:
+            _error("Recovery preserves external edits. Resolve every listed conflict first.")
+        directory, receipt = _recovery_receipt(project_path, operation_id)
+        lock = project_path.parent / "Plugins/.JevEditor.install.lock"
+        if plan["lock_before"] is None:
+            with lock.open("x", encoding="utf-8") as handle:
+                handle.write(operation_id)
+        changed = 0
+        for action in plan["actions"]:
+            target = Path(action["path"])
+            if _record(target) != action["before"]:
+                _error(
+                    "A recovery target changed. Its external edit was preserved.",
+                    "stale_setup_plan",
+                )
+            if action["after"] is None:
+                _safe_path(target)
+                target.unlink()
+            else:
+                data = _read(directory / action["backup"])
+                if {"sha256": _digest(data), "bytes": len(data)} != action["after"]:
+                    _error("A recovery backup changed. Review a fresh plan.", "stale_setup_plan")
+                _atomic_write(target, data)
+            changed += 1
+        # On failure the receipt and identifying lock survive, so recovery can
+        # resume from hashes after inspection instead of guessing which writes ran.
+        receipt["status"] = (
+            "complete" if plan["mode"] == "finish_committed_install" else "recovered"
+        )
+        _atomic_write(directory / "receipt.json", _json_bytes(receipt))
+        if _read(lock, 128) != operation_id.encode():
+            _error("The setup lock changed; it was preserved.", "setup_conflict")
+        lock.unlink()
+        return {
+            "status": "recovered",
+            "mode": plan["mode"],
+            "plan_id": plan["plan_id"],
+            "changed_files": changed,
+            "backup_directory": str(directory),
+            "project_file": str(project_path),
+            "build_performed": False,
+            "next_steps": [
+                "Review a fresh install plan before retrying installation.",
+                "Build and authenticate the exact project after installing.",
+            ],
+        }
+
+
+def list_recovery(project_file: str | Path) -> dict:
+    """List bounded local receipt metadata; never remove a lock based on its age."""
+    project_path, _ = _project(project_file)
+    parent = project_path.parent / "Plugins"
+    lock = _presence(parent / ".JevEditor.install.lock")
+    root = parent / ".JevEditorBackups"
+    _safe_path(root)
+    receipts, truncated = [], False
+    if root.is_dir():
+        with os.scandir(root) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 128:
+                    truncated = True
+                    break
+                try:
+                    operation_id = _operation_id(entry.name)
+                    data = _json(Path(entry.path) / "receipt.json")
+                    if data.get("owner") != OWNER or data.get("project_file") != str(project_path):
+                        continue
+                    status = data.get("status")
+                    if not isinstance(status, str):
+                        status = "unknown"
+                    receipts.append(
+                        {
+                            "operation_id": operation_id,
+                            "status": status
+                            if status
+                            in {
+                                "prepared",
+                                "complete",
+                                "rolled_back",
+                                "rollback_failed",
+                                "recovered",
+                            }
+                            else "unknown",
+                            "reviewed_recovery_supported": data.get("schema") == 2,
+                        }
+                    )
+                except (OSError, JevError):
+                    continue
+    return {
+        "project_file": str(project_path),
+        "lock": lock,
+        "receipts": sorted(receipts, key=lambda item: item["operation_id"]),
+        "truncated": truncated,
+        "active_process_checked": False,
+        "scope": "Receipt discovery only; applying recovery requires the exclusive OS lease.",
+    }
+
+
+def _python_dependencies() -> dict:
+    packages = {}
+    for name, minimum, maximum in (
+        ("httpx", (0, 28, 0), (0, 29, 0)),
+        ("mcp", (1, 26, 0), (2, 0, 0)),
+        ("pydantic", (2, 11, 0), (3, 0, 0)),
+    ):
+        try:
+            version = importlib.metadata.version(name)
+            parts = version.split(".")
+            parsed = tuple(int(p) for p in parts) if all(p.isdigit() for p in parts) else None
+            compatible = (
+                minimum <= (*parsed, *([0] * (3 - len(parsed)))) < maximum if parsed else None
+            )
+            packages[name] = {"version": version, "compatible_release": compatible}
+        except importlib.metadata.PackageNotFoundError:
+            packages[name] = {"version": None, "compatible_release": False}
+    return {
+        "python": platform.python_version(),
+        "python_supported": sys.version_info >= (3, 12),
+        "packages": packages,
+        "dependency_imports_tested": False,
+        "scope": "Installed distribution metadata only; prerelease compatibility is unknown.",
+    }
 
 
 def _presence(path: Path) -> dict:
@@ -766,6 +1133,8 @@ def inspect_setup(
         "source": source,
         "engine": engine,
         "toolchain": _toolchain(),
+        "python_environment": _python_dependencies(),
+        "installer_recovery": list_recovery(project_path),
         "credentials": credentials,
         "recovery_metadata": recovery,
         "additional_plugin_paths": _additional_plugins(project_path, project),

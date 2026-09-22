@@ -95,7 +95,7 @@ async def test_doctor_old_03_bridge_retains_core_compatibility_but_requires_05_u
     assert set(project["missing_capabilities"]) == PROJECT_WORKFLOW_CAPABILITIES
     assert set(project["features"]) == set(PROJECT_WORKFLOW_FEATURES)
     assert all(not feature["ready"] for feature in project["features"].values())
-    assert any("0.5" in step and "Native plan review" in step for step in result["next_steps"])
+    assert any("0.7" in step and "Native plan review" in step for step in result["next_steps"])
     bridge.call.assert_awaited_once_with("status")
 
 
@@ -170,7 +170,7 @@ async def test_doctor_old_04_bridge_reports_only_new_mesh_features_missing(monke
     assert all(
         value["ready"] for name, value in report["features"].items() if name != "mesh_editing"
     )
-    assert "0.5" in result["next_steps"][0]
+    assert "0.7" in result["next_steps"][0]
 
 
 def test_cli_verification_file_is_bounded_and_has_no_arbitrary_options(tmp_path):

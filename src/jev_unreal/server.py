@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field
 
+from .blueprints import register_blueprint_tools
 from .bridge import UnrealBridge
 from .capture import capture_content
 from .catalog import ToolCatalog
@@ -585,4 +586,5 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         )
 
     register_project_tools(server, bridge)
+    register_blueprint_tools(server, bridge)
     return server

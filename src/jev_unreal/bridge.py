@@ -118,6 +118,10 @@ class UnrealBridge:
                     "test_not_allowed",
                     "pie_required",
                     "test_unavailable",
+                    "blueprint_compile_disabled",
+                    "target_not_allowed",
+                    "compile_failed",
+                    "plan_consumed",
                 }
                 if code not in known:
                     code = "bridge_error"
@@ -148,6 +152,10 @@ class UnrealBridge:
             "pending_plans",
             "plan_status",
             "blueprint_inspect",
+            "blueprint_compile_targets",
+            "blueprint_compile_preview",
+            "blueprint_compile",
+            "blueprint_compile_receipt",
             "asset_dependencies",
             "asset_import_info",
             "validation_rules",
@@ -180,6 +188,8 @@ class UnrealBridge:
                     "validation_cancel",
                     "functional_start",
                     "functional_cancel",
+                    "blueprint_compile_preview",
+                    "blueprint_compile",
                 }
                 and not expected
             ):
@@ -193,6 +203,10 @@ class UnrealBridge:
                 "pending_plans",
                 "plan_status",
                 "blueprint_inspect",
+                "blueprint_compile_targets",
+                "blueprint_compile_preview",
+                "blueprint_compile",
+                "blueprint_compile_receipt",
                 "asset_dependencies",
                 "asset_import_info",
                 "validation_rules",
@@ -255,4 +269,8 @@ class UnrealBridge:
                     "expected_project": actual,
                     "expected_state": state,
                 }
+            if action in {"blueprint_compile_preview", "blueprint_compile"}:
+                if len(actual) > 2048 or any(ord(character) < 32 for character in actual):
+                    raise JevError("bridge_error", "Editor returned an invalid project identity.")
+                params = {**(params or {}), "expected_project": actual}
             return await self._call(action, params or {})

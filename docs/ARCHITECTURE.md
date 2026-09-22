@@ -28,7 +28,7 @@ The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{acti
 
 Python reads authenticated status before every operation and compares its project with the configured binding. Preview, apply, camera framing and project-job start/cancel require an explicit project. That binding comes from `JEV_EXPECTED_PROJECT` or a selected [connection profile](CONNECTION_PROFILES.md). A profile selects the project, endpoint and token file together at MCP startup; it does not inherit a legacy token or retarget a running process. Each selected editor uses its own MCP process.
 
-Status advertises bridge version `0.6.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, mesh replacement/copying, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
+Status advertises bridge version `0.7.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, mesh replacement/copying, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
 
 For `validation_start`, Python also puts the authenticated status's exact project,
 session, world and revision into the native request. Native code checks these before
@@ -104,6 +104,21 @@ as MCP. A human can inspect selected actors, review a translation or label/folde
 change, and apply the reviewed one-shot plan. MCP-created pending plans are also
 visible. The 0.6 presentation changes neither the authenticated bridge contract
 nor the 40-tool MCP catalog. It adds no execution path or permissions.
+
+Version 0.7 adds a separate project-approved Blueprint compile service and four MCP
+tools (44 total). Its aliases are configured locally; discovery and preview never
+load or compile an asset. Commit consumes a state-bound preview and invokes the
+native compiler with `SkipSave`. Engine compiler-busy flags, PIE, notified object
+changes and competing validation/functional jobs prevent entry. Compiler callbacks
+are trusted project code and can affect dependent assets/instances; receipts state
+that saving and complete side effects are unknown. This service shares no permission
+decision with Jev and offers no arbitrary graph/code/command execution.
+
+Source installation now keeps schema-2 write-ahead receipts and acquires an
+operating-system lease. Explicit recovery plans bind receipt, backup and current
+target hashes, preserving independent edits. Closed operations cannot rewind later
+installs. This filesystem recovery is separate from editor scene transactions and
+does not make native editor receipts persistent across crashes.
 
 A deterministic presentation layer formats the native record into operation-order
 **Field / Before / After** content. It does not resolve editor objects, invoke a

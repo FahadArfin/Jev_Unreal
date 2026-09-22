@@ -39,3 +39,20 @@ public:
     FString ImportMetadata;
     virtual void GetAssetRegistryTags(FAssetRegistryTagsContext Context) const override;
 };
+
+/** Exercises real native validation conventions: legacy result helpers and dirty side effects. */
+UCLASS()
+class UJevCompatibilityFixtureValidator : public UEditorValidatorBase
+{
+    GENERATED_BODY()
+public:
+    static bool bAutomationEnabled;
+    static int32 PostCalls;
+    virtual bool IsEnabled() const override { return bAutomationEnabled; }
+    virtual void PostAssetValidation(TArray<TSharedRef<FTokenizedMessage>>& OutMessages) override { ++PostCalls; }
+protected:
+    virtual bool CanValidateAsset_Implementation(const FAssetData& Data, UObject* Asset, FDataValidationContext& Context) const override;
+    virtual EDataValidationResult ValidateLoadedAsset_Implementation(const FAssetData& Data, UObject* Asset, FDataValidationContext& Context) override;
+private:
+    int32 InstanceCalls = 0;
+};

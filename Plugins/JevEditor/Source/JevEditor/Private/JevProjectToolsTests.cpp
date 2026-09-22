@@ -7,9 +7,13 @@
 #include "EdGraph/EdGraphNode.h"
 #include "EditorFramework/AssetImportData.h"
 #include "Engine/Blueprint.h"
+#include "EditorValidator_Localization.h"
+#include "EditorValidator_Material.h"
+#include "EditorValidatorSubsystem.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/DataValidation.h"
+#include "Misc/ScopeExit.h"
 #include "UObject/Package.h"
 
 namespace JevProjectTests
@@ -299,6 +303,62 @@ bool FJevValidationJobSafety::RunTest(const FString& Parameters)
     TestEqual(TEXT("cancelled callback does not append stale success"), Result->GetNumberField(TEXT("completed")), 0.0);
     TestTrue(TEXT("subsequent independent job can be queued"), Tools.Execute(TEXT("validation_start"), StartParams({Good}), Identity())->GetBoolField(TEXT("ok")));
     Tools.Shutdown();
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevValidatorCompatibility, "Jev.Editor.ValidatorCompatibility", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevValidatorCompatibility::RunTest(const FString& Parameters)
+{
+    using namespace JevProjectTests;
+    FConfig Config; FFixture Fixture; FJevProjectTools Tools;
+    auto* Good = Fixture.Asset(TEXT("Good_Asset"));
+    auto* Bad = Fixture.Asset(TEXT("Bad_Asset"));
+    auto* Dirty = Fixture.Asset(TEXT("Dirty_Asset"));
+    Fixture.Package->SetDirtyFlag(false);
+    UJevCompatibilityFixtureValidator::bAutomationEnabled = true;
+    UJevCompatibilityFixtureValidator::PostCalls = 0;
+    ON_SCOPE_EXIT { UJevCompatibilityFixtureValidator::bAutomationEnabled = false; };
+    auto Run = [&](const FString& ClassPath, const TArray<UObject*>& Assets)
+    {
+        GConfig->SetArray(TEXT("JevEditor.Validation"), TEXT("Rules"), {TEXT("fixture|") + ClassPath}, GGameIni);
+        const auto Started = Tools.Execute(TEXT("validation_start"), StartParams(Assets), Identity());
+        if (!Started->GetBoolField(TEXT("ok"))) return Started;
+        for (int32 Index = 0; Index <= Assets.Num(); ++Index) Tools.Tick(Identity());
+        return Tools.Execute(TEXT("validation_job"), JobParams(Started), Identity());
+    };
+    auto Response = Run(UJevCompatibilityFixtureValidator::StaticClass()->GetPathName(), {Good, Bad, Dirty});
+    if (!TestTrue(TEXT("project convention fixture completes"), Response->GetBoolField(TEXT("ok")))) return false;
+    const auto Result = Response->GetObjectField(TEXT("result"));
+    const auto& Rows = Result->GetArrayField(TEXT("results"));
+    if (!TestEqual(TEXT("all selected assets evaluated"), Rows.Num(), 3)) return false;
+    TestEqual(TEXT("legacy AssetPasses propagated"), Rows[0]->AsObject()->GetStringField(TEXT("result")), FString(TEXT("valid")));
+    TestEqual(TEXT("legacy AssetFails propagated"), Rows[1]->AsObject()->GetStringField(TEXT("result")), FString(TEXT("invalid")));
+    TestEqual(TEXT("per-asset instances isolate mutable state"), Rows[2]->AsObject()->GetStringField(TEXT("result")), FString(TEXT("valid")));
+    TestTrue(TEXT("selected package dirty transition recorded"), Rows[2]->AsObject()->GetBoolField(TEXT("package_dirty_changed")));
+    TestEqual(TEXT("legacy warning retained"), Rows[2]->AsObject()->GetNumberField(TEXT("warning_count")), 1.0);
+    TestEqual(TEXT("unsupported global cleanup hook never invoked"), UJevCompatibilityFixtureValidator::PostCalls, 0);
+    TestFalse(TEXT("selected-rule receipt does not claim global hooks"), Result->GetBoolField(TEXT("post_asset_validation_called")));
+    UJevCompatibilityFixtureValidator::bAutomationEnabled = false;
+    Response = Run(UJevCompatibilityFixtureValidator::StaticClass()->GetPathName(), {Good});
+    TestEqual(TEXT("disabled native rule explains non-verdict"), Response->GetObjectField(TEXT("result"))->GetArrayField(TEXT("results"))[0]->AsObject()->GetStringField(TEXT("not_validated_reason")), FString(TEXT("validator_disabled")));
+    // Real engine rule: validate a nonlocalized registered asset through the same adapter.
+    Response = Run(UEditorValidator_Localization::StaticClass()->GetPathName(), {Good});
+    TestEqual(TEXT("engine localization validator compatible with selected-rule adapter"), Response->GetObjectField(TEXT("result"))->GetStringField(TEXT("verdict")), FString(TEXT("valid")));
+    // Do not invent shader validation evidence when the engine policy has no platforms.
+    auto* Settings = GetMutableDefault<UDataValidationSettings>();
+    const bool bOldMaterial = Settings->bEnableMaterialValidation;
+    Settings->bEnableMaterialValidation = false;
+    ON_SCOPE_EXIT { Settings->bEnableMaterialValidation = bOldMaterial; };
+    Response = Run(UEditorValidator_Material::StaticClass()->GetPathName(), {Good});
+    TestEqual(TEXT("unconfigured engine material validator never silently passes"), Response->GetObjectField(TEXT("result"))->GetStringField(TEXT("verdict")), FString(TEXT("not_validated")));
+    GConfig->SetArray(TEXT("JevEditor.Validation"), TEXT("Rules"), {TEXT("fixture|") + UJevProjectFixtureValidator::StaticClass()->GetPathName()}, GGameIni);
+    const int32 Before = UJevProjectFixtureValidator::Executions;
+    const auto Queued = Tools.Execute(TEXT("validation_start"), StartParams({Good}), Identity());
+    auto Changed = Identity(); Changed->SetStringField(TEXT("revision"), TEXT("new-revision"));
+    Tools.Tick(Changed);
+    const auto Cancelled = Tools.Execute(TEXT("validation_job"), JobParams(Queued), Identity())->GetObjectField(TEXT("result"));
+    TestEqual(TEXT("queued revision rechecked before callback"), Cancelled->GetStringField(TEXT("stop_reason")), FString(TEXT("revision_changed_before_start")));
+    TestEqual(TEXT("stale queue runs no trusted callback"), UJevProjectFixtureValidator::Executions, Before);
     return true;
 }
 

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "id": "public-format-example",
+  "provenance": "authored_synthetic_pilot",
+  "seed": 43,
+  "participants": [
+    "example-agent"
+  ],
+  "repetitions": 2,
+  "tasks": [
+    {
+      "id": "example-translation",
+      "initial_state_sha256": "aeb505630aae732ead21c5cc80b3e1d879d15f95daee101a8b172c2aaa7d6115",
+      "acceptance_criteria_sha256": "c66b20622ff7a8d00c25c1561d2b413df38c16d82066721738ff6342d43f9b39",
+      "goal_sha256": "1a4569f259f1e2f5467fbee09dd4889c93721b175e8af4bf447b70dc429f10e9",
+      "timeout_seconds": 60,
+      "criteria": [
+        {
+          "id": "transform",
+          "evaluation": "automated"
+        }
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method": "direct_agent",
+      "implementation": "format-placeholder",
+      "configuration_sha256": "0968f3941d24bdabe18a3a97655bcd60bb2540b6f476d11199fdb6df51b64d5c"
+    },
+    {
+      "method": "keyword",
+      "implementation": "format-placeholder",
+      "configuration_sha256": "edbd71e9fd5f96b49705db205f96ea4bb35076b1aea610e8e199a70b328e6e03"
+    },
+    {
+      "method": "jev",
+      "implementation": "format-placeholder",
+      "configuration_sha256": "6332ecd80328de85b93785ee7b03d89949bae288073f6728317a95a51c233844"
+    }
+  ],
+  "environment_sha256": "ee505af7559ba205c5a2e157a6a1dbe865b40d1394aff70424d80dad2e37916f",
+  "allowed_tools_sha256": "74d9b5dd917e441d2006bf93aec515faea0ea6dac0465a037368a19689ecbc67",
+  "intervention_policy_sha256": "cb911ba9eb220a288128ef89a358896c96ba8f27f741c1b9ee8e3f40583c5415"
+}

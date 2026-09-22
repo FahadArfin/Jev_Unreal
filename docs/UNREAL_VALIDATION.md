@@ -1,8 +1,39 @@
 # Unreal validation
 
-Jev Editor **0.6.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
+Jev Editor **0.7.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
 
-## Current 0.6 review workflow
+## Current 0.7 project workflows
+
+The final licensed incremental build passed in **7.45 seconds**. Native report
+**`2026.09.22-05.31.37`** records **33/33 passed**: 30 clean and three suites with
+four engine warning entries. There are zero failed, not-run or incomplete suites.
+New coverage includes:
+
+- `BlueprintVariants`: stored Widget/Animation graphs and unsupported subclasses.
+- `BlueprintCompileWorkflow` / `BlueprintCompileGuards`: actual successful/failing
+  compiles, retained diagnostics, replay/stale/policy/expiry and compiler-busy refusal.
+- `ValidatorCompatibility`: native result helpers, fresh instances, dirty transitions,
+  engine localization/material-policy behavior and the queued revision guard.
+- `GameplayRecipes`: four positive/four negative recipes and a repeat run, real native
+  path generation, owned cleanup and bounded waiting for PIE teardown.
+- `ReviewAccessibleNames`: names on the actual focusable input widgets.
+
+Rendered report **`2026.09.22-05.29.26`** records **3/3 passed**, zero warnings,
+including `ReviewNarrowAccessibility`. Its native captures were viewed. It tests
+expanded English labels, native synthetic keyboard events and announcement requests;
+it does not establish actual translations, physical input or screen-reader delivery.
+
+The official stdio client and saved PowerShell launcher discovered **44 tools**
+against authenticated bridge **0.7.0** in the exact repository sandbox. Live smoke
+checks cover baseline editing/capture, mesh editing, compile-policy refusal and
+receipts surviving MCP reconnection. No smoke requested a save or provider call.
+Fresh Blueprint compilation and gameplay execution are native automation evidence,
+separate from these default-policy HTTP/stdio checks.
+
+See the [full validation report](VALIDATION.md) for installer evidence, fixture
+corrections, warning details and the remaining external acceptance requirements.
+
+## Historical 0.6 review workflow
 
 The final licensed incremental build passed in **6.56 seconds**. The native
 automation report **`2026.09.22-04.57.09`** records **27 passed**, 0 failed, 0 not
