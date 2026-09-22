@@ -29,7 +29,7 @@ PROJECTS = {
     "primary": ROOT / "examples/JevSandbox/JevSandbox.uproject",
     "installed": ROOT / "artifacts/install-acceptance/JevSandbox/JevSandbox.uproject",
 }
-REPORT = ROOT / "artifacts/connections-smoke-v0.5.json"
+REPORT = ROOT / "artifacts/connections-smoke-v0.6.json"
 CUBE = "/Engine/BasicShapes/Cube.Cube"
 RULES = {
     "localization": "/Script/DataValidation.EditorValidator_Localization",
@@ -257,7 +257,7 @@ async def run(profiles_path: Path):
                 sessions[name] = await connect(stack, profiles_path, profiles[name])
                 initial[name] = await context(sessions[name], PROJECTS[name])
                 status = initial[name]
-                require(status["bridge_version"] == "0.5.0", "Rebuild both native plugins for 0.5.")
+                require(status["bridge_version"] == "0.6.0", "Rebuild both native plugins for 0.6.")
                 require(
                     {"plan_status", "validation_start", "validation_job"}
                     <= set(status["capabilities"]),

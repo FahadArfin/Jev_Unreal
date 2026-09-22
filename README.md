@@ -7,7 +7,7 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.5 alpha.** Python MCP server + source-built Unreal editor plugin, with **40 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.6 alpha.** Python MCP server + source-built Unreal editor plugin, with **40 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
@@ -26,7 +26,7 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - Measured grid, staircase and room recipes, with automatic transform readback checks after apply.
 - Measured alignment, distribution, pivot grid snapping and grounding on a specified plane, preserving rotation and scale.
 - Reviewed placeholder mesh replacement with an explicit material policy, plus controlled copies of native props with fresh mesh/material/settings checks. See [mesh workflows](docs/MESH_WORKFLOWS.md).
-- **Window → Jev Review**: inspect selected actors, preview translation/naming/folders, review MCP plans and apply once inside Unreal.
+- **Window → Jev Review**: inspect selected actors, preview translation/naming/folders, read explicit before/after changes, and apply once inside Unreal. Keyboard-focusable review/results, expandable technical details and separate refresh diagnostics support deliberate human review. See [review workflow](docs/REVIEW_PANEL.md).
 - Native plan receipts that survive an MCP reconnect while the editor stays open.
 - Already-loaded native Blueprint graphs, variables, pins and stored compiler messages; direct asset dependencies and recorded import provenance.
 - Explicitly approved native Data Validation rules with bounded jobs, cancellation and authoritative valid/invalid/not-validated results.

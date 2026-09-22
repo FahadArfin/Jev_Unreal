@@ -104,7 +104,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::StatusSnapshot(UWorld* World) const
     Result->SetStringField(TEXT("world_path"), World->GetPathName());
     Result->SetStringField(TEXT("current_level"), GetPathNameSafe(World->GetCurrentLevel()));
     Result->SetStringField(TEXT("revision"), Revision(World));
-    Result->SetStringField(TEXT("bridge_version"), TEXT("0.5.0"));
+    Result->SetStringField(TEXT("bridge_version"), TEXT("0.6.0"));
     Result->SetBoolField(TEXT("play_in_editor"), GEditor->PlayWorld != nullptr);
     Result->SetBoolField(TEXT("simulating"), GEditor->bIsSimulatingInEditor);
     Result->SetBoolField(TEXT("editor_world"), true);

@@ -1,6 +1,65 @@
 # Validation evidence
 
-## Current 0.5 mesh workflow acceptance
+## Current 0.6 native review workflow acceptance
+
+The 0.6 alpha improves the human review workflow while retaining the same 40 MCP
+tools and execution contracts. Tests used the exact isolated JevSandbox on
+Windows 11 / licensed Unreal **5.8.2**. No representative artist, physical keyboard,
+screen-reader, localization or production-readiness claim follows from these fixtures.
+
+| Layer | Result | Scope |
+| --- | --- | --- |
+| Python | **1,273 passed**, Python 3.13.2, **50.15 seconds** | Existing primarily synthetic contract suite; Python changes are version and live smoke-script updates. |
+| Dependency/lint/package | Locked extras sync, Ruff and wheel/source build passed | Source distributions include native source, not licensed engine/editor binaries. |
+| Licensed native build | Compiled and linked successfully, **6.56 seconds** on final incremental build | Installed compiler preference and engine-header warnings remain; this is not an install or performance benchmark. |
+| Native automation | **27/27 suites passed**, 25 clean and two warning-bearing suites | Three existing empty-bounds/typed-element warning entries; zero failed/skipped/incomplete suites. |
+| Rendered automation | **2/2 suites passed**, zero warnings | Native Slate event routing and captures; separate from headless tests and representative user acceptance. |
+| Live MCP/editor | **40 tools**, baseline editor smoke and mesh workflows passed | Exact authenticated sandbox, fresh mesh checks, unchanged-source/new-identity checks, stale/replay refusal and native captures. |
+| Saved launcher | Connected to bridge **0.6.0**, discovered 40 tools | Existing encrypted key available; **zero provider requests**. |
+
+The final native report is timestamped **`2026.09.22-04.57.09`**, and the rendered
+report **`2026.09.22-04.57.45`**. New `Jev.Editor.ReviewPresentation` and
+`Jev.Editor.ReviewRecovery` suites cover all seven supported operation types,
+both mesh policies, exact small numeric changes, malformed/incomplete/oversized
+records, and recovery messages that retain uncertainty about an attempted apply.
+
+`Jev.Rendered.ReviewWorkflow` routes actual Slate Tab/Shift+Tab, text-entry, Enter
+and Space events in a private native test window. It enters a 25 cm translation,
+verifies preview immutability and copyable read-only text, proves Enter in review
+does not execute, then deliberately focuses Apply and confirms one actual actor
+move. It checks fresh inspection, expiry, selection errors, pending mesh review,
+keyboard access to the collapsed technical detail, and selection/focus stability
+through normal two-second refreshes. Advancing the receipt clock past 15-minute
+retention verifies that a failed passive lookup preserves the last action result,
+its selected text and focus while separately disabling Apply.
+
+The initial rendered check originally expected the offscreen Apply widget to
+already have arranged geometry. It now scrolls that control into view, waits for
+normal Slate layout, and checks its visible geometry and disabled state. The
+workflow test passed before that fixture correction; failed runs were not counted
+as final acceptance. Code review separately found and corrected passive refresh
+errors overwriting explicit outcomes. The final regression covers that correction.
+
+Native images were viewed: the [initial layout](images/review-panel-v0.6.png),
+[scrolled action area](images/review-panel-v0.6-actions.png),
+[selected transform text](images/review-panel-v0.6-transform.png),
+[mesh review](images/review-panel-v0.6-mesh.png) and
+[error guidance](images/review-panel-v0.6-error.png) are readable in the captured
+fixture sizes. The three text images are direct native widget captures, not edited
+screenshots. Full populated-window captures remain local because they include the
+machine's project path. Scrolling is required for longer content; these images do
+not establish every tab size, display scale, language or assistive configuration.
+
+Local raw evidence is ignored under `artifacts/review-pytest.xml`,
+`review-native-build.log`, `unreal-automation/`, `unreal-rendered/`,
+`editor-smoke-v0.6.json`, `mesh-workflows-v0.6.json` and
+`saved-launcher-v0.6.json`, plus native PNGs under the sandbox's `Saved/Automation`.
+No smoke requested a save or edited another game. This milestone made no provider
+calls or new Jev accuracy/cost measurement. Installer, multiple-editor, independent
+workflow and broader platform acceptance remain historical or open as identified
+below. See [native evidence](UNREAL_VALIDATION.md) and [review use](REVIEW_PANEL.md).
+
+## Historical 0.5 mesh workflow acceptance
 
 The 0.5 alpha adds reviewed mesh replacement and controlled prop copies. Validation
 uses only the repository's isolated JevSandbox, public engine meshes and synthetic

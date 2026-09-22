@@ -26,8 +26,8 @@ from jev_unreal.config import Settings
 ROOT = Path(__file__).resolve().parents[1]
 SANDBOX = ROOT / "examples/JevSandbox/JevSandbox.uproject"
 ARTIFACTS = ROOT / "artifacts"
-REPORT = ARTIFACTS / "mesh-workflows-v0.5.json"
-DIAGNOSTICS = ARTIFACTS / "mesh-workflows-v0.5-diagnostics.json"
+REPORT = ARTIFACTS / "mesh-workflows-v0.6.json"
+DIAGNOSTICS = ARTIFACTS / "mesh-workflows-v0.6-diagnostics.json"
 CUBE = "/Engine/BasicShapes/Cube.Cube"
 SPHERE = "/Engine/BasicShapes/Sphere.Sphere"
 OVERRIDE_MATERIAL = "/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"
@@ -255,7 +255,7 @@ async def capture(session, paths, stage):
     require(len(images) == 1, "Expected exactly one native viewport image.")
     data = base64.b64decode(images[0].data, validate=True)
     require(data.startswith(b"\x89PNG\r\n\x1a\n"), "Native capture was not a PNG.")
-    target = ARTIFACTS / f"mesh-workflow-v0.5-{stage}.png"
+    target = ARTIFACTS / f"mesh-workflow-v0.6-{stage}.png"
     target.write_bytes(data)
     return {
         "stage": stage,
@@ -307,13 +307,13 @@ async def run(report):
             require(len(tools) == 40, "Expected the matching 40-tool MCP catalog.")
             require("unreal_mesh_preview" in tools, "Mesh workflow MCP tool is unavailable.")
             status = await context(session)
-            require(status.get("bridge_version") == "0.5.0", "Expected native bridge 0.5.0.")
+            require(status.get("bridge_version") == "0.6.0", "Expected native bridge 0.6.0.")
             require(
                 {"replace_mesh", "duplicate_mesh", "preview_expected_state"}
                 <= set(status.get("capabilities", [])),
                 "The native mesh capabilities are missing.",
             )
-            report.update(engine_version=status["engine_version"], bridge_version="0.5.0")
+            report.update(engine_version=status["engine_version"], bridge_version="0.6.0")
             report["mcp_tools"] = len(tools)
             cube = await call(session, "unreal_asset_details", {"path": CUBE})
             sphere = await call(session, "unreal_asset_details", {"path": SPHERE})

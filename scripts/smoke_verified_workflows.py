@@ -275,7 +275,7 @@ async def main():
                 "saved_to_disk": False,
                 "cloud_used": False,
             }
-            (ROOT / "artifacts/verified-workflows-v0.5.json").write_text(
+            (ROOT / "artifacts/verified-workflows-v0.6.json").write_text(
                 json.dumps(report, indent=2) + "\n", encoding="utf-8"
             )
             print(json.dumps(report, indent=2))

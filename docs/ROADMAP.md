@@ -48,11 +48,20 @@ Undo and fresh mesh/material/settings verification. General actor cloning,
 attachment hierarchies, physics simulation, automatic pivot compensation and
 representative game collision/play acceptance remain outside this release.
 
+Version 0.6 improves the [native human review workflow](REVIEW_PANEL.md): all
+supported operations have explicit Before/After fields, complete bounded mesh
+detail is separately expandable, and inspection/review/results are selectable
+and keyboard-focusable. Status polling preserves reviewed text and explicit
+action outcomes; read failures and expiry disable Apply with recovery guidance.
+Native key-event fixtures cover deliberate application and focus behavior.
+Representative artist, physical-keyboard, screen-reader and translated-language
+acceptance remain open; automation is not a substitute for those studies.
+
 ## Next priorities
 
 | Priority | Feature/workflow | Why it matters | Evidence required before calling it ready |
 | --- | --- | --- | --- |
-| Next | Review-panel usability and accessibility | Make the implemented panel understandable to artists/designers and usable from keyboard and assistive workflows. | Observed task completion, focus order, readable before/after values, accessible errors and localization review. |
+| Next | Representative review-panel usability and accessibility | Validate the 0.6 review and keyboard foundations with artists/designers and assistive workflows. | Observed task completion, physical keyboard and screen-reader behavior, accessible errors and translated-language review. |
 | Next | Fresh-machine install and upgrade acceptance | Turn the source installer into a demonstrated onboarding path across supported toolchains. | Clean Windows hosts, missing dependencies, Blueprint-only/C++ projects, previous releases, locked files and recovery after interruption. |
 | Next | Real-project validator compatibility | Establish which common native rules work with the selected-rule adapter and how their side effects behave. | Representative project fixtures, documented unsupported shared/global state, cleanup and cancellation evidence. |
 | Next | Blueprint coverage and reviewed compile diagnostics | Cover useful Blueprint subclasses and fresh compile results before considering graph repairs. | Subclass-specific contracts, before/after identity, compile side-effect handling and known failing/working projects. |

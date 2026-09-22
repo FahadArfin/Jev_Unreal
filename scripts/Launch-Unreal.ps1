@@ -26,7 +26,7 @@ if ($AutomationTests) {
 }
 if ($RenderedReviewTest) {
     $reportPath = Join-Path $repositoryRoot 'artifacts\unreal-rendered'
-    $editorArguments += @('-Unattended', '-NoPause', '-ExecCmds="Automation RunTests Jev.Rendered.ReviewPanel"', '-TestExit="Automation Test Queue Empty"', ('-ReportExportPath="' + $reportPath + '"'))
+    $editorArguments += @('-Unattended', '-NoPause', '-ExecCmds="Automation RunTests Jev.Rendered"', '-TestExit="Automation Test Queue Empty"', ('-ReportExportPath="' + $reportPath + '"'))
 }
 $jevPreviousPort = $env:JEV_BRIDGE_PORT
 $env:JEV_BRIDGE_PORT = [string]$Port
@@ -46,13 +46,16 @@ if ($AutomationTests -or $RenderedReviewTest) {
     $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
     $passedCount = [int]$report.succeeded + [int]$report.succeededWithWarnings
     if ($RenderedReviewTest) {
-        $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq 'Jev.Rendered.ReviewPanel' })
-        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 1 -or $testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw 'Rendered review-panel automation failed or incomplete.' }
-        Write-Output 'Rendered review-panel automation passed. Inspect Saved/Automation/Jev/ReviewPanel.png for visual acceptance.'
+        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 2) { throw 'Rendered review automation failed or incomplete.' }
+        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow')) {
+            $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
+            if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected rendered automation test did not pass: $expectedTest" }
+        }
+        Write-Output 'Rendered review automation passed. Inspect Saved/Automation/Jev/Review*.png for visual acceptance.'
         return
     }
-    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 25) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
-    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback')) {
+    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 27) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
+    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback', 'Jev.Editor.ReviewPresentation', 'Jev.Editor.ReviewRecovery')) {
         $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
         if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected Unreal automation test did not pass: $expectedTest" }
     }
