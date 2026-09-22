@@ -17,7 +17,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+. "$PSScriptRoot/Import-JevSecurity.ps1"
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'This helper requires Windows. On other platforms, configure environment variables and run uv run --frozen jev-unreal serve.'
@@ -41,7 +41,7 @@ try {
         $jevLocalData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
         $jevCredentialPath = Join-Path (Join-Path $jevLocalData 'JevUnreal') 'openrouter.dpapi'
         if (Test-Path -LiteralPath $jevCredentialPath -PathType Leaf) {
-            $jevSecureKey = ConvertTo-SecureString -String ([IO.File]::ReadAllText($jevCredentialPath))
+            $jevSecureKey = ConvertTo-SecureString -String ([IO.File]::ReadAllText($jevCredentialPath).Trim())
             $jevKeyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($jevSecureKey)
             [Environment]::SetEnvironmentVariable(
                 'OPENROUTER_API_KEY',

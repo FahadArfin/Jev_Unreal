@@ -13,7 +13,7 @@ Initial validation: **2026-09-22 UTC** (2026-09-21 local US Eastern). This is a 
 | Real MCP -> HTTP -> Unreal | Passed, 9 tools discovered | Actual authenticated editor operations, not mocks |
 | Actual saved Codex launcher configuration | MCP initialization/list-tools/status passed | PowerShell launcher starts the server and identifies the sandbox; in-app reconnect still required to expose tools in a new Codex session |
 | Jev evaluation fixture validation | 24 cases validated, zero cloud calls | Inputs/harness are valid; no statement about model quality |
-| Live Jev provider calls | **Not run: provider key not supplied locally** | Accuracy, real latency, billing and account access are unverified |
+| Live Jev provider calls | 24/24 valid responses through OpenRouter; 22/24 matched fixture labels | Real account access, wire compatibility and small-fixture behavior; not production accuracy |
 
 The repository's GitHub Actions workflow runs Python 3.12/3.13 checks on Windows and Ubuntu. Inspect the check associated with the commit you use; cloud CI does not compile proprietary Unreal Engine or run the local editor tests.
 
@@ -46,8 +46,28 @@ Use the masked local prompt, then run:
 
 This uses the configured OpenRouter account for at most 24 public-fixture requests, disables the local cache, and writes a sanitized local report. Alternatively, set your key in the process environment and use `uv run python scripts/evaluate.py --output artifacts/jev-evaluation.json`. No simulated result is substituted when credentials are missing.
 
-The keyword baseline gets **23/24** on the authored smoke set. That demonstrates why a model should not be called before every obvious editor operation. This small, easy, non-held-out set checks wiring and failure behavior; it cannot establish Jev's value over simple rules. A useful next study needs representative real tool catalogs, ambiguous cases, larger held-out labels, baseline coding-agent runs, p50/p95 latency, actual cost, abstention/error rates and total human correction time.
+The first live run completed at **2026-09-22 01:18:45 UTC** using OpenRouter's returned model `typesafe/jev-1.13-20260917`: 24 sequential requests, zero retries, zero cache hits, and 24 valid responses. Results are recorded in a [sanitized evaluation report](evaluations/2026-09-22-openrouter.json), with fixture and routing-code hashes.
+
+| Metric | Observed result |
+| --- | --- |
+| Jev decisions matching authored labels | 22/24 |
+| Keyword baseline matching the same labels | 23/24 |
+| Recommendations / deferrals | 17 / 7 |
+| Correct among accepted recommendations | 16/17 |
+| Median / p95 response latency | 212 ms / 318 ms |
+| Provider-reported cost for 24 requests | USD 0.000522564 |
+| Input / output tokens reported | 12,442 / 1,811 |
+
+One supported transform request was deferred; one unsupported delete request received an actor-inspection recommendation instead of the expected deferral. The latter passed the confidence gate, confirming that confidence is not a correctness guarantee. Neither recommendation executed an editor operation. No thresholds or fixture labels were changed after observing these results.
+
+The keyword baseline did better on this small, easy, non-held-out set. These results verify live wiring and illustrate the need to use Jev selectively; they do not establish value over simple rules or a game-development speedup. A useful next study needs representative real tool catalogs, ambiguous cases, larger held-out labels, baseline coding-agent runs, error rates and total human correction time. The separate connectivity smoke call is excluded from the table.
 
 ## Remaining limits
 
-No live provider accuracy or speedup is claimed. No visual/gameplay acceptance, other engine/platform builds, production-map performance, sustained load, runtime NPC system, Blender executor or multiplayer behavior was tested. Native static mesh transformations exclude Blueprint actors and attachment hierarchies. The local HTTP service is for a trusted workstation, not internet deployment. Review [architecture](ARCHITECTURE.md) and [security](../SECURITY.md).
+No production accuracy or game-development speedup is claimed. No visual/gameplay acceptance, other engine/platform builds, production-map performance, sustained load, runtime NPC system, Blender executor or multiplayer behavior was tested. Native static mesh transformations exclude Blueprint actors and attachment hierarchies. The local HTTP service is for a trusted workstation, not internet deployment. Review [architecture](ARCHITECTURE.md) and [security](../SECURITY.md).
+
+## Windows credential setup regression
+
+Version `0.1.0a2` fixes credential scripts resolving `Microsoft.PowerShell.Security` through inherited module search paths. All three credential entry points now import the manifest under the running shell's `$PSHOME`, without force-reloading it. Windows PowerShell 5.1 regression checks cover clean and mixed-edition module paths, repeated imports, an already loaded native module, and DPAPI round trips using synthetic values only. The interactive setup script was also exercised with temporary storage and a synthetic masked-input substitute; no real credential file was used for these tests.
+
+If an older prompt failed with duplicate `ObjectSecurity` type-data members, close that failed window and open the updated setup script in a fresh PowerShell process. No machine-wide PowerShell settings need changing. See Microsoft's [module-path inheritance explanation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_psmodulepath?view=powershell-7.6).

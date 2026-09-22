@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([switch]$SmokeOnly)
 $ErrorActionPreference = 'Stop'
-Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+. "$PSScriptRoot/Import-JevSecurity.ps1"
 $jevRoot = Split-Path -Parent $PSScriptRoot
 $jevPriorKey = $env:OPENROUTER_API_KEY
 $jevSecureKey = $null
