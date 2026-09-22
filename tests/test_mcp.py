@@ -60,6 +60,16 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_blueprint_compile_targets",
                 "unreal_blueprint_compile_preview",
                 "unreal_blueprint_compile",
+                "unreal_blueprint_pin_preview",
+                "unreal_workflow_inspect",
+                "unreal_workflow_preview",
+                "unreal_workflow_apply",
+                "unreal_workflow_receipt",
+                "unreal_surface_preview",
+                "unreal_performance_start",
+                "unreal_performance_job",
+                "unreal_performance_cancel",
+                "unreal_performance_compare",
                 "unreal_blueprint_compile_receipt",
                 "unreal_asset_dependencies",
                 "unreal_asset_import_info",
@@ -73,7 +83,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_functional_cancel",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
-            assert len(by_name) == 44
+            assert len(by_name) == 54
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
             assert set(by_name["unreal_frame"].inputSchema["properties"]["view"]["enum"]) == {
                 "current",
@@ -99,6 +109,9 @@ async def test_stdio_protocol_and_offline_failure():
             assert "unreal_actors" in resource.contents[0].text
             layouts = await session.read_resource("jev://layouts")
             assert "stairs" in layouts.contents[0].text
+            domains = await session.read_resource("jev://domain-workflows")
+            assert "unreal_blueprint_pin_preview" in domains.contents[0].text
+            assert "readback_verified" in domains.contents[0].text
             prompts = await session.list_prompts()
             assert {p.name for p in prompts.prompts} == {
                 "blockout_workflow",

@@ -1,4 +1,4 @@
-# Native editor inspection and edits (bridge 0.7.0)
+# Native editor inspection and edits (bridge 0.8.0)
 
 These actions use the existing authenticated loopback bridge. They execute on the
 editor game thread and do not call a model provider. Requests remain JSON objects
@@ -282,3 +282,15 @@ a blocking callback can exceed that budget. Validation retains eight job records
 functional testing 64, for 15 minutes after completion in editor memory. Restart
 discards them. Read [Unreal validation evidence](UNREAL_VALIDATION.md) for the
 native, live and rendered checks actually completed.
+
+## Domain workflows in 0.8
+
+The catalog now has 54 tools. The native workflow service exposes typed domain
+inspection, state-bound preview, one-shot apply, receipt and bounded editor timing
+jobs. It shares authenticated project identity and project-job exclusion. Global
+object notifications and exact target readback invalidate pending edits; material
+and Blueprint literal edits have explicit local policies. No arbitrary command,
+filesystem access or runtime switching is introduced. See [domain workflows](DOMAIN_WORKFLOWS.md)
+for the complete supported operations, bounded inputs, native Undo behavior and
+limitations. Domain/Blueprint review is through MCP; the Slate panel continues to
+display ordinary scene plans, including surface placement.

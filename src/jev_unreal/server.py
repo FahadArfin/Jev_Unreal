@@ -17,6 +17,7 @@ from .catalog import ToolCatalog
 from .config import Settings
 from .decision import DecisionClient
 from .diagnostics import group_diagnostics
+from .domain_workflows import register_domain_tools
 from .errors import JevError
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
 from .meshes import MeshRecipe, preview_mesh
@@ -549,7 +550,12 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "capture unreal_snapshot. Inspect actor_details edit blockers and define measurable "
             "checks from the requested goal. For alignment/spacing use unreal_spatial_preview; "
             "for replacing or copying native mesh actors use unreal_mesh_preview; "
-            "for materials or labels/folders use unreal_preview with expected_state from the "
+            "for collision-surface placement use unreal_surface_preview. For material parameters, "
+            "lights or viewport poses inspect with unreal_workflow_inspect and use the separate "
+            "unreal_workflow_preview/apply/receipt tools. Check readback_verified and capture "
+            "rendered changes. For approved Blueprint literals use unreal_blueprint_pin_preview "
+            "and unreal_blueprint_compile, then inspect compiler status and test semantics. "
+            "For material slots or labels/folders use unreal_preview with expected_state from the "
             "latest inspection. Review the plan, apply only authorized changes once, then use "
             "unreal_verify with the expected identity and unreal_diff with the baseline ID. "
             "Do not reuse the pre-edit revision for post-edit checks. Frame and capture the "
@@ -585,6 +591,56 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "classifier confidence does not establish either permission or success."
         )
 
+    @server.resource("jev://domain-workflows")
+    def domain_workflow_guide() -> dict:
+        """Discover supported domain queries and the matching review/apply/verify path."""
+        return {
+            "version": "0.8",
+            "queries": [
+                "material",
+                "light",
+                "camera",
+                "asset_diagnosis",
+                "rig",
+                "widgets",
+                "surface",
+                "navigation",
+            ],
+            "inspect_tool": "unreal_workflow_inspect",
+            "review_paths": {
+                "material_light_camera": [
+                    "unreal_workflow_preview",
+                    "unreal_workflow_apply",
+                    "unreal_workflow_receipt",
+                ],
+                "surface_placement": ["unreal_surface_preview", "unreal_apply", "unreal_plan"],
+                "blueprint_literal": [
+                    "unreal_blueprint_pin_preview",
+                    "unreal_blueprint_compile",
+                    "unreal_blueprint_compile_receipt",
+                ],
+            },
+            "measurements": [
+                "unreal_performance_start",
+                "unreal_performance_job",
+                "unreal_performance_cancel",
+                "unreal_performance_compare",
+            ],
+            "verify": (
+                "Read fresh inspected state and the receipt status. Domain edits require "
+                "readback_verified; Blueprint plans require a passed compiler result and "
+                "separate semantic tests. Capture material/light/view changes. Stored UI/rig "
+                "data and native nav paths do not prove runtime behavior. Timing pairs do "
+                "not establish significance or identify GPU bottlenecks."
+            ),
+            "permissions": (
+                "Bind the exact project. Material edits require EditableMaterials policy; "
+                "Blueprint literals require compile Targets and bEnablePinEdits. "
+                "Jev recommendations never authorize execution."
+            ),
+        }
+
     register_project_tools(server, bridge)
     register_blueprint_tools(server, bridge)
+    register_domain_tools(server, bridge, previews)
     return server

@@ -16,7 +16,7 @@ async def test_compile_annotations_separate_discovery_preview_and_execution():
     server = FastMCP("blueprint-test")
     register_blueprint_tools(server, AsyncMock())
     tools = {tool.name: tool for tool in await server.list_tools()}
-    assert len(tools) == 4
+    assert len(tools) == 5
     assert tools["unreal_blueprint_compile_targets"].annotations.readOnlyHint is True
     assert tools["unreal_blueprint_compile_receipt"].annotations.readOnlyHint is True
     assert tools["unreal_blueprint_compile_preview"].annotations.destructiveHint is False

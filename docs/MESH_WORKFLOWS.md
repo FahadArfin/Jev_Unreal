@@ -262,3 +262,11 @@ evidence of a completed run. Refer to [validation evidence](VALIDATION.md) for t
 actual native build, automated, live and visual checks completed for the release.
 Numerical/readback checks do not establish art quality, collision simulation,
 gameplay correctness or broad project compatibility.
+
+## Extended copy state in 0.8
+
+Native readback now also requires `receives_decals`, `render_custom_depth`,
+`custom_depth_stencil_value` (0..255) and `translucency_sort_priority`
+(-32767..32767). These settings are copied intentionally, previewed and verified;
+missing fields never become matching defaults. Other unsupported rendering/physics
+settings and attached hierarchies continue to refuse controlled duplication.

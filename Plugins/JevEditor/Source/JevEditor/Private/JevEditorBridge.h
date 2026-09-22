@@ -38,6 +38,10 @@ private:
         TArray<uint8> CollisionResponses;
         bool bActorCollisionEnabled = true;
         bool bCastShadow = true;
+        bool bReceivesDecals = true;
+        bool bRenderCustomDepth = false;
+        int32 CustomDepthStencilValue = 0;
+        int32 TranslucencySortPriority = 0;
         bool bVisible = true;
         bool bHiddenInGame = false;
         bool bActorHiddenInGame = false;

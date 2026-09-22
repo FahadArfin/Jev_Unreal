@@ -1,6 +1,71 @@
 # Validation evidence
 
-## Current 0.7 immediate-priority implementation
+## Current 0.8 domain workflows
+
+Validated on **2026-09-22 UTC** on the existing Windows 11 host and licensed
+**Unreal Engine 5.8.2-56702186+++UE5+Release-5.8** in the exact repository
+`examples/JevSandbox/JevSandbox.uproject`. The [ten roadmap engineering slices](ROADMAP.md#version-08-next-ten-engineering-slices)
+have explicit supported scopes and remaining acceptance work in the
+[domain workflow guide](DOMAIN_WORKFLOWS.md).
+
+| Evidence | Result | What it establishes |
+| --- | --- | --- |
+| Python tests | **1,451 passed** on Python 3.13 | Typed schemas, transport/project/capability gates, official stdio discovery, recipe/readback contracts and measurement rejection/accounting. These are not Unreal or live-provider tests. |
+| Locked environment and packaging | `uv sync --locked --all-extras`, Ruff and `uv build` passed | Source/wheel construction; no licensed Unreal binary is distributed. |
+| Licensed native build | Successful compile/link, **4.56 seconds** final incremental build | Native UE 5.8.2 compilation; build duration is not a performance benchmark. |
+| Editor automation | **40/40 suites passed** | 37 clean and three warning-bearing suites; no failed, skipped or incomplete suites. |
+| Rendered automation | **4/4 suites passed**, zero warnings | Existing review UI tests plus actual red/green material rendering and viewport pose restoration. |
+| Live official MCP | **54 tools**, authenticated bridge **0.8.0** | Baseline, roadmap/reconnect, mesh and new domain smoke workflows in the exact sandbox. |
+| Provider evaluation | **Zero new provider requests** | No Jev routing-efficiency, GPU bottleneck or game-development speedup claim. |
+
+Final editor report: **`2026.09.22-06.32.50`**. Final rendered report:
+**`2026.09.22-06.33.30`**. The warning-bearing suites retain the earlier
+empty-bounds, missing Recast/crowd-manager and typed-element engine warnings;
+the new domain suites passed cleanly.
+
+New native evidence covers approved Blueprint literal edit/compile, literal Undo,
+expression/linked-pin/stale refusal, effective scalar/vector material readback and
+Undo, revoked material policy, native light intensity/color readback and Undo,
+plan expiration, unnotified target changes, surface support height, slope/overlap/
+unapproved-blocker/missing-hit refusals, native mesh LOD/collision diagnostics,
+missing bones and exact skeleton compatibility, stored widgets without Slate
+construction, measurement completion/cancellation/state changes, and extended
+mesh settings through the existing duplicate/rollback tests. The gameplay recipe
+fixture also exercises the domain query against a built Recast mesh, stricter
+width/step requirements and an unreachable endpoint. A path is not pawn movement.
+
+The rendered fixture changes a loaded native material instance from
+[red](images/DomainMaterialRed-v0.8.png) to [green](images/DomainMaterialGreen-v0.8.png)
+through a reviewed plan, verifies colored pixels, and restores camera position/FOV.
+Both images were visually inspected. This is one unlit public-shape fixture, not
+general material, lighting, animation, runtime UI or artist acceptance.
+
+The live domain smoke measures and previews terrain placement, applies it through
+the scene plan service, checks the actual resulting transform, reads extended
+mesh state, queries LOD/collision/dependencies, applies/captures/restores a camera,
+checks receipt replay refusal and policy/type refusals, and completes two native
+20-sample timing captures. The comparison explicitly makes no significance claim.
+These are editor ticker intervals, including observer overhead and idle/UI work,
+not frame-synchronized GPU/render costs or packaged gameplay performance.
+
+An earlier live attempt exposed missing identity fields in native domain inspection
+responses. The placement wrapper refused to preview. The fix retains the identity
+object while copying fields; new native assertions verify response identities and
+the subsequent official MCP run passed. Earlier failed attempts are not counted
+as successful acceptance.
+
+Raw local evidence remains ignored under `artifacts/pytest-v08.xml`,
+`build-v08-final.log`, `unreal-automation/`, `unreal-rendered/`,
+`editor-smoke-v0.8.json`, `roadmap-smoke-v0.8.json`, `mesh-workflows-v0.8.json`
+and `domain-workflows-v0.8.json`. No private project, saved scene, provider payload,
+credential, engine source or engine binary was added to the repository.
+
+Clean-host onboarding, representative project assets/validators/compiler
+extensions, human accessibility, physical input, multiple-editor/native platform
+matrices and independent workflow studies were not rerun or established by this
+milestone. The [community acceptance protocol](COMMUNITY_ACCEPTANCE.md) remains open.
+
+## Historical 0.7 immediate-priority implementation
 
 Tests ran on the existing Windows development host with Python **3.13.2** and
 licensed Unreal **5.8.2**, using only the isolated JevSandbox for editor operations.

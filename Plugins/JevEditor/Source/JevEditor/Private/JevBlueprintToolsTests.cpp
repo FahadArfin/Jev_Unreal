@@ -14,6 +14,10 @@
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 #include "WidgetBlueprint.h"
+#include "K2Node_CallFunction.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Editor.h"
+#include "Misc/ScopeExit.h"
 
 namespace JevBlueprintTests
 {
@@ -94,6 +98,30 @@ struct FFixture
         Package->SetDirtyFlag(false); Package->RemoveFromRoot();
     }
 };
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevBlueprintPinWorkflow, "Jev.Editor.BlueprintPinWorkflow", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevBlueprintPinWorkflow::RunTest(const FString&)
+{
+    using namespace JevBlueprintTests; FFixture Fixture; UBlueprint* BP = Fixture.CompileAsset();
+    bool OldPinEdits = false; const bool HadPinEdits = GConfig->GetBool(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnablePinEdits"), OldPinEdits, GGameIni);
+    ON_SCOPE_EXIT { if (HadPinEdits) GConfig->SetBool(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnablePinEdits"), OldPinEdits, GGameIni); else GConfig->RemoveKey(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnablePinEdits"), GGameIni); };
+    GConfig->SetBool(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnablePinEdits"), true, GGameIni);
+    UEdGraph* Graph = BP->UbergraphPages[0]; auto* Node = NewObject<UK2Node_CallFunction>(Graph, NAME_None, RF_Transactional); Node->SetFromFunction(UKismetMathLibrary::StaticClass()->FindFunctionByName(TEXT("Add_IntInt"))); Node->CreateNewGuid(); Node->AllocateDefaultPins(); Graph->AddNode(Node, false, false);
+    auto* Pin = Node->FindPin(TEXT("A")); if (!TestNotNull(TEXT("native math input"), Pin)) return false;
+    Pin->DefaultValue = TEXT("2"); BP->Status = BS_Dirty; FJevBlueprintTools Tools;
+    auto Params = PreviewParams(); auto Edit = MakeShared<FJsonObject>(); Edit->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString()); Edit->SetStringField(TEXT("pin_id"), Pin->PinId.ToString()); Edit->SetStringField(TEXT("value"), TEXT("7")); Params->SetObjectField(TEXT("pin_edit"), Edit);
+    auto Plan = Tools.Execute(TEXT("blueprint_pin_preview"), Params, Identity()); if (!TestTrue(TEXT("reviewable primitive edit"), Plan->GetBoolField(TEXT("ok")))) return false;
+    TestEqual(TEXT("preview preserves literal"), Pin->DefaultValue, FString(TEXT("2")));
+    auto Result = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); if (!TestTrue(TEXT("edit compiles"), Result->GetBoolField(TEXT("ok")))) return false;
+    TestEqual(TEXT("fresh compiler success"), Result->GetObjectField(TEXT("result"))->GetStringField(TEXT("status")), FString(TEXT("passed"))); TestEqual(TEXT("literal applied"), Pin->DefaultValue, FString(TEXT("7")));
+    GEditor->UndoTransaction(); TestEqual(TEXT("Undo restores literal"), Pin->DefaultValue, FString(TEXT("2")));
+    Edit->SetStringField(TEXT("value"), TEXT("1+2")); TestEqual(TEXT("expressions refused"), ErrorCode(Tools.Execute(TEXT("blueprint_pin_preview"), Params, Identity())), FString(TEXT("unsupported_asset")));
+    Edit->SetStringField(TEXT("value"), TEXT("8")); auto* Output = Node->FindPin(TEXT("ReturnValue")); Pin->MakeLinkTo(Output); TestEqual(TEXT("linked input refused"), ErrorCode(Tools.Execute(TEXT("blueprint_pin_preview"), Params, Identity())), FString(TEXT("unsupported_asset"))); Pin->BreakAllPinLinks();
+    Plan = Tools.Execute(TEXT("blueprint_pin_preview"), Params, Identity()); if (!TestTrue(TEXT("stale literal plan"), Plan->GetBoolField(TEXT("ok")))) return false;
+    Pin->DefaultValue = TEXT("3"); TestEqual(TEXT("unnotified literal change refused"), ErrorCode(Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity())), FString(TEXT("stale_plan")));
+    TestEqual(TEXT("cannot smuggle edit into compile-only action"), ErrorCode(Tools.Execute(TEXT("blueprint_compile_preview"), Params, Identity())), FString(TEXT("bad_request")));
+    return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevBlueprintVariants, "Jev.Editor.BlueprintVariants", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -222,4 +250,3 @@ bool FJevBlueprintCompileGuards::RunTest(const FString& Parameters)
 }
 
 #endif
-

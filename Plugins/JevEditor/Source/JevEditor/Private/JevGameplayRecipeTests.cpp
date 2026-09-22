@@ -2,6 +2,8 @@
 
 #include "JevEditorBridge.h"
 #include "JevEditorFunctionalTools.h"
+#include "JevEditorWorkflowTools.h"
+#include "NavigationData.h"
 #include "ActorFactories/ActorFactory.h"
 #include "AI/NavigationSystemBase.h"
 #include "Builders/CubeBuilder.h"
@@ -103,6 +105,21 @@ public:
                 auto* Path = UNavigationSystemV1::FindPathToLocationSynchronously(World, Start.Location, End.Location);
                 if (Path && Path->IsValid() && !Path->IsPartial())
                 {
+                    FJevWorkflowTools Domains;
+                    auto Q = MakeShared<FJsonObject>(); Q->SetStringField(TEXT("kind"), TEXT("navigation")); Q->SetStringField(TEXT("nav_data_path"), Navigation->GetDefaultNavDataInstance(FNavigationSystem::DontCreate)->GetPathName());
+                    Q->SetArrayField(TEXT("start"), JevWorkflow::Vector(FVector(0, 0, 25))); Q->SetArrayField(TEXT("end"), JevWorkflow::Vector(FVector(400, 0, 25))); Q->SetArrayField(TEXT("projection_extent_cm"), JevWorkflow::Vector(FVector(50))); Q->SetNumberField(TEXT("required_width_cm"), 50); Q->SetNumberField(TEXT("maximum_step_cm"), 50);
+                    const auto Route = JevWorkflow::Navigation(Q);
+                    if (State->Test->TestTrue(TEXT("domain nav query uses real built Recast data"), Route->GetBoolField(TEXT("ok"))))
+                    {
+                        const auto R = Route->GetObjectField(TEXT("result"));
+                        State->Test->TestTrue(TEXT("domain route is complete"), R->GetBoolField(TEXT("complete_path")));
+                        if (R->HasField(TEXT("path_length_cm"))) State->Test->TestTrue(TEXT("domain measures native route length"), R->GetNumberField(TEXT("path_length_cm")) >= 399);
+                        Q->SetNumberField(TEXT("required_width_cm"), 10000); Q->SetNumberField(TEXT("maximum_step_cm"), 0);
+                        const auto Strict = JevWorkflow::Navigation(Q)->GetObjectField(TEXT("result"));
+                        State->Test->TestFalse(TEXT("overbroad width never passes"), Strict->GetBoolField(TEXT("width_requirement_covered_by_agent"))); State->Test->TestFalse(TEXT("zero-step requirement never inferred"), Strict->GetBoolField(TEXT("step_requirement_covered_by_agent")));
+                        Q->SetArrayField(TEXT("end"), JevWorkflow::Vector(FVector(100000)));
+                        State->Test->TestFalse(TEXT("unreachable endpoint refused"), JevWorkflow::Navigation(Q)->GetObjectField(TEXT("result"))->GetBoolField(TEXT("complete_path")));
+                    }
                     State->bNavigationReady = true;
                     return true;
                 }

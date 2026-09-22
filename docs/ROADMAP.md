@@ -75,6 +75,30 @@ are tracked separately so these features do not become unsupported readiness cla
 The [community acceptance protocol](COMMUNITY_ACCEPTANCE.md) provides concrete
 observed tasks and clean-host/project matrices for collecting the remaining evidence.
 
+## Version 0.8: next ten engineering slices
+
+The next ten engineering rows were implemented in roadmap order. The supported
+scope is deliberately explicit; the remaining acceptance column is not closed by
+the existence of an API. See [domain workflows](DOMAIN_WORKFLOWS.md) for examples,
+policy, inputs, failure handling and evidence limits.
+
+| Order | Priority | Implemented scope | Remaining expansion and acceptance |
+| --- | --- | --- | --- |
+| 1 | Reviewed Blueprint edits | Allowlisted native math-input literals, typed pin checks, preview/diff, one-shot edit/compile, Undo and receipts. | Broader nodes/links, semantic project tests, compiler-extension side effects and transaction recovery. |
+| 2 | Material parameters | Loaded MIC scalar/vector discovery, exact project policy, reviewed global overrides, readback/Undo and rendered color fixture. | Layers, static switches, textures, representative parent chains and broader visual regressions. |
+| 3 | Mesh copy compatibility | Decal reception, custom depth/stencil and translucent sorting join the existing explicit copy/readback state. | Approved attachment hierarchies, more intentional settings, real prop/collision/play acceptance. |
+| 4 | Terrain placement | Approved first-hit collision surfaces, bounded slopes, normal alignment, supported bounds and overlap-refusing scene previews. | Multiple support samples, complex/concave collision, streaming and physics acceptance. |
+| 5 | DCC/dependency diagnosis | Bounded registry traversal, mesh bounds/LODs/collision/material findings and recorded import basenames/hashes. | Actual DCC source availability, unit/pivot intent, texture completeness and import round trips. |
+| 6 | Lights/camera | Native intensity/color review and Undo; inspected/restorable perspective poses/FOV, native capture and rendered fixture. | Exposure/time/render-setting controls, lighting bake and measured performance acceptance. |
+| 7 | Navigation/accessibility | Existing Recast endpoint projection/path length, agent width/step comparisons, explicit build/staleness limits. | Actual corridor/step geometry, controller movement, interactions and project accessibility requirements. |
+| 8 | Performance investigations | Bounded editor ticker/memory capture, cancellation, complete paired receipt comparison and regression thresholds. | Frame-synchronized render/GPU attribution, representative workloads and repeated statistical evidence. |
+| 9 | Animation/rig validation | Stored hierarchy, required bones, exact skeleton compatibility, sequence duration and root-motion flag. | Real rigs, playback, extracted motion, skin weights, retargeting and export/import acceptance. |
+| 10 | UI workflow support | Bounded stored widget tree, native focus/text/overflow/canvas diagnostics without binding execution or runtime construction. | Running viewport geometry, DPI/resolution variants, input, localization and assistive-user acceptance. |
+
+The catalog is now **54 tools**. No additional provider request or measured
+game-development speedup is claimed. Native, rendered, Python and live bridge
+evidence is tracked separately in [validation](VALIDATION.md).
+
 ## Next acceptance priorities and later features
 
 | Priority | Feature/workflow | Why it matters | Evidence required before calling it ready |
@@ -85,16 +109,16 @@ observed tasks and clean-host/project matrices for collecting the remaining evid
 | Next | Broader Blueprint compile acceptance | Exercise the implemented Widget/Animation inspection and reviewed compiler workflow on representative project assets. | Subclass-specific runtime contracts, compiler extensions and known failing/working projects. |
 | Next | Project adoption of gameplay recipes | Adapt the implemented door, navigation, interaction and combat examples to real project requirements. | Project-owned acceptance criteria, setup/teardown and reproducible negative cases. |
 | Next | Independent real workflow study | Determine when Jev improves routing, completion quality, correction time and total cost using the implemented benchmark harness. | Separately held answer keys; direct-agent, keyword and Jev baselines; representative tasks; full-workflow evidence and all failures. |
-| Later | Reviewed Blueprint edits | Add bounded graph operations with compile checks and before/after diffs. | Transaction recovery, pin/type validation and semantic tests; project-specific construction side effects considered. |
-| Later | Material parameter workflows | Inspect instances, change exposed parameters, compare rendered results. | Known parameter types, parent/asset identity, dependency checks and visual regression tests. |
-| Later | Broader mesh copy compatibility | Extend the implemented replacement/copy workflow to additional intentional actor settings and approved hierarchies. | Representative props, explicit attachment semantics, collision/play acceptance and further undo/rollback fixtures. |
-| Later | Terrain-aware placement | Trace to approved surfaces, align to normals and verify overlap rules. | Explicit collision channel/filter semantics, slopes, missing geometry, streamed worlds and physics tests. |
-| Later | DCC import and dependency diagnosis | Build on direct registry/provenance inspection to identify broken references, import scale, missing textures, LOD and collision problems. | Source availability, measured unit/pivot contracts, bounded traversal and representative DCC imports. |
-| Later | Lighting and camera workflows | Inspect lights, propose bounded adjustments, capture repeatable viewpoints and compare results. | Stable exposure/time/view settings; render comparisons and performance measurements. |
-| Later | Navigation and accessibility checks | Evaluate project-defined widths, step heights, reachability and interaction rules. | Actual navmesh/pawn configuration and project-owned gameplay requirements. |
-| Later | Performance investigations | Summarize measured frame, memory and rendering costs and track regressions. | Reproducible capture protocol; distinguish asset counts from measured bottlenecks. |
-| Later | Animation/rig validation | Catch missing bones, incompatible skeletons, root-motion and retargeting problems. | Representative rigs, animation playback and export/import tests. |
-| Later | UI workflow support | Inspect widget structure, input focus, text overflow and resolution variants. | Running viewport captures, input tests and localization/accessibility checks. |
+| Extend 0.8 | Reviewed Blueprint edits | Add bounded graph operations with compile checks and before/after diffs. | Transaction recovery, pin/type validation and semantic tests; project-specific construction side effects considered. |
+| Extend 0.8 | Material parameter workflows | Inspect instances, change exposed parameters, compare rendered results. | Known parameter types, parent/asset identity, dependency checks and visual regression tests. |
+| Extend 0.8 | Broader mesh copy compatibility | Extend the implemented replacement/copy workflow to additional intentional actor settings and approved hierarchies. | Representative props, explicit attachment semantics, collision/play acceptance and further undo/rollback fixtures. |
+| Extend 0.8 | Terrain-aware placement | Trace to approved surfaces, align to normals and verify overlap rules. | Explicit collision channel/filter semantics, slopes, missing geometry, streamed worlds and physics tests. |
+| Extend 0.8 | DCC import and dependency diagnosis | Build on direct registry/provenance inspection to identify broken references, import scale, missing textures, LOD and collision problems. | Source availability, measured unit/pivot contracts, bounded traversal and representative DCC imports. |
+| Extend 0.8 | Lighting and camera workflows | Inspect lights, propose bounded adjustments, capture repeatable viewpoints and compare results. | Stable exposure/time/view settings; render comparisons and performance measurements. |
+| Extend 0.8 | Navigation and accessibility checks | Evaluate project-defined widths, step heights, reachability and interaction rules. | Actual navmesh/pawn configuration and project-owned gameplay requirements. |
+| Extend 0.8 | Performance investigations | Summarize measured frame, memory and rendering costs and track regressions. | Reproducible capture protocol; distinguish asset counts from measured bottlenecks. |
+| Extend 0.8 | Animation/rig validation | Catch missing bones, incompatible skeletons, root-motion and retargeting problems. | Representative rigs, animation playback and export/import tests. |
+| Extend 0.8 | UI workflow support | Inspect widget structure, input focus, text overflow and resolution variants. | Running viewport captures, input tests and localization/accessibility checks. |
 | Later | Editor compatibility and reconnect UX | Extend explicit profiles with clearer connection management across supported engine versions. | Real multiple-editor sessions, restart/version mismatch cases and licensed runtime acceptance for every advertised version. |
 | Later | Multi-agent coordination | Prevent agents from unknowingly editing the same scene while preserving human edits. | Scene leases, conflicts, cancellation and concurrency tests; no confidence-based permission. |
 | Later | Durable crash recovery | Investigate an apply after the editor or machine crashes. | Persistent receipts with privacy controls, exact identity, partial-write recovery and crash-injection tests. Current native receipts survive MCP reconnects only. |

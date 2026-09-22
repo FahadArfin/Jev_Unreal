@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
-  "Version": 7,
-  "VersionName": "0.7.0",
+  "Version": 8,
+  "VersionName": "0.8.0",
   "FriendlyName": "Jev Editor Bridge",
   "Description": "Authenticated local editor inspection and previewed, undoable scene operations for Jev Unreal.",
   "Category": "Editor",

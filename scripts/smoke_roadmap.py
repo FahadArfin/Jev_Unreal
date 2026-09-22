@@ -44,9 +44,9 @@ async def main():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {tool.name for tool in (await session.list_tools()).tools}
-            assert len(tools) == 44, tools
+            assert len(tools) == 54, tools
             status = await call(session, "unreal_status")
-            assert status["bridge_version"] == "0.7.0"
+            assert status["bridge_version"] == "0.8.0"
             assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
             dependencies = await call(
                 session,
@@ -180,7 +180,7 @@ async def main():
         "blueprint_fixture_coverage": "Native automation, separate from this smoke",
         "functional_execution_coverage": "Native PIE automation, separate from this smoke",
     }
-    destination = ROOT / "artifacts/roadmap-smoke-v0.7.json"
+    destination = ROOT / "artifacts/roadmap-smoke-v0.8.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"ok": True, "tools": len(tools), "reconnect_verified": True}))
