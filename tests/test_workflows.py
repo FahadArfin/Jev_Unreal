@@ -4,7 +4,68 @@ import pytest
 from pydantic import ValidationError
 
 from jev_unreal.errors import JevError
-from jev_unreal.workflows import Candidate, Operation, gate, route, triage
+from jev_unreal.workflows import Candidate, ExpectedState, Operation, gate, route, triage
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"op": "set_material", "actor_path": "/Temp/A.A", "slot": 0, "material_path": "/Game/M.M"},
+        {
+            "op": "set_metadata",
+            "actor_path": "/Temp/A.A",
+            "label": "Crate",
+            "folder": "Props/Crates",
+        },
+        {"op": "set_metadata", "actor_path": "/Temp/A.A", "folder": ""},
+    ],
+)
+def test_material_and_metadata_operations_keep_typed_bounded_arguments(value):
+    assert Operation.model_validate(value).model_dump(exclude_none=True) == value
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"slot": True},
+        {"slot": -1},
+        {"slot": 64},
+        {"slot": "0"},
+        {"material_path": "C:/material.uasset"},
+        {"material_path": "/Game/M.M:Subobject"},
+        {"label": "unexpected"},
+        {"folder": "unexpected"},
+        {"location": [0, 0, 0]},
+    ],
+)
+def test_material_operation_rejects_cross_operation_fields_and_invalid_slots(changes):
+    value = {
+        "op": "set_material",
+        "actor_path": "/Temp/A.A",
+        "slot": 0,
+        "material_path": "/Game/M.M",
+        **changes,
+    }
+    with pytest.raises(ValidationError):
+        Operation.model_validate(value)
+
+
+@pytest.mark.parametrize(
+    "folder",
+    ["/Root", "A//B", "A/../B", "A/./B", "A\\B", "A:B", "A\x00B", " A", "A/ ", "A/", "😀" * 129],
+)
+def test_metadata_folder_rejects_invalid_paths_and_utf16_overflow(folder):
+    with pytest.raises(ValidationError):
+        Operation(op="set_metadata", actor_path="/Temp/A.A", folder=folder)
+
+
+def test_metadata_needs_an_explicit_change_and_measured_state_is_complete():
+    with pytest.raises(ValidationError):
+        Operation(op="set_metadata", actor_path="/Temp/A.A")
+    with pytest.raises(ValidationError):
+        ExpectedState(session_id="s", world_path="w")
+    with pytest.raises(ValidationError):
+        ExpectedState(session_id="s", world_path="w", revision="r", skip_checks=True)
 
 
 @pytest.mark.parametrize(

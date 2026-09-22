@@ -33,8 +33,8 @@ if ($AutomationTests) {
     if ((Get-Item -LiteralPath $reportFile).LastWriteTime -lt $startedAt) { throw 'The automation report is stale.' }
     $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
     $passedCount = [int]$report.succeeded + [int]$report.succeededWithWarnings
-    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 9) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
-    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement')) {
+    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 14) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
+    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback')) {
         $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
         if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected Unreal automation test did not pass: $expectedTest" }
     }

@@ -239,7 +239,7 @@ async def main(require_capture: bool = False):
                 "saved_to_disk": False,
             }
             print(json.dumps(report, indent=2))
-            destination = SANDBOX.parents[2] / "artifacts" / "editor-smoke-v0.2.json"
+            destination = SANDBOX.parents[2] / "artifacts" / "editor-smoke-v0.3.json"
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 

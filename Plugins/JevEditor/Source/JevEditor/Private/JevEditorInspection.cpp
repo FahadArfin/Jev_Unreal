@@ -5,12 +5,15 @@
 #include "Editor.h"
 #include "Engine/Level.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "FileHelpers.h"
 #include "ImageUtils.h"
 #include "LevelEditorViewport.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "Misc/Base64.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/PackageName.h"
@@ -101,12 +104,12 @@ TSharedRef<FJsonObject> FJevEditorBridge::StatusSnapshot(UWorld* World) const
     Result->SetStringField(TEXT("world_path"), World->GetPathName());
     Result->SetStringField(TEXT("current_level"), GetPathNameSafe(World->GetCurrentLevel()));
     Result->SetStringField(TEXT("revision"), Revision(World));
-    Result->SetStringField(TEXT("bridge_version"), TEXT("0.2.0"));
+    Result->SetStringField(TEXT("bridge_version"), TEXT("0.3.0"));
     Result->SetBoolField(TEXT("play_in_editor"), GEditor->PlayWorld != nullptr);
     Result->SetBoolField(TEXT("simulating"), GEditor->bIsSimulatingInEditor);
     Result->SetBoolField(TEXT("editor_world"), true);
     TArray<TSharedPtr<FJsonValue>> Capabilities;
-    for (const TCHAR* Capability : {TEXT("status"), TEXT("context"), TEXT("actors"), TEXT("assets"), TEXT("asset_details"), TEXT("validate"), TEXT("capture"), TEXT("frame"), TEXT("preview"), TEXT("apply")})
+    for (const TCHAR* Capability : {TEXT("status"), TEXT("context"), TEXT("actors"), TEXT("actor_details"), TEXT("assets"), TEXT("asset_details"), TEXT("validate"), TEXT("capture"), TEXT("frame"), TEXT("frame_views"), TEXT("preview"), TEXT("preview_expected_state"), TEXT("set_material"), TEXT("set_metadata"), TEXT("apply")})
         Capabilities.Add(MakeShared<FJsonValueString>(Capability));
     Result->SetArrayField(TEXT("capabilities"), Capabilities);
     return Result;
@@ -238,6 +241,70 @@ TSharedPtr<FJsonObject> FJevEditorBridge::ResolveStaticMeshAsset(const FString& 
     return nullptr;
 }
 
+TSharedPtr<FJsonObject> FJevEditorBridge::ResolveMaterialAsset(const FString& Path, UMaterialInterface*& OutMaterial) const
+{
+    OutMaterial = nullptr;
+    if (Path.Len() > 512 || !Path.Contains(TEXT(".")) || !FPackageName::IsValidObjectPath(Path) || Path.Contains(TEXT(":")) || Path.Contains(TEXT("..")) || (!Path.StartsWith(TEXT("/Game/")) && !Path.StartsWith(TEXT("/Engine/"))))
+        return Error(TEXT("bad_request"), TEXT("material_path must identify an exact /Game or /Engine asset object, without subobjects or traversal, at most 512 characters."));
+    auto& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+    const FAssetData Asset = Registry.GetAssetByObjectPath(FSoftObjectPath(Path));
+    if (!Asset.IsValid()) return Error(TEXT("asset_not_found"), TEXT("The selected material is not present in the current asset registry."));
+    if (Asset.IsRedirector() || (Asset.AssetClassPath != UMaterial::StaticClass()->GetClassPathName() && Asset.AssetClassPath != UMaterialInstanceConstant::StaticClass()->GetClassPathName()))
+        return Error(TEXT("asset_unsupported"), TEXT("Material edits accept only native Material or MaterialInstanceConstant assets, not redirectors or other classes."));
+    OutMaterial = Cast<UMaterialInterface>(Asset.GetAsset());
+    if (!IsValid(OutMaterial) || (OutMaterial->GetClass() != UMaterial::StaticClass() && OutMaterial->GetClass() != UMaterialInstanceConstant::StaticClass()) || OutMaterial->GetPathName() != Path)
+        return Error(TEXT("asset_unavailable"), TEXT("The selected material could not be resolved to its exact asset identity."));
+    return nullptr;
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::ActorDetails(UWorld* World, const TSharedPtr<FJsonObject>& Params) const
+{
+    const TArray<TSharedPtr<FJsonValue>>* Paths = nullptr;
+    if (!JevInspection::OnlyFields(Params, {TEXT("actor_paths")}) || !Params->TryGetArrayField(TEXT("actor_paths"), Paths) || Paths->IsEmpty() || Paths->Num() > 20)
+        return Error(TEXT("bad_request"), TEXT("actor_details requires 1 to 20 unique exact actor paths."));
+    TSet<FString> Seen;
+    TArray<AActor*> Actors;
+    for (const auto& Value : *Paths)
+    {
+        FString Path;
+        if (!Value.IsValid() || Value->Type != EJson::String || !Value->TryGetString(Path) || Path.IsEmpty() || Path.Len() > 1024 || Seen.Contains(Path))
+            return Error(TEXT("bad_request"), TEXT("actor_paths must contain unique, nonempty strings of at most 1024 characters."));
+        Seen.Add(Path);
+        AActor* Actor = FindActor(World, Path);
+        if (!IsValid(Actor)) return Error(TEXT("actor_not_found"), TEXT("Every requested actor must exist in the current editor world; no partial snapshot was returned."));
+        if (Actor->GetActorTransform().ContainsNaN()) return Error(TEXT("actor_bounds_unavailable"), TEXT("A requested actor has non-finite transform values and cannot be represented safely."));
+        Actors.Add(Actor);
+    }
+    TArray<TSharedPtr<FJsonValue>> Details;
+    for (AActor* Actor : Actors)
+    {
+        auto Detail = ActorSnapshot(Actor);
+        const FBox Bounds = Actor->GetComponentsBoundingBox(true, false);
+        const bool bBoundsAvailable = Bounds.IsValid && !Bounds.Min.ContainsNaN() && !Bounds.Max.ContainsNaN() && !Bounds.GetCenter().ContainsNaN() && !Bounds.GetSize().ContainsNaN() && !Bounds.GetExtent().IsNearlyZero();
+        Detail->SetBoolField(TEXT("bounds_available"), bBoundsAvailable);
+        if (bBoundsAvailable)
+        {
+            auto Box = MakeShared<FJsonObject>();
+            Box->SetArrayField(TEXT("min"), JevInspection::Vector(Bounds.Min));
+            Box->SetArrayField(TEXT("max"), JevInspection::Vector(Bounds.Max));
+            Box->SetArrayField(TEXT("center"), JevInspection::Vector(Bounds.GetCenter()));
+            Box->SetArrayField(TEXT("size"), JevInspection::Vector(Bounds.GetSize()));
+            Detail->SetObjectField(TEXT("bounds_cm"), Box);
+        }
+        else Detail->SetField(TEXT("bounds_cm"), MakeShared<FJsonValueNull>());
+        const TArray<FString> Blockers = ActorEditBlockers(Actor);
+        TArray<TSharedPtr<FJsonValue>> Reasons;
+        for (const FString& Blocker : Blockers) Reasons.Add(MakeShared<FJsonValueString>(Blocker));
+        Detail->SetArrayField(TEXT("edit_blockers"), Reasons);
+        Detail->SetBoolField(TEXT("editable"), Blockers.IsEmpty());
+        Details.Add(MakeShared<FJsonValueObject>(Detail));
+    }
+    auto Result = StatusSnapshot(World);
+    Result->SetArrayField(TEXT("actors"), Details);
+    Result->SetBoolField(TEXT("truncated"), false);
+    return JevInspection::Success(Result);
+}
+
 TSharedRef<FJsonObject> FJevEditorBridge::Validate(UWorld* World, const TSharedPtr<FJsonObject>& Params) const
 {
     FString Query;
@@ -364,10 +431,15 @@ TSharedRef<FJsonObject> FJevEditorBridge::Frame(UWorld* World, const TSharedPtr<
 {
     const TArray<TSharedPtr<FJsonValue>>* Paths = nullptr;
     double Padding = 1.2;
-    if (!JevInspection::OnlyFields(Params, {TEXT("actor_paths"), TEXT("padding")}) || !Params->TryGetArrayField(TEXT("actor_paths"), Paths) || Paths->Num() < 1 || Paths->Num() > 20)
-        return Error(TEXT("bad_request"), TEXT("frame requires 1 to 20 unique exact actor paths and optional padding."));
+    FString View = TEXT("current");
+    if (!JevInspection::OnlyFields(Params, {TEXT("actor_paths"), TEXT("padding"), TEXT("view")}) || !Params->TryGetArrayField(TEXT("actor_paths"), Paths) || Paths->Num() < 1 || Paths->Num() > 20)
+        return Error(TEXT("bad_request"), TEXT("frame requires 1 to 20 unique exact actor paths and optional padding/view."));
     if (Params->HasField(TEXT("padding")) && (!Params->HasTypedField<EJson::Number>(TEXT("padding")) || !Params->TryGetNumberField(TEXT("padding"), Padding) || !FMath::IsFinite(Padding) || Padding < 1 || Padding > 4))
         return Error(TEXT("bad_request"), TEXT("padding must be a finite number from 1 to 4."));
+    if (Params->HasField(TEXT("view")) && (!Params->HasTypedField<EJson::String>(TEXT("view")) || !Params->TryGetStringField(TEXT("view"), View)))
+        return Error(TEXT("bad_request"), TEXT("view must be a named camera orientation string."));
+    if (View != TEXT("current") && View != TEXT("isometric") && View != TEXT("top") && View != TEXT("front") && View != TEXT("right"))
+        return Error(TEXT("bad_request"), TEXT("view must be current, isometric, top, front, or right."));
 
     // Resolve and validate every input before touching viewport state.
     TSet<FString> UniquePaths;
@@ -402,9 +474,21 @@ TSharedRef<FJsonObject> FJevEditorBridge::Frame(UWorld* World, const TSharedPtr<
         return Error(TEXT("viewport_unavailable"), TEXT("No current drawable level-editor viewport is available for this editor world."));
     if (Client->IsAnyActorLocked())
         return Error(TEXT("viewport_locked"), TEXT("Stop piloting or locking the viewport to an actor before framing; actor state will not be changed."));
+    if (View != TEXT("current") && !Client->IsPerspective())
+        return Error(TEXT("viewport_unavailable"), TEXT("Camera orientation presets require an existing perspective viewport; projection mode is never changed."));
     if (!Client->IsOrtho() && (!FMath::IsFinite(Client->ViewFOV) || Client->ViewFOV <= 1 || Client->ViewFOV >= 179))
         return Error(TEXT("viewport_unavailable"), TEXT("The current viewport requires a valid perspective field of view before framing."));
 
+    if (View != TEXT("current"))
+    {
+        // Focus also exits orbit mode; exit first so its conversion cannot replace
+        // the requested rotation. All possible rejection paths precede this point.
+        Client->ToggleOrbitCamera(false);
+        if (View == TEXT("isometric")) Client->SetViewRotation(FRotator(-35.2643897, 45, 0));
+        else if (View == TEXT("top")) Client->SetViewRotation(FRotator(-90, 0, 0));
+        else if (View == TEXT("front")) Client->SetViewRotation(FRotator(0, -90, 0));
+        else Client->SetViewRotation(FRotator(0, 0, 0));
+    }
     Client->FocusViewportOnBox(FBox(Center - PaddedExtent, Center + PaddedExtent), true);
     auto Result = MakeShared<FJsonObject>();
     TArray<TSharedPtr<FJsonValue>> FramedPaths;
@@ -416,6 +500,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Frame(UWorld* World, const TSharedPtr<
     Bounds->SetArrayField(TEXT("size"), JevInspection::Vector(Extent * 2));
     Result->SetObjectField(TEXT("bounds_cm"), Bounds);
     Result->SetNumberField(TEXT("padding"), Padding);
+    Result->SetStringField(TEXT("view"), View);
     Result->SetArrayField(TEXT("current_camera_location"), JevInspection::Vector(Client->GetViewLocation()));
     const FRotator Rotation = Client->GetViewRotation();
     Result->SetArrayField(TEXT("current_camera_rotation"), JevInspection::Vector(FVector(Rotation.Pitch, Rotation.Yaw, Rotation.Roll)));

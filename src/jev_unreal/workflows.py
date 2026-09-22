@@ -11,7 +11,7 @@ CATALOG = {
     "unreal_status": "Inspect the current Unreal editor project, session and world identity.",
     "unreal_actors": "Inspect actor paths, names, classes and transforms in the current level.",
     "unreal_assets": "Search the asset registry by name/path before choosing existing assets.",
-    "unreal_preview": "Preview primitive or existing static mesh spawns, or actor transform edits.",
+    "unreal_preview": "Preview spawns, transforms, material assignments or actor metadata edits.",
     "jev_triage": "Classify an Unreal log excerpt and suggest the next diagnostic category.",
     "unreal_context": "Inspect current selection, play state, dirty packages and relevant actors.",
     "unreal_asset_details": "Inspect a known asset path for mesh bounds, LODs and collision data.",
@@ -19,6 +19,12 @@ CATALOG = {
     "unreal_capture": "Capture the currently rendered editor viewport for visual review.",
     "unreal_frame": "Frame specific known actors in the editor camera before visual capture.",
     "unreal_layout_preview": "Preview a measured grid, staircase or room from dimensions.",
+    "unreal_actor_details": "Inspect exact actors, world bounds, materials and edit blockers.",
+    "unreal_snapshot": "Record a selected-actor baseline before editing, without scene changes.",
+    "unreal_diff": "Compare selected actors with a recorded baseline to identify actual changes.",
+    "unreal_verify": "Check fresh actor measurements against explicit expected results.",
+    "unreal_spatial_preview": "Preview actor alignment, distribution, grid snapping or grounding.",
+    "unreal_plan": "Review a tracked plan and its last known apply outcome; never retries it.",
 }
 
 
@@ -112,13 +118,27 @@ RotationValue = Annotated[float, Field(ge=-36000, le=36000, strict=True)]
 ScaleValue = Annotated[float, Field(ge=0.001, le=1000, strict=True)]
 
 
+class ExpectedState(BaseModel):
+    """An inspected editor state that native preview must still match."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    session_id: str = Field(min_length=1, max_length=64)
+    world_path: str = Field(min_length=1, max_length=1024)
+    revision: str = Field(min_length=1, max_length=128)
+
+
 class Operation(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    op: Literal["spawn_primitive", "spawn_static_mesh", "set_transform"]
+    op: Literal[
+        "spawn_primitive", "spawn_static_mesh", "set_transform", "set_material", "set_metadata"
+    ]
     shape: Literal["Cube", "Sphere", "Cylinder", "Plane"] | None = None
     label: str | None = Field(default=None, min_length=1, max_length=80)
     actor_path: str | None = Field(default=None, min_length=1, max_length=1024)
     asset_path: str | None = Field(default=None, min_length=1, max_length=512)
+    material_path: str | None = Field(default=None, min_length=1, max_length=512)
+    slot: int | None = Field(default=None, ge=0, le=63, strict=True)
+    folder: str | None = Field(default=None, max_length=256)
     location: tuple[LocationValue, LocationValue, LocationValue] | None = None
     rotation: tuple[RotationValue, RotationValue, RotationValue] | None = None
     scale: tuple[ScaleValue, ScaleValue, ScaleValue] | None = None
@@ -140,7 +160,7 @@ class Operation(BaseModel):
             raise ValueError("Actor labels must contain at most 80 Unreal UTF-16 code units.")
         return value
 
-    @field_validator("asset_path")
+    @field_validator("asset_path", "material_path")
     @classmethod
     def exact_asset_path(cls, value: str | None) -> str | None:
         if value is not None and (
@@ -154,35 +174,43 @@ class Operation(BaseModel):
             raise ValueError("Use an exact /Game or /Engine asset object path.")
         return value
 
+    @field_validator("folder")
+    @classmethod
+    def valid_folder(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if (
+            any(part in ("", ".", "..") or part != part.strip() for part in value.split("/"))
+            or any(ord(c) < 32 or ord(c) == 127 or c in "\\:" for c in value)
+            or len(value.encode("utf-16-le")) // 2 > 256
+        ):
+            raise ValueError("Use a relative actor folder with nonempty slash-separated segments.")
+        return value
+
     @model_validator(mode="after")
     def fields_match_operation(self):
-        if self.op == "spawn_primitive":
-            if (
-                self.shape is None
-                or self.label is None
-                or self.actor_path is not None
-                or self.asset_path is not None
-            ):
-                raise ValueError("spawn_primitive requires shape/label; no actor_path/asset_path.")
-        elif self.op == "spawn_static_mesh":
-            if (
-                self.asset_path is None
-                or self.label is None
-                or self.actor_path is not None
-                or self.shape is not None
-            ):
-                raise ValueError("Mesh spawn requires asset_path/label; no shape/actor_path.")
-        elif (
-            self.actor_path is None
-            or not self.actor_path.strip()
-            or self.shape is not None
-            or self.label is not None
-            or self.asset_path is not None
-            or all(value is None for value in (self.location, self.rotation, self.scale))
-        ):
-            raise ValueError(
-                "set_transform requires actor_path and a transform field, without shape or label."
-            )
+        transforms = {"location", "rotation", "scale"}
+        required = {
+            "spawn_primitive": {"shape", "label"},
+            "spawn_static_mesh": {"asset_path", "label"},
+            "set_transform": {"actor_path"},
+            "set_material": {"actor_path", "material_path", "slot"},
+            "set_metadata": {"actor_path"},
+        }[self.op]
+        allowed = required | {"op"}
+        if self.op in {"spawn_primitive", "spawn_static_mesh", "set_transform"}:
+            allowed |= transforms
+        elif self.op == "set_metadata":
+            allowed |= {"label", "folder"}
+        present = set(self.model_dump(exclude_none=True))
+        if not required <= present or not present <= allowed:
+            raise ValueError(f"Fields do not match {self.op}.")
+        if self.actor_path is not None and not self.actor_path.strip():
+            raise ValueError("Actor path must not be blank.")
+        if self.op == "set_transform" and not (present & transforms):
+            raise ValueError("set_transform requires at least one transform field.")
+        if self.op == "set_metadata" and not (present & {"label", "folder"}):
+            raise ValueError("set_metadata requires label or folder (empty folder means root).")
         return self
 
     # The editor repeats complete validation, including world-dependent checks.

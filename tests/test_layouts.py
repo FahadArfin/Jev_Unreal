@@ -110,6 +110,8 @@ def readback():
     operation = compile_layout(GridLayout(kind="grid", rows=1, columns=1))["operations"][0]
     actor = {key: deepcopy(operation[key]) for key in ("location", "rotation", "scale")}
     actor["path"] = "/Temp/World.Cube"
+    actor["label"] = operation["label"]
+    actor["static_mesh_path"] = "/Engine/BasicShapes/Cube.Cube"
     return operation, actor
 
 
@@ -118,6 +120,60 @@ def test_readback_accepts_equivalent_rotation_and_float_precision():
     actor["rotation"] = [0, 360, 0]
     actor["location"][0] += 1e-6
     assert verify_readback([operation], [actor])["status"] == "passed"
+
+
+@pytest.mark.parametrize("shape", ["Cube", "Sphere", "Cylinder", "Plane"])
+def test_primitive_readback_requires_exact_shape_asset_and_requested_label(shape):
+    operation, actor = readback()
+    operation["shape"] = shape
+    actor["static_mesh_path"] = f"/Engine/BasicShapes/{shape}.{shape}"
+    assert verify_readback([operation], [actor])["status"] == "passed"
+    actor["static_mesh_path"] = "/Game/Lookalike.Lookalike"
+    assert verify_readback([operation], [actor])["status"] == "mismatch"
+    actor["static_mesh_path"] = f"/Engine/BasicShapes/{shape}.{shape}"
+    actor["label"] = "Unexpected label"
+    assert verify_readback([operation], [actor])["status"] == "mismatch"
+
+
+def test_static_mesh_readback_also_checks_requested_label():
+    operation, actor = readback()
+    operation.update(op="spawn_static_mesh", asset_path="/Game/Door.Door")
+    actor.update(static_mesh_path="/Game/Door.Door", label="Wrong")
+    assert verify_readback([operation], [actor])["issues"] == [
+        {"index": 0, "code": "metadata_mismatch", "field": "label"}
+    ]
+
+
+@pytest.mark.parametrize("count", [0, 21])
+async def test_invalid_normalized_expectation_count_never_verifies_native_apply(count):
+    operation, actor = readback()
+    bridge = AsyncMock()
+    bridge.call.return_value = {"plan_id": "test", "operations": [operation] * count}
+    tracker = PreviewTracker(bridge)
+    await tracker.preview([operation])
+    bridge.call.return_value = {"applied": True, "actors": [actor] * count}
+    result = await tracker.apply("test")
+    assert result["applied"] is True
+    assert result["verification"]["status"] == "mismatch"
+    assert result["verification"]["checked_actors"] == 0
+    assert tracker.journal.get("test")["status"] == "applied"
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"shape": None},
+        {"shape": []},
+        {"shape": "Capsule"},
+        {"label": None},
+        {"op": "spawn_static_mesh", "asset_path": None},
+        {"op": "set_metadata", "actor_path": "/Temp/World.Cube", "label": None},
+    ],
+)
+def test_malformed_normalized_spawn_or_metadata_expectations_cannot_pass(patch):
+    operation, actor = readback()
+    operation.update(patch)
+    assert verify_readback([operation], [actor])["status"] == "mismatch"
 
 
 @pytest.mark.parametrize(

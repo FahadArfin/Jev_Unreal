@@ -316,11 +316,15 @@ bool FJevFrameSafetyTest::RunTest(const FString& Parameters)
     const int32 OriginalActorCount = CountActors(World);
     const bool bOriginallySelected = GEditor->GetSelectedActors()->IsSelected(Actor);
     const FString ExactPath = Actor->GetPathName();
-    auto FrameCall = [&Bridge](const TArray<TSharedPtr<FJsonValue>>& Paths, TSharedPtr<FJsonValue> Padding = nullptr)
+    FLevelEditorViewportClient* OriginalClient = GCurrentLevelEditingViewportClient;
+    const FVector OriginalCameraLocation = OriginalClient ? OriginalClient->GetViewLocation() : FVector::ZeroVector;
+    const FRotator OriginalCameraRotation = OriginalClient ? OriginalClient->GetViewRotation() : FRotator::ZeroRotator;
+    auto FrameCall = [&Bridge](const TArray<TSharedPtr<FJsonValue>>& Paths, TSharedPtr<FJsonValue> Padding = nullptr, TSharedPtr<FJsonValue> View = nullptr)
     {
         auto Params = MakeShared<FJsonObject>();
         Params->SetArrayField(TEXT("actor_paths"), Paths);
         if (Padding) Params->SetField(TEXT("padding"), Padding);
+        if (View) Params->SetField(TEXT("view"), View);
         auto Request = MakeShared<FJsonObject>();
         Request->SetStringField(TEXT("action"), TEXT("frame"));
         Request->SetObjectField(TEXT("params"), Params);
@@ -334,6 +338,8 @@ bool FJevFrameSafetyTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Frame rejects coerced padding"), FrameCall({PathValue}, MakeShared<FJsonValueBoolean>(true))->GetBoolField(TEXT("ok")));
     TestFalse(TEXT("Frame rejects excessive padding"), FrameCall({PathValue}, MakeShared<FJsonValueNumber>(4.01))->GetBoolField(TEXT("ok")));
     TestFalse(TEXT("Frame rejects out-of-range padding"), FrameCall({PathValue}, MakeShared<FJsonValueNumber>(0.99))->GetBoolField(TEXT("ok")));
+    TestFalse(TEXT("Frame rejects unknown camera preset"), FrameCall({PathValue}, nullptr, MakeShared<FJsonValueString>(TEXT("arbitrary")))->GetBoolField(TEXT("ok")));
+    TestFalse(TEXT("Frame rejects coerced camera preset"), FrameCall({PathValue}, nullptr, MakeShared<FJsonValueBoolean>(true))->GetBoolField(TEXT("ok")));
     TArray<TSharedPtr<FJsonValue>> ExcessPaths;
     for (int32 I = 0; I < 21; ++I) ExcessPaths.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("unused%d"), I)));
     TestFalse(TEXT("Frame is bounded to 20 targets"), FrameCall(ExcessPaths)->GetBoolField(TEXT("ok")));
@@ -345,10 +351,20 @@ bool FJevFrameSafetyTest::RunTest(const FString& Parameters)
         const auto NoViewport = FrameCall({PathValue});
         TestFalse(TEXT("Frame requires an existing viewport"), NoViewport->GetBoolField(TEXT("ok")));
         TestEqual(TEXT("Frame cannot fall back to other editor state"), NoViewport->GetObjectField(TEXT("error"))->GetStringField(TEXT("code")), FString(TEXT("viewport_unavailable")));
+        for (const TCHAR* Preset : {TEXT("isometric"), TEXT("top"), TEXT("front"), TEXT("right")})
+        {
+            const auto PresetWithoutViewport = FrameCall({PathValue}, nullptr, MakeShared<FJsonValueString>(Preset));
+            TestEqual(TEXT("Valid preset still requires a real viewport"), PresetWithoutViewport->GetObjectField(TEXT("error"))->GetStringField(TEXT("code")), FString(TEXT("viewport_unavailable")));
+        }
     }
     TestTrue(TEXT("Failed frame requests preserve actor transforms"), Actor->GetActorTransform().Equals(OriginalTransform));
     TestEqual(TEXT("Failed frame requests preserve actor count"), CountActors(World), OriginalActorCount);
     TestEqual(TEXT("Failed frame requests preserve selection"), GEditor->GetSelectedActors()->IsSelected(Actor), bOriginallySelected);
+    if (OriginalClient)
+    {
+        TestTrue(TEXT("Rejected frames preserve camera location"), OriginalClient->GetViewLocation().Equals(OriginalCameraLocation));
+        TestTrue(TEXT("Rejected frames preserve camera rotation"), OriginalClient->GetViewRotation().Equals(OriginalCameraRotation));
+    }
     TestFalse(TEXT("Frame rejects arbitrary camera or filesystem parameters"), Call(Bridge, TEXT("frame"), TEXT("{\"actor_paths\":[],\"camera_position\":[1,2,3]}"))->GetBoolField(TEXT("ok")));
     return true;
 }

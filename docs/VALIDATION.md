@@ -1,6 +1,61 @@
 # Validation evidence
 
-Release **0.2.0a1**, validated on **2026-09-22 UTC** (2026-09-21 US Eastern). This is a tested alpha, not a production-readiness certificate. Synthetic tests, live provider calls, engine tests and visual review establish different things.
+Release **0.3.0a1**, validated on **2026-09-22 UTC** (2026-09-21 US Eastern). This is a tested alpha, not a production-readiness certificate. Synthetic tests, live provider calls, engine tests and visual review establish different things.
+
+## Inspect, edit and verify acceptance
+
+| Layer | 0.3 result | Scope |
+| --- | --- | --- |
+| Python | **865 passed**, Python 3.13.2, 31.34 seconds | Strict contracts, geometry, instance-aware evidence, bounded snapshots/records, ambiguous outcomes, capability compatibility and real stdio protocol; mostly synthetic fixtures |
+| Dependencies/lint/package | Locked sync, Ruff and `uv build` passed | Builds Python wheel/source; no PyPI publication |
+| UE native | Build succeeded; **14 suites passed**, one expected empty-bounds navigation warning | UE 5.8.2 Windows; includes partial-failure and no-op Undo/Redo preservation regressions |
+| Live MCP/editor | **27 tools**, baseline and verified-edit smoke passed | Real authenticated rendered sandbox, unsaved actor edits and native images |
+| Saved client launcher | 27 tools and correct 0.3 sandbox identity | Existing Windows encrypted-key launcher, zero provider calls |
+| Live Jev | Three responses, four authored labels matched | Public synthetic helper compatibility; not accuracy or productivity evidence |
+
+Review caught and fixed an important Undo edge case before acceptance: Unreal can
+discard a no-op transaction, so rollback must match the exact Jev transaction GUID
+before undoing anything. Further regression tests prevent empty apply expectations
+from passing, check primitive mesh/label readback, and preserve actionable errors
+when the installed native plugin lacks a capability.
+
+The real stdio MCP client discovered **27 tools** against the rendered UE **5.8.2**
+sandbox, with bridge **0.3.0**. `scripts/smoke_verified_workflows.py` exercised three
+rotated, differently scaled native cubes through the complete workflow:
+
+- Exact actor bounds and live instance identity, retained snapshot, unchanged diff,
+  then a changed diff after the first edit.
+- Five measured previews/applies: ground, align a bounds edge, distribute equal
+  bounds gaps, snap pivots to a grid, and ground again. All generated fresh checks
+  passed; preview did not change actor state.
+- Old inspection revision and wrong session rejected before preview; each apply
+  was one-shot, and retained plan records reflected the observed outcome.
+- Batch label/folder changes, an existing material assignment, native readback and
+  fresh checks against the same actor instances.
+- A deliberately wrong label returned `failed`; a wrong instance or missing actor
+  returned `unverifiable`, never a false pass.
+- Isometric, top, front and right perspective camera presets followed by four
+  **1014 × 479** native captures with matching camera metadata.
+
+The [isometric capture](images/verified-workflow-isometric.png) and
+[top capture](images/verified-workflow-top.png) were viewed and show all three
+rotated test objects. Front and right captures were also viewed; the right view
+occludes objects along the row, as expected from that camera direction. A camera
+preset is not a visibility or collision guarantee. Grounding uses the specified
+Z plane; there is no terrain trace or simulated contact test.
+
+The baseline `scripts/smoke_editor.py --require-capture` also passed against 0.3,
+including auth/origin rejection, project binding, stale plans, mesh placement,
+grid/stairs/room layouts and rendered capture. Test actors remain unsaved in the
+isolated sandbox. These tests make no provider requests and modify no other game.
+Local evidence: `artifacts/editor-smoke-v0.3.json`,
+`artifacts/verified-workflows-v0.3.json`, native automation reports and build logs.
+The [Unreal evidence](UNREAL_VALIDATION.md) describes native rollback tests and limits.
+
+## Historical 0.2 baseline
+
+The following table and original measurements record the previous release. They
+are retained as historical evidence, not substituted for the 0.3 acceptance above.
 
 | Layer | Result | What it establishes |
 | --- | --- | --- |
@@ -22,7 +77,7 @@ The first PR matrix exposed an intermittent Windows Python 3.12 test-server fail
 
 ## Network/editor evidence
 
-The isolated sandbox reported `5.8.2-56702186+++UE5+Release-5.8`, with its listener at `127.0.0.1:9845`. The current nine-test native automation report is timestamped **`2026.09.22-01.53.08`**.
+The isolated sandbox reported `5.8.2-56702186+++UE5+Release-5.8`, with its listener at `127.0.0.1:9845`. The historical 0.2 nine-test native automation report is timestamped **`2026.09.22-01.53.08`**.
 
 `scripts/smoke_editor.py` launched the real Python MCP server over stdio, initialized it with the official MCP client, and successfully checked:
 
@@ -45,7 +100,21 @@ The Python bridge serializes calls and paces individual HTTP requests, including
 
 Test actors remain unsaved. No project packages were saved and no other game project was modified. Local raw evidence is ignored in `artifacts/editor-smoke-v0.2.json`, `artifacts/editor-viewport.png` and `artifacts/unreal-automation/`. [Native coverage and limitations](UNREAL_VALIDATION.md).
 
-## Live 0.2 semantic smoke
+## Live 0.3 semantic smoke
+
+At **2026-09-22 02:35:07 UTC**, the same three-request public-fixture workflow
+smoke returned three valid responses from `typesafe/jev-1.13-20260917`, with all
+four authored labels matching (three recommendations and one abstention). The
+unsupported-action case used the expanded **17-candidate** router. No editor
+operation ran. [Sanitized 0.3 report](evaluations/2026-09-22-workflows-v0.3.json).
+
+Reported provider latency was **343.17 ms** for asset selection, **228.67 ms** for
+batched diagnostics, and **375.42 ms** for the unsupported route. Usage totaled
+**2,368 input tokens, 386 output tokens and USD 0.000099456**, with zero cache hits
+and automatic retries. These few synthetic cases establish helper compatibility,
+not held-out accuracy, improvement over direct tools or a productivity gain.
+
+## Historical live 0.2 semantic smoke
 
 Run the masked key setup if needed, then the three-request workflow smoke:
 

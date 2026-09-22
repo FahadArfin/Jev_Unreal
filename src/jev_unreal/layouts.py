@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .bridge import UnrealBridge
 from .errors import JevError
+from .journal import PlanJournal
 
 Coordinate = Annotated[float, Field(ge=-900000, le=900000, strict=True)]
 Dimension = Annotated[float, Field(ge=0.1, le=50000, strict=True)]
@@ -205,13 +206,18 @@ def _finite_vector(value: object) -> bool:
 def verify_readback(expected: object, actors: object) -> dict:
     """Check returned actor identity and transforms, including equivalent Euler rotations."""
     issues = []
-    if not isinstance(actors, list) or not isinstance(expected, list):
+    if (
+        not isinstance(actors, list)
+        or not isinstance(expected, list)
+        or not 1 <= len(expected) <= 20
+        or len(actors) > 20
+    ):
         return {
             "status": "mismatch",
             "issues": [
                 {
                     "code": "invalid_actor_list"
-                    if not isinstance(actors, list)
+                    if not isinstance(actors, list) or len(actors) > 20
                     else "invalid_expected_operations"
                 }
             ],
@@ -224,26 +230,80 @@ def verify_readback(expected: object, actors: object) -> dict:
         issues.append({"code": "actor_count_mismatch"})
     seen_paths = set()
     for index, (operation, actor) in enumerate(zip(expected, actors, strict=False)):
-        if not isinstance(operation, dict) or operation.get("op") not in {
-            "spawn_primitive",
-            "spawn_static_mesh",
-            "set_transform",
-        }:
+        if (
+            not isinstance(operation, dict)
+            or not isinstance(operation.get("op"), str)
+            or operation["op"]
+            not in {
+                "spawn_primitive",
+                "spawn_static_mesh",
+                "set_transform",
+                "set_material",
+                "set_metadata",
+            }
+        ):
             issues.append({"index": index, "code": "invalid_expected_operation"})
             continue
         if not isinstance(actor, dict):
             issues.append({"index": index, "code": "invalid_actor_readback"})
             continue
+        if operation["op"] in {"spawn_primitive", "spawn_static_mesh"}:
+            label = operation.get("label")
+            if not isinstance(label, str) or not label.strip():
+                issues.append({"index": index, "code": "invalid_expected_operation"})
+                continue
+            if actor.get("label") != label:
+                issues.append({"index": index, "code": "metadata_mismatch", "field": "label"})
+        if operation["op"] == "spawn_primitive":
+            shape = operation.get("shape")
+            if not isinstance(shape, str) or shape not in {"Cube", "Sphere", "Cylinder", "Plane"}:
+                issues.append({"index": index, "code": "invalid_expected_operation"})
+                continue
+            if actor.get("static_mesh_path") != f"/Engine/BasicShapes/{shape}.{shape}":
+                issues.append({"index": index, "code": "mesh_identity_mismatch"})
+        elif operation["op"] == "spawn_static_mesh":
+            asset_path = operation.get("asset_path")
+            if not isinstance(asset_path, str) or not asset_path:
+                issues.append({"index": index, "code": "invalid_expected_operation"})
+                continue
+        elif operation["op"] == "set_metadata" and not any(
+            isinstance(operation.get(field), str) for field in ("label", "folder")
+        ):
+            issues.append({"index": index, "code": "invalid_expected_operation"})
+            continue
         path = actor.get("path")
         if not isinstance(path, str) or not path or path in seen_paths:
             issues.append({"index": index, "code": "invalid_actor_identity"})
-        elif operation.get("op") == "set_transform" and path != operation.get("actor_path"):
+        elif operation.get("op") in {
+            "set_transform",
+            "set_material",
+            "set_metadata",
+        } and path != operation.get("actor_path"):
             issues.append({"index": index, "code": "actor_identity_mismatch"})
         seen_paths.add(path if isinstance(path, str) else None)
         if operation.get("op") == "spawn_static_mesh" and actor.get(
             "static_mesh_path"
         ) != operation.get("asset_path"):
             issues.append({"index": index, "code": "mesh_identity_mismatch"})
+        if operation.get("op") == "set_material":
+            materials = actor.get("materials")
+            matches = (
+                [
+                    item
+                    for item in materials
+                    if isinstance(item, dict)
+                    and type(item.get("slot")) is int
+                    and item["slot"] == operation.get("slot")
+                ]
+                if isinstance(materials, list)
+                else []
+            )
+            if len(matches) != 1 or matches[0].get("path") != operation.get("material_path"):
+                issues.append({"index": index, "code": "material_mismatch"})
+        if operation.get("op") == "set_metadata":
+            for field in ("label", "folder"):
+                if field in operation and actor.get(field) != operation[field]:
+                    issues.append({"index": index, "code": "metadata_mismatch", "field": field})
         for field in ("location", "scale", "rotation"):
             actual, target = actor.get(field), operation.get(field)
             if not _finite_vector(actual):
@@ -274,7 +334,7 @@ def verify_readback(expected: object, actors: object) -> dict:
         "status": "passed" if not issues else "mismatch",
         "issues": issues,
         "checked_actors": min(len(expected), len(actors)),
-        "scope": "Native apply readback: actor identities, positions, orientations, scales.",
+        "scope": "Native readback: actor identities, transforms and requested metadata/materials.",
         "visual_acceptance": False,
         "saved": False,
     }
@@ -286,21 +346,109 @@ class PreviewTracker:
     def __init__(self, bridge: UnrealBridge):
         self.bridge = bridge
         self._plans: dict[str, tuple[float, list[dict]]] = {}
+        self._attempted: dict[str, float] = {}
+        self.journal = PlanJournal()
 
-    async def preview(self, operations: list[dict]) -> dict:
-        result = await self.bridge.call("preview", {"operations": operations})
+    def _remember(self, plan_id: str, **fields):
+        try:
+            self.journal.put(plan_id, **fields)
+        except Exception:
+            # A receipt is supporting evidence. Malformed optional metadata must
+            # never hide the outcome of an already-applied native transaction.
+            try:
+                self.journal.put(
+                    plan_id,
+                    status=fields["status"],
+                    executed=fields.get("executed"),
+                    saved=False,
+                    details_omitted=True,
+                )
+            except Exception:
+                # Receipt persistence is best effort, including the minimal fallback.
+                # The independent attempt guard still prevents immediate replay.
+                pass
+
+    async def preview(self, operations: list[dict], expected_state: dict | None = None) -> dict:
+        params = {"operations": operations}
+        if expected_state is not None:
+            params["expected_state"] = expected_state
+        result = await self.bridge.call("preview", params)
         now = time.monotonic()
         self._plans = {key: value for key, value in self._plans.items() if value[0] > now}
         if len(self._plans) >= 64:
             self._plans.pop(next(iter(self._plans)))
-        self._plans[result["plan_id"]] = (now + 120, deepcopy(result["operations"]))
+        expiry = result.get("expires_in_seconds", 120)
+        if type(expiry) not in (int, float) or not 0 <= expiry <= 120 or not math.isfinite(expiry):
+            expiry = 120
+        self._plans[result["plan_id"]] = (now + expiry, deepcopy(result["operations"]))
+        self._remember(
+            result["plan_id"],
+            status="previewed",
+            operations=result["operations"],
+            expires_in_seconds=result.get("expires_in_seconds", 120),
+            expected_state=expected_state,
+            revision=result.get("revision"),
+            executed=False,
+            saved=False,
+        )
         return result
 
     async def apply(self, plan_id: str) -> dict:
+        now = time.monotonic()
+        self._attempted = {
+            key: deadline for key, deadline in self._attempted.items() if deadline > now
+        }
+        if plan_id in self._attempted:
+            raise JevError(
+                "unknown_plan",
+                "This process already attempted the plan. Inspect its record and scene; "
+                "do not retry.",
+            )
+        if len(self._attempted) >= 64:
+            self._attempted.pop(next(iter(self._attempted)))
+        self._attempted[plan_id] = now + 900
         expectation = self._plans.pop(plan_id, None)
-        result = await self.bridge.call("apply", {"plan_id": plan_id})
+        if expectation and expectation[0] <= now:
+            expectation = None
+        self._remember(plan_id, status="applying", executed=None, saved=False)
+        try:
+            result = await self.bridge.call("apply", {"plan_id": plan_id})
+        except BaseException as exc:
+            # Cancellation/transport loss may happen after native application. Preserve
+            # that uncertainty and never issue another apply on behalf of the caller.
+            code = exc.code if isinstance(exc, JevError) else "interrupted"
+            rejected = code in {
+                "wrong_project",
+                "project_required",
+                "missing_bridge_token",
+                "stale_plan",
+                "expired_plan",
+                "play_mode",
+                "level_locked",
+                "actor_locked",
+                "actor_not_found",
+                "actor_unsupported",
+                "bad_request",
+                "editor_busy",
+                "asset_not_found",
+                "asset_unsupported",
+                "asset_unavailable",
+                "material_slot_invalid",
+                "rate_limited",
+                "unauthorized",
+                "forbidden",
+                "capability_unavailable",
+            }
+            self._remember(
+                plan_id,
+                status="rejected" if rejected else "unknown",
+                error_code=code,
+                executed=False if rejected else None,
+                next_step="Inspect the record/current actors; create a fresh preview if needed.",
+            )
+            raise
         if not isinstance(result, dict):
-            return {
+            result = {
                 "applied": None,
                 "verification": {
                     "status": "unavailable",
@@ -321,8 +469,26 @@ class PreviewTracker:
         else:
             result["verification"] = {
                 "status": "unavailable",
-                "reason": "No preview record in this MCP process.",
+                "reason": "No unexpired preview expectation in this MCP process.",
                 "visual_acceptance": False,
                 "saved": False,
             }
+        paths = (
+            [
+                actor["path"]
+                for actor in result.get("actors", [])
+                if isinstance(actor, dict) and isinstance(actor.get("path"), str)
+            ]
+            if isinstance(result.get("actors"), list)
+            else []
+        )
+        self._remember(
+            plan_id,
+            status="applied" if result.get("applied") is True else "unknown",
+            executed=True if result.get("applied") is True else None,
+            actor_paths=paths[:20],
+            verification=result["verification"],
+            revision_after=result.get("revision"),
+            next_step="Use fresh unreal_verify/unreal_diff and capture for independent checks.",
+        )
         return result

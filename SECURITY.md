@@ -30,6 +30,37 @@ Keep an independent backup or version-controlled copy before allowing editor
 mutations. Structured model output still requires deterministic validation; model
 responses are untrusted input. Only explicitly supported operations should run.
 
+The 0.3 alpha exposes 27 MCP tools. Existing-actor edits are restricted to supported
+exact native StaticMeshActors without attachment or editability blockers. Transform,
+existing material-slot assignment, and actor label/folder operations pass through
+the same native preview/apply boundary. The bridge provides no arbitrary Python,
+shell, console, C++, Blueprint execution or generic property setter. Capability
+advertisements indicate protocol support; they grant no permission and do not
+replace project binding, actor validation or user authorization.
+
+Use fresh actor inspection and, where relevant, an `expected_state` containing the
+measured session, world and revision when creating a preview. Spatial recipes do
+this automatically. Native plans expire after 120 seconds, are consumed once, and
+reject changed tracked state. The fingerprint covers supported actor state; it is
+not a complete hash of every property or asset byte. Geometry checks use world
+AABBs and do not establish terrain contact, collision safety or gameplay behavior.
+
+An apply timeout, cancellation or incomplete rollback can leave the outcome
+unknown. Do not retry an ambiguous plan. Read `unreal_plan`, inspect current actors
+and use fresh verification/diff before making a new plan. Successful native apply
+and verification are separate observations; a failed check does not undo an edit.
+Only Unreal's editor transaction provides Undo, and no workflow automatically
+saves packages.
+
+Plan records and selected-actor snapshots are held in MCP process memory, returned
+only when requested, and bounded by count, serialized bytes and a 15-minute
+lifetime. Plan records allow up to 64 entries/2 MiB (64 KiB per record, with details
+omitted when necessary); snapshots allow 32 entries/2 MiB. Python object overhead
+is additional. Records can be evicted and disappear on restart. Receipt writes are
+best effort; neither store is a durable audit log, crash recovery service, backup,
+or replay queue. The separate local attempted-plan guard is also bounded; native
+single-use plans remain the execution boundary.
+
 Catalog discovery is restricted to explicitly configured literal loopback HTTP(S)
 endpoints, with redirects, compression and external `tools/call` rejected. Exact
 schemas and annotations remain untrusted metadata, not authorization. A discovered
@@ -44,6 +75,17 @@ to upload. Viewport images are returned to the requesting MCP client. That clien
 may forward them to its own model/provider for visual review; Jev_Unreal does not
 control the client's data policy. This server sends no images to Jev.
 PNG structure validation is not a general-purpose image-decoder security audit.
+Actor details, snapshots, checks and plan records also contain project metadata
+visible to the requesting MCP client; this server does not automatically send that
+data to Jev. Camera framing changes the current editor view, including explicit
+perspective presets, but does not edit actor geometry.
+
+The supported workflow is inspect, snapshot the intended selection, preview,
+apply once, then verify/diff fresh data and review a viewport capture. Missing or
+incomplete evidence must remain unverifiable. See the
+[verification contract](docs/VERIFICATION.md),
+[spatial workflow](docs/SPATIAL_WORKFLOWS.md), and [roadmap](docs/ROADMAP.md) for
+current boundaries and work that is not yet implemented.
 
 Provider API keys belong in the local process environment or supported local secret
 storage. The Windows helper uses Windows DPAPI tied to the current user account;

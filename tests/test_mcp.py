@@ -46,9 +46,22 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_capture",
                 "unreal_frame",
                 "unreal_layout_preview",
+                "unreal_actor_details",
+                "unreal_snapshot",
+                "unreal_diff",
+                "unreal_verify",
+                "unreal_spatial_preview",
+                "unreal_plan",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
+            assert set(by_name["unreal_frame"].inputSchema["properties"]["view"]["enum"]) == {
+                "current",
+                "isometric",
+                "top",
+                "front",
+                "right",
+            }
             assert by_name["jev_route"].annotations.openWorldHint is True
             result = await session.call_tool(
                 "jev_decide",
@@ -70,6 +83,7 @@ async def test_stdio_protocol_and_offline_failure():
             assert {p.name for p in prompts.prompts} == {
                 "blockout_workflow",
                 "diagnostic_workflow",
+                "verified_edit_workflow",
             }
             recipe = await session.call_tool(
                 "unreal_layout_preview",
@@ -106,3 +120,43 @@ async def test_stdio_protocol_and_offline_failure():
             capture = await session.call_tool("unreal_capture", {})
             assert capture.isError
             assert capture.structuredContent["error"]["code"] == "missing_bridge_token"
+            details = await session.call_tool(
+                "unreal_actor_details", {"actor_paths": ["/Temp/A.A"]}
+            )
+            assert details.structuredContent["error"]["code"] == "missing_bridge_token"
+            snapshot = await session.call_tool("unreal_snapshot", {"actor_paths": ["/Temp/A.A"]})
+            assert snapshot.structuredContent["error"]["code"] == "missing_bridge_token"
+            diff = await session.call_tool("unreal_diff", {"snapshot_id": "missing"})
+            assert diff.structuredContent["result"]["status"] == "unverifiable"
+            verification = await session.call_tool(
+                "unreal_verify",
+                {"checks": [{"kind": "label", "actor_path": "/Temp/A.A", "expected": "A"}]},
+            )
+            assert verification.structuredContent["result"]["status"] == "unverifiable"
+            invalid_checks = await session.call_tool("unreal_verify", {"checks": []})
+            assert invalid_checks.isError
+            spatial = await session.call_tool(
+                "unreal_spatial_preview",
+                {
+                    "recipe": {
+                        "kind": "ground",
+                        "actor_paths": ["/Temp/A.A"],
+                        "z_cm": 0,
+                    }
+                },
+            )
+            assert spatial.structuredContent["error"]["code"] == "missing_bridge_token"
+            record = await session.call_tool("unreal_plan", {"plan_id": "missing"})
+            assert record.structuredContent["error"]["code"] == "plan_record_missing"
+            checks_resource = await session.read_resource("jev://checks")
+            assert "bottom_z" in checks_resource.contents[0].text
+            for name in (
+                "unreal_actor_details",
+                "unreal_snapshot",
+                "unreal_diff",
+                "unreal_verify",
+                "unreal_spatial_preview",
+                "unreal_plan",
+            ):
+                assert by_name[name].annotations.readOnlyHint is True
+                assert by_name[name].annotations.openWorldHint is False

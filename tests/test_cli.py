@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from jev_unreal.cli import run_command
+from jev_unreal.cli import WORKFLOW_CAPABILITIES, read_checks, run_command
 from jev_unreal.config import Settings
 from jev_unreal.errors import JevError
 
@@ -22,7 +22,10 @@ from jev_unreal.errors import JevError
 async def test_doctor_readiness_and_no_provider_calls(monkeypatch, connected, bound, ready):
     bridge = AsyncMock()
     if connected:
-        bridge.call.return_value = {"project_file": "test.uproject"}
+        bridge.call.return_value = {
+            "project_file": "test.uproject",
+            "capabilities": list(WORKFLOW_CAPABILITIES),
+        }
     else:
         bridge.call.side_effect = JevError("editor_unavailable", "Editor unavailable")
     monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
@@ -49,3 +52,45 @@ async def test_cli_layouts_are_offline_and_catalog_empty_is_explicit():
     assert set(result) == {"grid", "stairs", "room"}
     result = await run_command(Namespace(command="catalog", catalog_command="status"), Settings())
     assert result["tool_count"] == 0
+
+
+async def test_doctor_reports_connected_but_outdated_native_plugin(monkeypatch):
+    bridge = AsyncMock()
+    bridge.call.return_value = {
+        "project_file": "test.uproject",
+        "capabilities": ["status", "preview"],
+    }
+    monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
+    result = await run_command(
+        Namespace(command="doctor"), Settings(expected_project="test.uproject")
+    )
+    assert result["editor"]["ready"] is True
+    assert result["ready"] is False
+    assert set(result["workflow_compatibility"]["missing_capabilities"]) == WORKFLOW_CAPABILITIES
+    assert "Rebuild" in result["next_steps"][0]
+
+
+def test_cli_verification_file_is_bounded_and_has_no_arbitrary_options(tmp_path):
+    path = tmp_path / "checks.json"
+    path.write_text('{"checks":[],"command":"anything"}')
+    with pytest.raises(JevError, match="Use checks"):
+        read_checks(path)
+    path.write_bytes(b" " * 65537)
+    with pytest.raises(JevError, match="64 KiB"):
+        read_checks(path)
+    path.write_text('{"checks":[]}')
+    assert read_checks(path) == {"checks": []}  # Typed helper rejects empty checks.
+
+
+async def test_cli_inspect_and_failed_verification_are_read_only(monkeypatch, tmp_path):
+    bridge = AsyncMock()
+    bridge.call.return_value = {"actors": []}
+    monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
+    result = await run_command(Namespace(command="inspect", actor_paths=["/Temp/A.A"]), Settings())
+    assert result == {"actors": []}
+    bridge.call.assert_awaited_once_with("actor_details", {"actor_paths": ["/Temp/A.A"]})
+    path = tmp_path / "checks.json"
+    path.write_text('{"checks":[{"kind":"label","actor_path":"/Temp/A.A","expected":"A"}]}')
+    result = await run_command(Namespace(command="verify", file=str(path)), Settings())
+    assert result["status"] == "unverifiable"
+    assert bridge.call.await_count == 2
