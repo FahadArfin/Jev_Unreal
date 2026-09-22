@@ -21,6 +21,24 @@ WORKFLOW_CAPABILITIES = {
     "frame_views",
 }
 
+PROJECT_WORKFLOW_FEATURES = {
+    "plan_review": ("Native plan review", {"pending_plans", "plan_status"}),
+    "blueprint_inspection": ("Blueprint inspection", {"blueprint_inspect"}),
+    "asset_dependencies": ("Asset dependencies", {"asset_dependencies"}),
+    "import_provenance": ("Asset import provenance", {"asset_import_info"}),
+    "asset_validation": (
+        "Project asset validation",
+        {"validation_rules", "validation_start", "validation_job", "validation_cancel"},
+    ),
+    "functional_testing": (
+        "Project functional testing",
+        {"functional_tests", "functional_start", "functional_job", "functional_cancel"},
+    ),
+}
+PROJECT_WORKFLOW_CAPABILITIES = set().union(
+    *(capabilities for _, capabilities in PROJECT_WORKFLOW_FEATURES.values())
+)
+
 
 def read_checks(path: Path) -> dict:
     with path.open("rb") as handle:
@@ -35,6 +53,33 @@ def read_checks(path: Path) -> dict:
     ):
         raise JevError("invalid_request", "Use checks and optional expected_identity/revision.")
     return data
+
+
+def setup_command(args) -> dict:
+    from .setup import apply_plan, inspect_setup, plan_install, plan_uninstall, read_plan
+
+    if args.setup_command == "inspect":
+        return inspect_setup(
+            args.project,
+            source_plugin=args.source_plugin,
+            engine_root=args.engine_root,
+            port=args.port,
+        )
+    if args.setup_command == "apply":
+        return apply_plan(read_plan(args.file))
+    result = (
+        plan_install(args.project, args.source_plugin)
+        if args.setup_command == "plan"
+        else plan_uninstall(args.project)
+    )
+    if args.output:
+        # Refuse to overwrite an unrelated file or an earlier review without explicit removal.
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("x", encoding="utf-8") as handle:
+            json.dump(result, handle, indent=2, allow_nan=False)
+            handle.write("\n")
+    return result
 
 
 async def run_command(args, settings: Settings) -> dict:
@@ -70,18 +115,38 @@ async def run_command(args, settings: Settings) -> dict:
             else set()
         )
         missing_capabilities = sorted(WORKFLOW_CAPABILITIES - available)
+        missing_project_capabilities = sorted(PROJECT_WORKFLOW_CAPABILITIES - available)
+        project_features = {
+            feature: {
+                "label": label,
+                "ready": capabilities <= available,
+                "missing_capabilities": sorted(capabilities - available),
+            }
+            for feature, (label, capabilities) in PROJECT_WORKFLOW_FEATURES.items()
+        }
         catalog = ToolCatalog(Path(settings.catalog_file) if settings.catalog_file else None)
         return {
             "version": __version__,
             "ready": editor["ready"]
             and bool(settings.expected_project)
-            and not missing_capabilities,
+            and not missing_capabilities
+            and not missing_project_capabilities,
             "editor": editor,
             "workflow_compatibility": {
                 "ready": not missing_capabilities,
                 "missing_capabilities": missing_capabilities,
             },
+            "project_workflow_compatibility": {
+                "ready": not missing_project_capabilities,
+                "missing_capabilities": missing_project_capabilities,
+                "features": project_features,
+                "policy_verified": False,
+                "note": "Capability support only. Project validation/functional-test policies "
+                "may remain disabled; doctor does not enable them or execute project code.",
+            },
             "project_bound": bool(settings.expected_project),
+            "connection_profile": settings.profile_id or None,
+            "bridge_url": settings.bridge_url,
             "provider": {
                 "configured": bool(settings.api_key),
                 "model": settings.model,
@@ -106,6 +171,19 @@ async def run_command(args, settings: Settings) -> dict:
             + (
                 ["Rebuild and relaunch the matching JevEditor plugin for verified editing tools."]
                 if editor["ready"] and missing_capabilities
+                else []
+            )
+            + (
+                [
+                    "Rebuild and relaunch the matching JevEditor 0.4 or later for: "
+                    + ", ".join(
+                        feature["label"]
+                        for feature in project_features.values()
+                        if not feature["ready"]
+                    )
+                    + "."
+                ]
+                if editor["ready"] and missing_project_capabilities
                 else []
             ),
         }
@@ -160,6 +238,28 @@ def main():
     ).add_argument("file")
     commands.add_parser("doctor", help="Check editor connectivity/configuration; no cloud calls")
     commands.add_parser("layouts", help="Show available measured blockout recipes")
+    profiles = commands.add_parser("profiles", help="List explicitly configured editor connections")
+    profile_commands = profiles.add_subparsers(dest="profiles_command", required=True)
+    profile_commands.add_parser(
+        "list", help="Read names and endpoints without tokens"
+    ).add_argument("file")
+    setup = commands.add_parser("setup", help="Inspect or review local plugin installation changes")
+    setup_commands = setup.add_subparsers(dest="setup_command", required=True)
+    inspection = setup_commands.add_parser("inspect", help="Read-only local setup diagnostics")
+    inspection.add_argument("--project", required=True)
+    inspection.add_argument("--source-plugin")
+    inspection.add_argument("--engine-root")
+    inspection.add_argument("--port", type=int, default=9845)
+    install = setup_commands.add_parser("plan", help="Preview source plugin install/upgrade")
+    install.add_argument("--project", required=True)
+    install.add_argument("--source-plugin", required=True)
+    install.add_argument("--output")
+    uninstall = setup_commands.add_parser("uninstall-plan", help="Preview removal of owned files")
+    uninstall.add_argument("--project", required=True)
+    uninstall.add_argument("--output")
+    setup_commands.add_parser("apply", help="Apply an unchanged reviewed JSON plan").add_argument(
+        "file"
+    )
     catalog = commands.add_parser("catalog", help="Discover explicitly configured local MCP tools")
     catalog_commands = catalog.add_subparsers(dest="catalog_command", required=True)
     catalog_commands.add_parser("status", help="Refresh and summarize the configured catalog")
@@ -173,6 +273,14 @@ def main():
     commands.add_parser("decide", help="Evaluate a JSON state/questions file").add_argument("file")
     args = parser.parse_args()
     try:
+        if args.command == "setup":
+            print(json.dumps(setup_command(args), indent=2, allow_nan=False))
+            return
+        if args.command == "profiles":
+            from .profiles import summaries
+
+            print(json.dumps({"profiles": summaries(args.file)}, indent=2, allow_nan=False))
+            return
         settings = Settings.from_env()
         if args.command == "serve":
             from .server import create_server

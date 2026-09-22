@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.0a1
+
+- Added **Window → Jev Review**, using the native inspect/preview/apply path for
+  human review, translations and actor metadata changes.
+- Added bounded native plan receipts and pending-plan discovery. MCP reconnects
+  can inspect outcomes while the same editor stays open; editor crashes/restarts
+  still lose receipts. Reentrant edits cannot evict an in-flight apply record.
+- Added read-only loaded Blueprint graphs/pins/variables/stored diagnostics,
+  direct asset dependency/referencer inspection and redacted import provenance.
+- Added project-approved native Data Validation jobs and named functional tests
+  in an existing standalone PIE session. Both are disabled until a maintainer
+  configures an explicit allowlist. Trusted project callbacks are not sandboxed.
+- Added reviewed source install/update/repair/uninstall plans with hash guards,
+  owned-file manifests, retained backups, rollback and project enablement.
+- Added setup diagnostics and startup-selected connection profiles that bind
+  project, loopback endpoint and token file together. Native bridge ports are
+  configurable through `JEV_BRIDGE_PORT` (1024–65535).
+- Added a bounded benchmark harness with separate inputs/labels, keyword/Jev
+  routing runs and independently labelled human-attested workflow evidence.
+- Expanded the MCP surface from 27 to **39 tools**. See the
+  [roadmap](docs/ROADMAP.md) for implemented scope and outstanding acceptance.
+
+The [validation report](docs/VALIDATION.md) separates mock tests, live provider
+requests, native automation, real editor calls and visual acceptance. These
+foundations do not establish broad usability, productivity gains or readiness
+for millions of users.
+
 ## 0.3.0a1
 
 - Added exact selected-actor inspection with world AABBs, material assignments,

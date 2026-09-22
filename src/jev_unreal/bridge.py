@@ -98,6 +98,21 @@ class UnrealBridge:
                     "editor_busy",
                     "rollback_failed",
                     "material_slot_invalid",
+                    "asset_not_loaded",
+                    "unsupported_asset",
+                    "validation_disabled",
+                    "validation_rule_unavailable",
+                    "rule_not_allowed",
+                    "rule_unavailable",
+                    "wrong_project",
+                    "validation_busy",
+                    "unknown_job",
+                    "job_busy",
+                    "policy_invalid",
+                    "functional_disabled",
+                    "test_not_allowed",
+                    "pie_required",
+                    "test_unavailable",
                 }
                 if code not in known:
                     code = "bridge_error"
@@ -125,6 +140,19 @@ class UnrealBridge:
             "capture",
             "frame",
             "actor_details",
+            "pending_plans",
+            "plan_status",
+            "blueprint_inspect",
+            "asset_dependencies",
+            "asset_import_info",
+            "validation_rules",
+            "validation_start",
+            "validation_job",
+            "validation_cancel",
+            "functional_tests",
+            "functional_start",
+            "functional_job",
+            "functional_cancel",
         }:
             raise JevError("unknown_action", "Operation is not part of the editor allowlist.")
         async with self._lock:
@@ -137,13 +165,41 @@ class UnrealBridge:
                 raise JevError(
                     "wrong_project", "Connected editor does not match JEV_EXPECTED_PROJECT."
                 )
-            if action in {"preview", "apply", "frame"} and not expected:
+            if (
+                action
+                in {
+                    "preview",
+                    "apply",
+                    "frame",
+                    "validation_start",
+                    "validation_cancel",
+                    "functional_start",
+                    "functional_cancel",
+                }
+                and not expected
+            ):
                 raise JevError(
                     "project_required", "Set JEV_EXPECTED_PROJECT before editing a scene."
                 )
             if action == "status":
                 return status
             required_capabilities = set()
+            if action in {
+                "pending_plans",
+                "plan_status",
+                "blueprint_inspect",
+                "asset_dependencies",
+                "asset_import_info",
+                "validation_rules",
+                "validation_start",
+                "validation_job",
+                "validation_cancel",
+                "functional_tests",
+                "functional_start",
+                "functional_job",
+                "functional_cancel",
+            }:
+                required_capabilities.add(action)
             if action == "actor_details":
                 required_capabilities.add("actor_details")
             if action == "frame" and params and "view" in params:
@@ -168,4 +224,28 @@ class UnrealBridge:
                     "The connected editor lacks this capability. "
                     "Rebuild/relaunch the matching JevEditor plugin.",
                 )
+            if action == "validation_start":
+                # Bind the native mutation to this authenticated status response,
+                # not just an earlier client-side project check. A restarted editor
+                # can reuse an endpoint/token between these two HTTP requests.
+                state = {}
+                for name, maximum in (("session_id", 64), ("world_path", 1024), ("revision", 128)):
+                    value = status.get(name)
+                    if (
+                        not isinstance(value, str)
+                        or not 1 <= len(value) <= maximum
+                        or any(ord(character) < 32 for character in value)
+                    ):
+                        raise JevError(
+                            "bridge_error",
+                            "Editor did not return a valid state for project validation.",
+                        )
+                    state[name] = value
+                if len(actual) > 2048 or any(ord(character) < 32 for character in actual):
+                    raise JevError("bridge_error", "Editor returned an invalid project identity.")
+                params = {
+                    **(params or {}),
+                    "expected_project": actual,
+                    "expected_state": state,
+                }
             return await self._call(action, params or {})

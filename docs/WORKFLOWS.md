@@ -1,7 +1,7 @@
 # Practical workflows
 
 All examples are MCP tool arguments. Start with `unreal_context` and confirm the
-intended project. The 0.3 alpha exposes 27 tools. Local editor, discovery search,
+intended project. The 0.4 alpha exposes 39 tools. Local editor, discovery search,
 layout/spatial recipes, snapshots, verification, asset filtering and diagnostic
 grouping require no provider key. Optional Jev requests are explicit, bounded
 judgments; they do not execute an operation. Replace every example actor/asset
@@ -143,8 +143,11 @@ the operation completed. Do not replay it. Plan records retain the last observed
 status and available details, at most 64 records/2 MiB for 15 minutes; large details
 may be omitted. Receipt failures do not hide a confirmed native apply result.
 Local repeated-attempt suppression is separately bounded to 64 IDs/15 minutes;
-native single-use plans remain authoritative. Records and snapshots disappear on
-MCP restart or eviction and are not persistent recovery, Undo or auto-save.
+native single-use plans remain authoritative. Snapshots and local observations disappear on
+MCP restart or eviction. `unreal_plan` now reads native editor-session receipts first,
+so an MCP restart can recover the historical outcome while Unreal remains open.
+Native receipts expire and are lost on editor restart; they are not crash recovery,
+Undo or auto-save. See [the review panel](REVIEW_PANEL.md).
 
 ## Build and inspect a blockout
 
@@ -266,7 +269,15 @@ uv run jev-unreal catalog get "epic:EXACT_DISCOVERED_TOOL_NAME"
 ```
 
 `doctor` checks the editor connection/project binding and reports the native
-capabilities missing from the inspect/edit/verify workflow, without a provider request.
+capabilities missing from both inspect/edit/verify and the 0.4 project workflows,
+without a provider request. The existing `workflow_compatibility` field reports
+core editing support; `project_workflow_compatibility` separately reports native
+plan review, Blueprint inspection, asset dependencies/import provenance, asset
+validation and functional testing, with missing capabilities grouped by feature.
+Overall `ready` requires both reports to pass. A 0.3 editor can therefore remain
+core-compatible while correctly requiring a native-plugin upgrade for this release.
+Capability support does not enable or validate project execution policies: doctor
+does not invoke validators/tests or claim they are approved (`policy_verified=false`).
 Its provider status describes the current process environment, not encrypted
 credentials that only the Windows MCP launcher has decrypted. An unbound or
 unreachable editor or a missing required capability returns exit code 1 with
@@ -300,8 +311,11 @@ the explicitly refreshed in-memory snapshot. No private catalog is persisted.
 
 MCP clients can use the `verified_edit_workflow`, `blockout_workflow` and
 `diagnostic_workflow` prompts, plus `jev://checks` and `jev://layouts` resources.
-The [roadmap](ROADMAP.md) describes future review UI, installation improvements,
-project-owned tests and Blender handoff; those are not additional current tools.
+The [review panel](REVIEW_PANEL.md), [guided setup](SETUP.md),
+[Blueprint/asset validation](PROJECT_INSPECTION.md), [named functional tests](FUNCTIONAL_TESTS.md)
+and [connection profiles](CONNECTION_PROFILES.md) extend these workflows.
+The [roadmap](ROADMAP.md) distinguishes their implemented scope from remaining work,
+including Blender handoff and broader gameplay/platform acceptance.
 
 ## Performance and acceptance
 

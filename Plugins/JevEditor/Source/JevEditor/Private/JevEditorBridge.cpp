@@ -248,6 +248,8 @@ TSharedRef<FJsonObject> FJevEditorBridge::Execute(const TSharedPtr<FJsonObject>&
         return Jev::Success(StatusSnapshot(World));
     }
     if (Action == TEXT("context")) return Context(World, Params);
+    if (Action == TEXT("plan_status")) return PlanStatus(Params);
+    if (Action == TEXT("pending_plans")) return PendingPlans(Params);
     if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor)
         return Error(TEXT("play_mode"), TEXT("Stop Play or Simulate before this operation; status and context remain available."));
     if (Action == TEXT("asset_details")) return AssetDetails(Params);
@@ -256,9 +258,9 @@ TSharedRef<FJsonObject> FJevEditorBridge::Execute(const TSharedPtr<FJsonObject>&
     if (Action == TEXT("capture")) return Capture(World, Params);
     if (Action == TEXT("frame")) return Frame(World, Params);
     if (Action == TEXT("preview")) return Preview(World, Params);
-    if (Action == TEXT("apply")) return Apply(World, Params);
+    if (Action == TEXT("apply")) return ApplyTracked(World, Params);
     if (Action != TEXT("actors") && Action != TEXT("assets"))
-        return Error(TEXT("unknown_action"), TEXT("Supported actions: status, context, actors, actor_details, assets, asset_details, validate, capture, frame, preview, apply."));
+        return Error(TEXT("unknown_action"), TEXT("Supported actions: status, context, actors, actor_details, assets, asset_details, validate, capture, frame, preview, apply, plan_status, pending_plans."));
 
     if (!Jev::OnlyFields(Params, Action == TEXT("assets") ? TArray<FString>{TEXT("limit"), TEXT("query"), TEXT("path")} : TArray<FString>{TEXT("limit"), TEXT("query")}))
         return Error(TEXT("bad_request"), TEXT("Unexpected inspection parameter."));
@@ -312,4 +314,132 @@ TSharedRef<FJsonObject> FJevEditorBridge::Execute(const TSharedPtr<FJsonObject>&
     }
     Result->SetBoolField(TEXT("truncated"), bTruncated);
     return Jev::Success(Result);
+}
+
+void FJevEditorBridge::PrunePlanRecords()
+{
+    const double Now = Clock();
+    for (auto It = PlanRecords.CreateIterator(); It; ++It)
+    {
+        FPlanRecord& Record = It.Value();
+        if (Record.Status == TEXT("pending") && Record.ExpiresAt <= Now)
+        {
+            Record.Status = TEXT("expired");
+            Record.OutcomeCode = TEXT("expired_plan");
+            Record.UpdatedAt = Now;
+            Plans.Remove(It.Key());
+        }
+        if (Record.Status != TEXT("applying") && Now - Record.CreatedAt >= 900)
+        {
+            Plans.Remove(It.Key());
+            PlanRecordOrder.Remove(It.Key());
+            It.RemoveCurrent();
+        }
+    }
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::PlanRecordSnapshot(const FString& PlanId, const FPlanRecord& Record) const
+{
+    auto Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("plan_id"), PlanId);
+    Result->SetStringField(TEXT("session_id"), SessionId);
+    Result->SetStringField(TEXT("status"), Record.Status);
+    Result->SetObjectField(TEXT("review"), Record.Review);
+    Result->SetBoolField(TEXT("applied"), Record.Status == TEXT("applied"));
+    if (Record.Status == TEXT("unknown") || Record.Status == TEXT("applying")) Result->SetField(TEXT("executed"), MakeShared<FJsonValueNull>());
+    else Result->SetBoolField(TEXT("executed"), Record.Status == TEXT("applied") || Record.Status == TEXT("rolled_back"));
+    Result->SetBoolField(TEXT("saved"), false);
+    Result->SetBoolField(TEXT("requires_fresh_verification"), true);
+    Result->SetStringField(TEXT("scope"), TEXT("editor_session_memory"));
+    Result->SetStringField(TEXT("note"), TEXT("Historical outcome only. Undo, external edits, and map changes are not reflected here. Records survive an MCP reconnect, but not editor restart."));
+    Result->SetNumberField(TEXT("age_seconds"), FMath::Max(0.0, Clock() - Record.CreatedAt));
+    Result->SetNumberField(TEXT("expires_in_seconds"), FMath::Max(0.0, Record.ExpiresAt - Clock()));
+    Result->SetNumberField(TEXT("retention_remaining_seconds"), FMath::Max(0.0, 900.0 - (Clock() - Record.CreatedAt)));
+    if (!Record.OutcomeCode.IsEmpty()) Result->SetStringField(TEXT("outcome_code"), Record.OutcomeCode);
+    if (!Record.RevisionAfter.IsEmpty()) Result->SetStringField(TEXT("revision_after"), Record.RevisionAfter);
+    TArray<TSharedPtr<FJsonValue>> Paths;
+    for (const FString& Path : Record.ActorPaths) Paths.Add(MakeShared<FJsonValueString>(Path));
+    Result->SetArrayField(TEXT("actor_paths"), Paths);
+    return Result;
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::PlanStatus(const TSharedPtr<FJsonObject>& Params)
+{
+    FString PlanId;
+    if (!Jev::OnlyFields(Params, {TEXT("plan_id")}) || !Jev::ReadString(Params, TEXT("plan_id"), PlanId) || PlanId.IsEmpty() || PlanId.Len() > 64)
+        return Error(TEXT("bad_request"), TEXT("plan_status requires only a nonempty plan_id of at most 64 characters."));
+    PrunePlanRecords();
+    const FPlanRecord* Record = PlanRecords.Find(PlanId);
+    if (!Record) return Error(TEXT("unknown_plan"), TEXT("No retained record exists in this editor session. History is bounded to 64 records and 15 minutes."));
+    return Jev::Success(PlanRecordSnapshot(PlanId, *Record));
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::PendingPlans(const TSharedPtr<FJsonObject>& Params)
+{
+    double LimitNumber = 20;
+    if (!Jev::OnlyFields(Params, {TEXT("limit")}) || (Params->HasField(TEXT("limit")) &&
+        (!Params->HasTypedField<EJson::Number>(TEXT("limit")) || !Params->TryGetNumberField(TEXT("limit"), LimitNumber) ||
+        !FMath::IsFinite(LimitNumber) || LimitNumber < 1 || LimitNumber > 64 || FMath::FloorToDouble(LimitNumber) != LimitNumber)))
+        return Error(TEXT("bad_request"), TEXT("pending_plans accepts only limit, an integer from 1 to 64."));
+    PrunePlanRecords();
+    TArray<TSharedPtr<FJsonValue>> Items;
+    int32 PendingCount = 0;
+    for (int32 Index = PlanRecordOrder.Num() - 1; Index >= 0; --Index)
+    {
+        const FPlanRecord* Record = PlanRecords.Find(PlanRecordOrder[Index]);
+        if (!Record || Record->Status != TEXT("pending")) continue;
+        ++PendingCount;
+        if (Items.Num() >= static_cast<int32>(LimitNumber)) continue;
+        // The list contains summaries, so 64 plans cannot exceed the response cap.
+        auto Item = MakeShared<FJsonObject>();
+        Item->SetStringField(TEXT("plan_id"), PlanRecordOrder[Index]);
+        Item->SetStringField(TEXT("status"), Record->Status);
+        Item->SetStringField(TEXT("project_file"), Record->Review->GetStringField(TEXT("project_file")));
+        Item->SetStringField(TEXT("world_path"), Record->Review->GetStringField(TEXT("world_path")));
+        Item->SetNumberField(TEXT("operation_count"), Record->Review->GetArrayField(TEXT("operations")).Num());
+        Item->SetNumberField(TEXT("expires_in_seconds"), FMath::Max(0.0, Record->ExpiresAt - Clock()));
+        Items.Add(MakeShared<FJsonValueObject>(Item));
+    }
+    auto Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("session_id"), SessionId);
+    Result->SetStringField(TEXT("scope"), TEXT("editor_session_memory"));
+    Result->SetArrayField(TEXT("plans"), Items);
+    Result->SetBoolField(TEXT("truncated"), PendingCount > Items.Num());
+    Result->SetNumberField(TEXT("pending_count"), PendingCount);
+    return Jev::Success(Result);
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::ApplyTracked(UWorld* World, const TSharedPtr<FJsonObject>& Params)
+{
+    if (bApplyingPlan) return Error(TEXT("editor_busy"), TEXT("A Jev plan is already applying. Inspect its outcome before another edit."));
+    TGuardValue<bool> ApplyGuard(bApplyingPlan, true);
+    FString PlanId;
+    const bool bTracked = Jev::OnlyFields(Params, {TEXT("plan_id")}) && Jev::ReadString(Params, TEXT("plan_id"), PlanId) &&
+        PlanId.Len() <= 64 && Plans.Contains(PlanId) && PlanRecords.Contains(PlanId);
+    if (bTracked)
+    {
+        PlanRecords[PlanId].Status = TEXT("applying");
+        PlanRecords[PlanId].UpdatedAt = Clock();
+    }
+    const auto Response = Apply(World, Params);
+    if (FPlanRecord* RecordPtr = bTracked ? PlanRecords.Find(PlanId) : nullptr)
+    {
+        FPlanRecord& Record = *RecordPtr;
+        Record.UpdatedAt = Clock();
+        if (Response->GetBoolField(TEXT("ok")))
+        {
+            const auto Result = Response->GetObjectField(TEXT("result"));
+            Record.Status = TEXT("applied");
+            Record.RevisionAfter = Result->GetStringField(TEXT("revision"));
+            for (const auto& Actor : Result->GetArrayField(TEXT("actors"))) Record.ActorPaths.Add(Actor->AsObject()->GetStringField(TEXT("path")));
+        }
+        else
+        {
+            Record.OutcomeCode = Response->GetObjectField(TEXT("error"))->GetStringField(TEXT("code"));
+            Record.Status = Record.OutcomeCode == TEXT("rollback_failed") ? TEXT("unknown") :
+                Record.OutcomeCode == TEXT("apply_failed") ? TEXT("rolled_back") :
+                Record.OutcomeCode == TEXT("expired_plan") ? TEXT("expired") : TEXT("rejected");
+        }
+    }
+    return Response;
 }

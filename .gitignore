@@ -56,3 +56,6 @@ Desktop.ini
 /.codex/
 # Automatically generated editor input defaults in the test harness
 /examples/JevSandbox/Config/DefaultInput.ini
+**/.JevEditorBackups/
+**/.JevEditor.install.lock
+**/.jev-install.json

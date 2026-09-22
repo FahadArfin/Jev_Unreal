@@ -55,7 +55,7 @@ async def main():
                 "set_metadata",
             } <= set(status["capabilities"]), status
             tools = (await session.list_tools()).tools
-            assert len(tools) == 27
+            assert len(tools) == 39
             operations = [
                 {
                     "op": "spawn_primitive",
@@ -96,7 +96,7 @@ async def main():
                 after_preview = await call("unreal_actor_details", {"actor_paths": paths})
                 assert before == after_preview, "Spatial preview changed inspected actors"
                 plan_id = proposal["preview"]["plan_id"]
-                assert (await call("unreal_plan", {"plan_id": plan_id}))["status"] == "previewed"
+                assert (await call("unreal_plan", {"plan_id": plan_id}))["status"] == "pending"
                 result = await call("unreal_apply", {"plan_id": plan_id})
                 assert result["verification"]["status"] == "passed", result
                 verified = await call(
@@ -275,7 +275,7 @@ async def main():
                 "saved_to_disk": False,
                 "cloud_used": False,
             }
-            (ROOT / "artifacts/verified-workflows-v0.3.json").write_text(
+            (ROOT / "artifacts/verified-workflows-v0.4.json").write_text(
                 json.dumps(report, indent=2) + "\n", encoding="utf-8"
             )
             print(json.dumps(report, indent=2))

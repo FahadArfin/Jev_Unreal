@@ -30,11 +30,15 @@ Keep an independent backup or version-controlled copy before allowing editor
 mutations. Structured model output still requires deterministic validation; model
 responses are untrusted input. Only explicitly supported operations should run.
 
-The 0.3 alpha exposes 27 MCP tools. Existing-actor edits are restricted to supported
+The 0.4 alpha exposes 39 MCP tools. Existing-actor edits are restricted to supported
 exact native StaticMeshActors without attachment or editability blockers. Transform,
 existing material-slot assignment, and actor label/folder operations pass through
 the same native preview/apply boundary. The bridge provides no arbitrary Python,
-shell, console, C++, Blueprint execution or generic property setter. Capability
+shell, console, C++ or Blueprint evaluation, or generic property setter.
+Separately configured named native validators and placed functional tests execute
+trusted project callbacks; they are disabled by default and are not a sandbox.
+A maintainer must approve exact rules/test aliases. Cancellation/time budgets are
+cooperative between callbacks, and callbacks can have broader side effects. Capability
 advertisements indicate protocol support; they grant no permission and do not
 replace project binding, actor validation or user authorization.
 
@@ -49,8 +53,8 @@ An apply timeout, cancellation or incomplete rollback can leave the outcome
 unknown. Do not retry an ambiguous plan. Read `unreal_plan`, inspect current actors
 and use fresh verification/diff before making a new plan. Successful native apply
 and verification are separate observations; a failed check does not undo an edit.
-Only Unreal's editor transaction provides Undo, and no workflow automatically
-saves packages.
+Only Unreal's editor transaction provides Undo. The adapter does not request
+package saves; approved project validator/test callbacks can save or modify state.
 
 Plan records and selected-actor snapshots are held in MCP process memory, returned
 only when requested, and bounded by count, serialized bytes and a 15-minute
@@ -60,6 +64,13 @@ is additional. Records can be evicted and disappear on restart. Receipt writes a
 best effort; neither store is a durable audit log, crash recovery service, backup,
 or replay queue. The separate local attempted-plan guard is also bounded; native
 single-use plans remain the execution boundary.
+
+Native plan receipts retain up to 64 records in editor memory for 15 minutes and
+can survive an MCP reconnect. An in-flight receipt cannot be evicted by a nested
+editor callback. Editor restart or crash loses these records; no scene is restored.
+The panel and MCP read the same historical native receipt, which is never a fresh
+verification of the scene. If native lookup fails, the MCP fallback identifies
+its `native_lookup_error` and remains only that client's earlier observation.
 
 Catalog discovery is restricted to explicitly configured literal loopback HTTP(S)
 endpoints, with redirects, compression and external `tools/call` rejected. Exact

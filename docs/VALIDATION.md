@@ -1,5 +1,72 @@
 # Validation evidence
 
+## Current 0.4 roadmap milestone
+
+Release **0.4.0a1**, validated on **2026-09-22 UTC**. The nine implemented
+foundations in the [roadmap](ROADMAP.md) are bounded alpha features, not completion
+of every roadmap item or certification for broad production use.
+
+| Layer | Observed result | Scope |
+| --- | --- | --- |
+| Python | **1,158 passed**, Python 3.13.2, 50.52 seconds | Contract, protocol, lifecycle, installation, profiles, compatibility and benchmark regressions; primarily synthetic fixtures |
+| Dependencies/lint/package | Locked extras sync, Ruff and `uv build` passed | Python wheel/source distributions; no PyPI publication |
+| Licensed native builds | Both isolated projects compiled and linked on UE **5.8.2** | Windows 11; compiler 14.51 preference/deprecation warnings remain |
+| Native automation | **21/21 suites passed**, 19 clean and two warning-bearing suites | Three warning entries, zero failed/skipped/incomplete suites; includes actual isolated PIE functional fixtures |
+| Rendered panel | **1/1 `Jev.Rendered.ReviewPanel` passed**, zero warnings | Real Slate tab, ten discoverable controls, disabled initial apply and native panel PNG; not representative accessibility/usability acceptance |
+| Real MCP/editor | **39 tools**, baseline, measured-edit and roadmap/reconnect smoke passed | Native authenticated sandbox operations, four camera captures and fresh verification |
+| Two editor connections | Both 39-tool MCP sessions passed isolation checks | Separate projects/tokens/ports; crossed plans rejected, own plans applied once, mismatched project refused |
+| Native validation over MCP | Localization rule returned `valid`; material rule returned `not_validated` for the engine cube | Two explicitly approved native rules; no claim about arbitrary project validators |
+| Installer lifecycle | Reviewed install, upgrade, native build, live connection and source removal passed | Disposable project on this configured machine; generated files and backups retained, original plugin entry restored |
+| Saved Windows launcher | Fresh stdio initialization discovered 39 tools and verified bridge 0.4/project identity | Existing encrypted-key launcher; zero provider requests |
+| Live routing benchmark | Jev **8/8**, keyword **7/8**, eight held-out-partition public synthetic cases | One tiny public dataset/run; no direct-agent or completed-workflow comparison |
+
+The native report is timestamped **`2026.09.22-03.35.34`**; the rendered report is
+**`2026.09.22-03.31.06`**. [Detailed native evidence](UNREAL_VALIDATION.md) separates
+fixture automation, live transport and visual acceptance. The [review panel image](images/review-panel-v0.4.png)
+was viewed: all controls fit and their labels are legible. The new
+[isometric](images/verified-workflow-v0.4-isometric.png) and
+[top](images/verified-workflow-v0.4-top.png) viewport images show the three measured
+test actors. This does not establish finished art, gameplay or broad panel usability.
+
+The measured workflow re-exercised exact actor identities, snapshots/diffs,
+ground/alignment/distribution/grid edits, material and metadata changes, stale-state
+and one-shot rejection, deliberate verification failures and four native camera
+captures. The reconnect smoke restarted the Python MCP process, recovered an
+`applied` receipt from the still-running editor and independently verified its
+actor's label. Neither test used a model or saved a map.
+
+Two simultaneous editors used ports 9845/9846 and distinct profiles. Deliberately
+conflicting legacy connection variables could not override the selected profile.
+Cross-editor plans changed neither scene; the correct plans each added exactly one
+unsaved cube and passed fresh label/instance checks. Native validator receipts
+distinguished a valid result from an inapplicable rule; the inspected cube package
+stayed clean. Validator side effects in general remain outside a sandbox guarantee.
+
+Review also found and corrected a preflight race: validation start now carries the
+authenticated project, session, world and revision to the native queue boundary.
+A changed editor rejects the request before callbacks run. Native and synthetic
+regressions cover mismatched identities and malformed state. Doctor now reports
+the complete 0.4 capability set, rather than declaring an older 0.3 plugin ready.
+
+The [sanitized routing report](benchmarks/2026-09-22-public-synthetic-v1.json)
+records the frozen dataset and answer-key hashes. Jev's eight requests averaged
+**234.95 ms** and reported **USD 0.00026061** total cost. This requested
+`typesafe/jev-1.13`; the returned resolved model identifier was not retained.
+The keyword baseline averaged 0.10 ms. These figures demonstrate the harness and
+current provider wiring, not game-development savings or independent accuracy.
+See [benchmark methods and limits](BENCHMARKS.md).
+
+Raw reports remain ignored locally: `artifacts/roadmap-pytest-release.xml`,
+`artifacts/unreal-automation/`, `artifacts/unreal-rendered/`,
+`artifacts/editor-smoke-v0.4.json`, `artifacts/verified-workflows-v0.4.json`,
+`artifacts/roadmap-smoke-v0.4.json`, `artifacts/connections-smoke-v0.4.json`,
+`artifacts/install-acceptance/summary.json` and `artifacts/saved-launcher-v0.4.json`.
+Published evidence contains no credentials, private game data or engine binaries.
+An already-running Codex MCP connection may require reconnect/restart to discover
+the expanded tool catalog; fresh launcher acceptance does not refresh that client.
+
+## Historical 0.3 acceptance
+
 Release **0.3.0a1**, validated on **2026-09-22 UTC** (2026-09-21 US Eastern). This is a tested alpha, not a production-readiness certificate. Synthetic tests, live provider calls, engine tests and visual review establish different things.
 
 ## Inspect, edit and verify acceptance

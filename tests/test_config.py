@@ -19,6 +19,9 @@ def clear_configuration_environment(monkeypatch):
         "JEV_EXPECTED_PROJECT",
         "JEV_MAX_REQUESTS",
         "JEV_CATALOG_FILE",
+        "JEV_PROFILES_FILE",
+        "JEV_PROFILE",
+        "JEV_BRIDGE_PORT",
     ):
         monkeypatch.delenv(name, raising=False)
 

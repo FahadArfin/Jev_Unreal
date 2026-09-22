@@ -18,6 +18,7 @@ public:
     static FString BoundedResponseBody(const TSharedRef<FJsonObject>& Response);
 #if WITH_DEV_AUTOMATION_TESTS
     void FailApplyAfterOperationsForTesting(int32 Count) { FailureAfterOperationsForTesting = Count; }
+    void OnApplyConsumedForTesting(TFunction<void()> Callback) { ApplyConsumedCallbackForTesting = MoveTemp(Callback); }
 #endif
 
 private:
@@ -49,12 +50,27 @@ private:
         double ExpiresAt = 0;
         TArray<FOperation> Operations;
     };
+    struct FPlanRecord
+    {
+        TSharedPtr<FJsonObject> Review;
+        FString Status = TEXT("pending");
+        FString OutcomeCode;
+        FString RevisionAfter;
+        TArray<FString> ActorPaths;
+        double CreatedAt = 0;
+        double UpdatedAt = 0;
+        double ExpiresAt = 0;
+    };
 
     FString SessionId;
     TFunction<double()> Clock;
     TMap<FString, FPlan> Plans;
+    TMap<FString, FPlanRecord> PlanRecords;
+    TArray<FString> PlanRecordOrder;
+    bool bApplyingPlan = false;
 #if WITH_DEV_AUTOMATION_TESTS
     int32 FailureAfterOperationsForTesting = INDEX_NONE;
+    TFunction<void()> ApplyConsumedCallbackForTesting;
 #endif
     FString Revision(UWorld* World) const;
     TSharedRef<FJsonObject> ActorSnapshot(AActor* Actor) const;
@@ -71,5 +87,10 @@ private:
     TSharedPtr<FJsonObject> ResolveMaterialAsset(const FString& Path, UMaterialInterface*& OutMaterial) const;
     TSharedRef<FJsonObject> Preview(UWorld* World, const TSharedPtr<FJsonObject>& Params);
     TSharedRef<FJsonObject> Apply(UWorld* World, const TSharedPtr<FJsonObject>& Params);
+    TSharedRef<FJsonObject> ApplyTracked(UWorld* World, const TSharedPtr<FJsonObject>& Params);
+    TSharedRef<FJsonObject> PlanStatus(const TSharedPtr<FJsonObject>& Params);
+    TSharedRef<FJsonObject> PendingPlans(const TSharedPtr<FJsonObject>& Params);
+    TSharedRef<FJsonObject> PlanRecordSnapshot(const FString& PlanId, const FPlanRecord& Record) const;
+    void PrunePlanRecords();
     AActor* FindActor(UWorld* World, const FString& Path) const;
 };

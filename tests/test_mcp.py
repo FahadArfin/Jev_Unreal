@@ -16,6 +16,8 @@ async def test_stdio_protocol_and_offline_failure():
             "JEV_BRIDGE_TOKEN": "",
             "JEV_BRIDGE_TOKEN_FILE": "",
             "JEV_PROVIDER": "openrouter",
+            "JEV_PROFILE": "",
+            "JEV_PROFILES_FILE": "",
         },
     )
     async with stdio_client(params) as (read, write):
@@ -52,6 +54,18 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_verify",
                 "unreal_spatial_preview",
                 "unreal_plan",
+                "unreal_pending_plans",
+                "unreal_blueprint_inspect",
+                "unreal_asset_dependencies",
+                "unreal_asset_import_info",
+                "unreal_validation_rules",
+                "unreal_validation_start",
+                "unreal_validation_job",
+                "unreal_validation_cancel",
+                "unreal_functional_tests",
+                "unreal_functional_start",
+                "unreal_functional_job",
+                "unreal_functional_cancel",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
@@ -147,7 +161,7 @@ async def test_stdio_protocol_and_offline_failure():
             )
             assert spatial.structuredContent["error"]["code"] == "missing_bridge_token"
             record = await session.call_tool("unreal_plan", {"plan_id": "missing"})
-            assert record.structuredContent["error"]["code"] == "plan_record_missing"
+            assert record.structuredContent["error"]["code"] == "missing_bridge_token"
             checks_resource = await session.read_resource("jev://checks")
             assert "bottom_z" in checks_resource.contents[0].text
             for name in (

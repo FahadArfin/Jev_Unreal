@@ -18,6 +18,7 @@ from .decision import DecisionClient
 from .diagnostics import group_diagnostics
 from .errors import JevError
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
+from .project_tools import register_project_tools
 from .selection import AssetCandidate, AssetFilters, rank_candidates
 from .spatial import SpatialRecipe, preview_spatial
 from .verification import Check, SceneSnapshots, SessionIdentity, verify_fresh
@@ -312,19 +313,26 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         return await safely(preview_spatial(bridge, previews, recipe))
 
     @server.tool(annotations=read)
-    def unreal_plan(
+    async def unreal_plan(
         plan_id: Annotated[str, Field(min_length=1, max_length=64)],
     ) -> dict[str, Any]:
-        """Review this process's retained plan and last observed outcome without applying it.
+        """Review native plan outcome, falling back to this MCP process's retained observation.
 
         At most 64 records/2 MiB for 15 minutes. Transport loss/cancellation stays unknown;
         a successful record can become outdated after later editor changes. Use unreal_verify
-        or unreal_diff for fresh evidence. No Undo, replay, save or recovery after restart occurs.
+        or unreal_diff for fresh evidence. Native session receipts survive an MCP reconnect,
+        but not an editor restart. No Undo, replay or save occurs. A transport failure while
+        checking a native receipt remains explicit; a local record is not a native confirmation.
         """
         try:
-            return {"ok": True, "result": previews.journal.get(plan_id)}
+            native = await bridge.call("plan_status", {"plan_id": plan_id})
+            return {"ok": True, "result": native}
         except JevError as exc:
-            return exc.as_dict()
+            try:
+                record = previews.journal.get(plan_id)
+                return {"ok": True, "result": {**record, "native_lookup_error": exc.code}}
+            except JevError:
+                return exc.as_dict()
 
     @server.tool(annotations=read)
     async def unreal_asset_details(
@@ -560,4 +568,5 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "classifier confidence does not establish either permission or success."
         )
 
+    register_project_tools(server, bridge)
     return server

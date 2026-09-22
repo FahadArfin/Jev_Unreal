@@ -1,0 +1,237 @@
+{
+  "$defs": {
+    "RoutingObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "input_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Input Sha256",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "recommend",
+            "defer",
+            "error"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "selected": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.:-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selected"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "missing_api_key",
+                "request_limit",
+                "circuit_open",
+                "rate_limited",
+                "provider_error",
+                "provider_unavailable",
+                "invalid_response",
+                "invalid_request",
+                "request_too_large",
+                "benchmark_contract",
+                "agent_error"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "maximum": 604800000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "cost_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "provider_reported",
+                "human_reported",
+                "local_no_provider"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Source"
+        },
+        "cached": {
+          "default": false,
+          "title": "Cached",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "case_id",
+        "input_sha256",
+        "outcome"
+      ],
+      "title": "RoutingObservation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "dataset_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Dataset Sha256",
+      "type": "string"
+    },
+    "catalog_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Catalog Sha256",
+      "type": "string"
+    },
+    "split": {
+      "enum": [
+        "train",
+        "dev",
+        "heldout"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "method": {
+      "enum": [
+        "keyword",
+        "jev",
+        "direct_agent"
+      ],
+      "title": "Method",
+      "type": "string"
+    },
+    "implementation": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]+$",
+      "title": "Implementation",
+      "type": "string"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/RoutingObservation"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Observations",
+      "type": "array"
+    },
+    "human_reviewed": {
+      "default": false,
+      "title": "Human Reviewed",
+      "type": "boolean"
+    },
+    "reviewer_id": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reviewer Id"
+    },
+    "evidence_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Evidence Sha256"
+    }
+  },
+  "required": [
+    "dataset_sha256",
+    "catalog_sha256",
+    "split",
+    "method",
+    "implementation",
+    "observations"
+  ],
+  "title": "RoutingRun",
+  "type": "object"
+}

@@ -25,6 +25,18 @@ CATALOG = {
     "unreal_verify": "Check fresh actor measurements against explicit expected results.",
     "unreal_spatial_preview": "Preview actor alignment, distribution, grid snapping or grounding.",
     "unreal_plan": "Review a tracked plan and its last known apply outcome; never retries it.",
+    "unreal_pending_plans": "List pending native plans shared with the Unreal review panel.",
+    "unreal_blueprint_inspect": "Inspect an open Blueprint's graphs, pins and stored errors.",
+    "unreal_asset_dependencies": "Inspect direct asset references or referencers in the registry.",
+    "unreal_asset_import_info": "Read recorded import provenance without opening source files.",
+    "unreal_validation_rules": "Discover explicitly approved native project asset validators.",
+    "unreal_validation_start": "Run selected approved project validators on exact selected assets.",
+    "unreal_validation_job": "Read progress and native results of a selected validation job.",
+    "unreal_validation_cancel": "Cancel queued work between project validator callbacks.",
+    "unreal_functional_tests": "List named project-approved gameplay tests and PIE eligibility.",
+    "unreal_functional_start": "Run one approved placed gameplay test in the existing PIE session.",
+    "unreal_functional_job": "Read the selected functional test's native result and cleanup.",
+    "unreal_functional_cancel": "Cancel this bridge's running test without stopping PIE.",
 }
 
 

@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
-  "Version": 3,
-  "VersionName": "0.3.0",
+  "Version": 4,
+  "VersionName": "0.4.0",
   "FriendlyName": "Jev Editor Bridge",
   "Description": "Authenticated local editor inspection and previewed, undoable scene operations for Jev Unreal.",
   "Category": "Editor",
@@ -9,5 +9,6 @@
   "CanContainContent": false,
   "IsBetaVersion": true,
   "EnabledByDefault": false,
-  "Modules": [{ "Name": "JevEditor", "Type": "Editor", "LoadingPhase": "PostEngineInit" }]
+  "Modules": [{ "Name": "JevEditor", "Type": "Editor", "LoadingPhase": "PostEngineInit" }],
+  "Plugins": [{ "Name": "DataValidation", "Enabled": true }]
 }
