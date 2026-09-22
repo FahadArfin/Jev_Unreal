@@ -1,8 +1,44 @@
 # Unreal validation
 
-Jev Editor **0.5.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
+Jev Editor **0.6.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
 
-## Current 0.5 native automation
+## Current 0.6 review workflow
+
+The final licensed incremental build passed in **6.56 seconds**. The native
+automation report **`2026.09.22-04.57.09`** records **27 passed**, 0 failed, 0 not
+run and 0 in progress: 25 clean suites and two with three existing fixture warning
+entries. All previous 25 suites ran again alongside:
+
+| Suite | Coverage |
+| --- | --- |
+| `Jev.Editor.ReviewPresentation` | Real receipts for all seven operations and both mesh policies; before/after identity, exact values, null/default distinctions and technical records; rejection of incomplete, contradictory, unsupported, deeply nested and oversized records. |
+| `Jev.Editor.ReviewRecovery` | Native codes and actionable recovery, including unknown outcomes, failed rollback, stale/expired plans and input/selection errors. |
+
+The separate rendered report **`2026.09.22-04.57.45`** records **2/2 passed**, zero
+warnings or incomplete tests. `Jev.Rendered.ReviewPanel` checks native controls and
+names, then scrolls Apply into view to verify its arranged geometry and disabled
+initial state. `Jev.Rendered.ReviewWorkflow` routes real Slate keyboard events,
+enters and applies a 25 cm move once, verifies preview/read-only behavior,
+Tab/Shift+Tab traversal, selected-text/focus preservation, expiry, explicit errors,
+and mesh technical disclosure. It also proves that receipt-retention expiry does
+not erase the last action result during passive refresh.
+
+The workflow's private test window and actor are cleaned up. Its C++ widget factory
+exists only in development automation builds and exposes no network operation.
+The production panel continues to call the existing native preview/apply path.
+
+The final live editor authenticated as bridge **0.6.0** in the exact repository
+sandbox. Baseline editing/capture and mesh replacement/copy smokes passed through
+the official MCP stdio SDK with **40 tools**, including six fresh mesh checks and
+stale/replay rejection. The saved encrypted-key launcher independently connected
+and discovered the catalog. Zero provider calls and no save requests were made.
+
+Five [published native captures](REVIEW_PANEL.md) were viewed. Automated events and
+readable images do not establish physical-keyboard, screen-reader, translated
+layout or representative artist acceptance. [Full evidence](VALIDATION.md) records
+the initial fixture failure, its correction, and remaining limits.
+
+## Historical 0.5 native automation
 
 The licensed build compiled and linked successfully. Visual Studio 14.51 still
 emits Unreal's compiler-preference warning and engine-header deprecation warnings.
@@ -28,7 +64,7 @@ collision-profile assignment had cleared mesh inheritance, and an inactive physi
 cache differed from class defaults after component registration. Unsupported active
 overrides still refuse copying.
 
-## Current 0.5 live acceptance
+## Historical 0.5 live acceptance
 
 The official stdio client discovered **40 tools** against bridge **0.5.0** in the
 exact repository sandbox. The new mesh smoke passed both replacement policies,

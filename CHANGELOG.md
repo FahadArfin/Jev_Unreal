@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0a1
+
+- Reworked native plan review into readable Before/After fields for all seven
+  supported operation types, with exact transform values, units, source identities,
+  material policy explanations and separately expandable mesh technical records.
+- Made inspection, review, technical detail and outcomes selectable, read-only and
+  keyboard-focusable. Explicit actions focus their relevant result; background
+  countdown/status updates preserve text selection and focus.
+- Added recovery guidance and separate refresh diagnostics. A failed passive read
+  disables Apply without replacing the last action outcome. Expired and consumed
+  plans remain disabled, with no global Apply shortcut or automatic retry.
+- Added localization-ready interface labels and native presentation, recovery and
+  rendered keyboard workflow fixtures. These do not establish screen-reader,
+  translated-language or representative artist acceptance.
+- The MCP catalog remains at 40 tools; bridge operations, execution permissions
+  and provider behavior are unchanged. See [review workflow](docs/REVIEW_PANEL.md)
+  and [validation evidence](docs/VALIDATION.md) for scope and completed checks.
+
 ## 0.5.0a1
 
 - Added `unreal_mesh_preview`, increasing the MCP catalog to 40 tools. Freshly

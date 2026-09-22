@@ -6,6 +6,7 @@
 class FJevEditorBridge;
 class SDockTab;
 class FSpawnTabArgs;
+class SWidget;
 struct FJevReviewAccess;
 
 /** Local human controls over the same bounded preview/apply path as MCP. */
@@ -23,6 +24,11 @@ public:
     static TSharedRef<FJsonObject> PreviewSelection(FJevEditorBridge& Bridge, const FVector* Translation,
         const FString* Label, const FString* Folder);
     static FString DescribeReview(const TSharedPtr<FJsonObject>& Record);
+
+#if WITH_DEV_AUTOMATION_TESTS
+    // In-process fixture only; never registered as an authenticated bridge action.
+    static TSharedRef<SWidget> CreateForTesting(FJevEditorBridge& Bridge);
+#endif
 
 private:
     void RegisterMenus();

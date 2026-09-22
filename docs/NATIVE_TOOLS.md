@@ -1,4 +1,4 @@
-# Native editor inspection and edits (bridge 0.5.0)
+# Native editor inspection and edits (bridge 0.6.0)
 
 These actions use the existing authenticated loopback bridge. They execute on the
 editor game thread and do not call a model provider. Requests remain JSON objects

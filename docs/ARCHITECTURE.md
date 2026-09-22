@@ -1,6 +1,6 @@
 # Architecture
 
-Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.5 alpha exposes 40 MCP tools. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
+Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.6 alpha exposes 40 MCP tools. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,7 @@ The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{acti
 
 Python reads authenticated status before every operation and compares its project with the configured binding. Preview, apply, camera framing and project-job start/cancel require an explicit project. That binding comes from `JEV_EXPECTED_PROJECT` or a selected [connection profile](CONNECTION_PROFILES.md). A profile selects the project, endpoint and token file together at MCP startup; it does not inherit a legacy token or retarget a running process. Each selected editor uses its own MCP process.
 
-Status advertises bridge version `0.5.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
+Status advertises bridge version `0.6.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, mesh replacement/copying, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
 
 For `validation_start`, Python also puts the authenticated status's exact project,
 session, world and revision into the native request. Native code checks these before
@@ -72,11 +72,14 @@ gap between measuring and creating a plan. Applying the plan performs its own
 stale-state checks afterward.
 
 Supported existing-actor mutations are transforms, assigning an existing material
-to an existing slot, and changing actor labels/folders. They require exact native
-StaticMeshActors without parent, child or child-actor attachments and without
-native edit blockers. A batch contains at most 20 operations and at most one
-operation per existing actor. No generic property writer, script executor or
-Blueprint graph editor is exposed.
+to an existing slot, changing actor labels/folders, and replacing a mesh under an
+explicit material policy. Controlled mesh copies create new actors from bounded
+source state. These operations require exact native StaticMeshActors without
+parent, child or child-actor attachments and without native edit blockers; copying
+has additional component/property and current-level restrictions documented in
+[mesh workflows](MESH_WORKFLOWS.md). A batch contains at most 20 operations and at
+most one operation per existing actor. No generic property writer, script executor
+or Blueprint graph editor is exposed.
 
 `PreviewTracker` retains normalized expectations and compares the native apply
 readback against requested transforms, identities and relevant metadata/material
@@ -99,8 +102,29 @@ acceptance. [Spatial contracts](SPATIAL_WORKFLOWS.md) and
 **Window → Jev Review** uses the same native inspection, previews and apply path
 as MCP. A human can inspect selected actors, review a translation or label/folder
 change, and apply the reviewed one-shot plan. MCP-created pending plans are also
-visible. Its two-second refresh only reads; it never approves, applies, retries or
-saves automatically. [Panel behavior](REVIEW_PANEL.md) describes its current scope.
+visible. The 0.6 presentation changes neither the authenticated bridge contract
+nor the 40-tool MCP catalog. It adds no execution path or permissions.
+
+A deterministic presentation layer formats the native record into operation-order
+**Field / Before / After** content. It does not resolve editor objects, invoke a
+provider, authorize a plan or execute an edit. All supported operations have
+readable summaries; complete bounded mesh detail remains in a collapsed technical
+section. This display is limited to reported native state, not a complete asset or
+component serialization.
+
+The reviewed plan body is separate from mutable status and expiry text. Read-only
+inspection, review, technical and result widgets support text selection and
+keyboard focus. An explicit successful preview/review focuses its content; an
+explicit action error focuses recovery guidance with the native code. The two-second refresh only
+reads and preserves focus and text selection when only status/countdown changes.
+It never approves, applies, retries or saves automatically. Tab/Shift+Tab use Slate
+navigation; Apply requires deliberate button activation and has no global shortcut.
+Error guidance does not infer an unchanged scene from a failed or uncertain call.
+
+Fixed labels use localization-ready Unreal text, without claiming translations
+or screen-reader, accessibility or representative-user acceptance. Rendered and
+automation evidence is recorded separately in [validation](VALIDATION.md).
+[Panel behavior](REVIEW_PANEL.md) describes the human workflow and recovery steps.
 
 The Python process retains these bounded stores:
 

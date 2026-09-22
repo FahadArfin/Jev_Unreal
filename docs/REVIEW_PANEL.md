@@ -5,31 +5,98 @@ The panel uses the same native preview, plan receipt and apply implementation as
 MCP. It works without a Jev/OpenRouter key. A configured bridge token is required
 to enable controls; a disabled panel explains the startup problem.
 
-![Jev Review panel captured by Unreal Slate](images/review-panel-v0.4.png)
+The 0.6 alpha separates readable changes, technical detail and the latest outcome.
+The bridge protocol and MCP catalog remain unchanged at 40 tools.
+
+![Jev Review 0.6 initial inspection and preparation view](images/review-panel-v0.6.png)
+
+The panel scrolls when its content exceeds the available editor-tab height.
+The [action-area capture](images/review-panel-v0.6-actions.png) shows the disabled
+Apply control after scrolling. [Selected transform review](images/review-panel-v0.6-transform.png),
+[mesh review](images/review-panel-v0.6-mesh.png) and
+[selection-error guidance](images/review-panel-v0.6-error.png) were captured directly
+from the native text widgets. See [validation evidence](VALIDATION.md) for the
+separate rendered keyboard tests and acceptance limits.
 
 1. Select native static mesh actors in the World Outliner and choose **Inspect
-   selection**. Read their measured bounds, transforms and edit blockers.
+   selected actors**. Read their measured bounds, transforms and edit blockers.
 2. Enter a translation in centimeters, or enable label/folder changes. Preview
    creates a plan without changing the scene. Blueprint actors and attachments
    remain outside the supported editing scope.
-3. Review the before/after values. An MCP-created pending plan also appears in the
-   panel; select its review button to see the same native operations and identity.
-4. Choose **Apply reviewed plan** once. Changes use an Unreal Undo transaction and
-   remain unsaved. Changed scenes, expired plans and replaced targets are rejected.
+3. Read the **Field / Before / After** changes. An MCP-created pending plan also
+   appears in the panel; select its review button to read the same native plan,
+   project and world. Expand technical detail when reviewing material overrides,
+   collision settings or mesh metadata.
+4. Choose **Apply reviewed plan once** deliberately. Changes use an Unreal Undo
+   transaction; the bridge requests no save. Changed scenes, expired plans and
+   replaced targets are rejected.
 5. Inspect the applied actors again. For explicit pass/fail evidence, run MCP
    `unreal_verify` with requirements derived from the task and capture the result.
 
-The panel refreshes pending plans every two seconds while open. It never approves
-or applies automatically, retries an interrupted apply, saves a map, or sends
-scene information to a model. Controls use standard Slate buttons, text fields
-and numeric entries; broad keyboard/accessibility and artist usability acceptance
-still require representative user testing.
+## Reading and keyboard navigation
 
-MCP-created mesh plans also appear here. Replacement review names the old/new
-mesh and material policy; copy review names its source, new label and transform.
-Scrollable technical detail retains every reviewed material slot,
-override, collision response and mesh setting. Mesh recipes are currently created
-through MCP; the panel's own creation controls remain translation and metadata.
+Inspection, plan review, technical detail and result text are read-only,
+selectable and keyboard-focusable. Use Tab and Shift+Tab to move between enabled
+controls, and select/copy text without changing the plan. A successful explicit
+preview or pending-plan review focuses the review content. An explicit action error focuses the
+result so its native error code and suggested next step are available together.
+
+The panel refreshes pending plans every two seconds while open. Status and expiry
+countdown update separately from the reviewed plan body. A refresh that only
+updates status/countdown preserves review text selection and keyboard focus; it
+does not bring the review into focus again. Plan changes, expiry or unavailable
+receipts can disable Apply. Native checks still decide whether an attempted apply
+is valid, regardless of the displayed countdown.
+
+A failed passive lookup appears in the separate plan-status area and disables
+Apply. It preserves the last explicit action result and any selection in that
+text, including when a receipt ages out of editor memory. An explicit failed
+action or refresh can replace the result with its own recovery guidance.
+
+There is no global Apply shortcut. Reading the review, pressing Enter in an edit
+field, or refreshing the list does not apply a plan. Activate the focused **Apply
+reviewed plan once** button when ready. The panel never approves automatically,
+retries an interrupted apply, saves a map, or sends scene information to a model.
+
+Fixed interface labels use Unreal localization-ready text. Translations and
+localized-layout acceptance are not supplied. Keyboard-focused automation and
+rendered captures, where recorded in [validation](VALIDATION.md), do not establish
+screen-reader support, broad accessibility or representative artist usability;
+those acceptance studies remain open.
+
+Epic's [screen-reader guidance](https://dev.epicgames.com/documentation/unreal-engine/supporting-screen-readers-in-unreal-engine)
+describes engine accessibility configuration. Named Slate controls alone do not
+prove that a particular screen reader works with this panel.
+
+## What the review contains
+
+Operations retain their original order. Each operation names its target and
+shows relevant **Field / Before / After** values, including units for transforms,
+the root folder when a folder is empty, and explicit absence for a newly created
+actor. The review supports primitive and mesh spawning, transforms, material
+assignment, labels/folders, mesh replacement and controlled mesh copies.
+
+Replacement review names the old/new mesh and material policy; copy review names
+its source, new label and transform. The collapsed technical-detail section
+retains the complete bounded native mesh review, including material slots,
+overrides, collision responses and mesh settings. Expanding it changes only the
+display. This is the state reported by the bridge, not every Unreal property or
+a hash of every asset byte. [Mesh workflow limits](MESH_WORKFLOWS.md) still apply.
+Mesh recipes are created through MCP; the panel's own creation controls remain
+translation and metadata.
+
+Review formatting is local and deterministic. It does not ask a model to rewrite
+the plan or decide whether it is safe. Readable descriptions do not grant
+permissions, add editable properties, or bypass stale-plan and one-shot checks.
+
+## Errors and uncertain outcomes
+
+The result retains the native error code and provides recovery guidance. Resolve
+selection or edit blockers before making another preview. If a plan is stale or
+expired, inspect the actors again and create a fresh plan. If application or
+receipt lookup has an uncertain outcome, inspect the native receipt and current
+actors before deciding what to do next. An error message alone does not prove
+that no scene change occurred. The panel never retries an apply for you.
 
 ## Outcomes after reconnecting MCP
 
