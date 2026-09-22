@@ -95,6 +95,9 @@ class UnrealBridge:
                     "response_too_large",
                     "actor_bounds_unavailable",
                     "viewport_locked",
+                    "editor_busy",
+                    "rollback_failed",
+                    "material_slot_invalid",
                 }
                 if code not in known:
                     code = "bridge_error"
@@ -121,6 +124,7 @@ class UnrealBridge:
             "validate",
             "capture",
             "frame",
+            "actor_details",
         }:
             raise JevError("unknown_action", "Operation is not part of the editor allowlist.")
         async with self._lock:
@@ -139,4 +143,29 @@ class UnrealBridge:
                 )
             if action == "status":
                 return status
+            required_capabilities = set()
+            if action == "actor_details":
+                required_capabilities.add("actor_details")
+            if action == "frame" and params and "view" in params:
+                required_capabilities.add("frame_views")
+            if action == "preview" and params:
+                if params.get("expected_state") is not None:
+                    required_capabilities.add("preview_expected_state")
+                for operation in params.get("operations", []):
+                    if isinstance(operation, dict) and operation.get("op") in {
+                        "set_material",
+                        "set_metadata",
+                    }:
+                        required_capabilities.add(operation["op"])
+            capabilities = status.get("capabilities", [])
+            if required_capabilities and (
+                not isinstance(capabilities, list)
+                or not required_capabilities
+                <= {item for item in capabilities if isinstance(item, str)}
+            ):
+                raise JevError(
+                    "capability_unavailable",
+                    "The connected editor lacks this capability. "
+                    "Rebuild/relaunch the matching JevEditor plugin.",
+                )
             return await self._call(action, params or {})

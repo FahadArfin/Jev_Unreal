@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-22T02:35:07.975885+00:00",
+  "mode": "live_provider",
+  "fixture_source": "Built-in public synthetic metadata in scripts/smoke_semantics.py",
+  "fixture_sha256": "e09edb76a83e90783c0e61446d2b073dbbbb2295b7f8cafa394e25c709c6e47c",
+  "helper_code_sha256": {
+    "rank_candidates": "6dcd22a53b328c81426f8c7da0d7919c86f32a2121e649bd761173e35d80bee8",
+    "group_diagnostics": "f43cca26c8176aa99dfaedf2536a13c733d64e396bffa225e7130430935cc917",
+    "route": "91c86b5f28102bd88a04f6356fdf19af983ee171229b138c333dd086faea92b1"
+  },
+  "smoke_script_sha256": "b2d24e69525d7367b8c29e148d19a31707c3261e14b5e496a6b64d4ba1cc7b66",
+  "limitation": "Public synthetic smoke fixtures, not held-out evaluation or a production benchmark. Label agreement describes only these authored cases. It does not measure game-development efficiency, visual quality, real project accuracy, or resistance to all prompt injections. No editor operation is executed.",
+  "automatic_retries": 0,
+  "cache_seconds": 0,
+  "planned_provider_requests": 3,
+  "validated_requests": [
+    {
+      "request_sha256": "d617e83637a2fd08aaa6b5985f5ed4dac113ee433f0d290e7dc80923c3daf74f",
+      "request_bytes": 1583,
+      "question_ids": [
+        "asset"
+      ],
+      "allowed_choices": {
+        "asset": [
+          "wood_door",
+          "metal_crate",
+          "__defer__"
+        ]
+      },
+      "case_id": "asset_selection"
+    },
+    {
+      "request_sha256": "bbf31133a71297085a0ade15a54bf435e44f3088a5f442517bde691c2c9251a9",
+      "request_bytes": 1774,
+      "question_ids": [
+        "g1",
+        "g2"
+      ],
+      "allowed_choices": {
+        "g1": [
+          "cpp_compile",
+          "blueprint_compile",
+          "asset_reference",
+          "shader",
+          "packaging",
+          "runtime",
+          "__defer__"
+        ],
+        "g2": [
+          "cpp_compile",
+          "blueprint_compile",
+          "asset_reference",
+          "shader",
+          "packaging",
+          "runtime",
+          "__defer__"
+        ]
+      },
+      "case_id": "diagnostic_batch"
+    },
+    {
+      "request_sha256": "c88377b3e12358d5c22bdfb7bc12b6f559b6b34b6d2ee7c9371cdf71e62c0df9",
+      "request_bytes": 2160,
+      "question_ids": [
+        "route"
+      ],
+      "allowed_choices": {
+        "route": [
+          "unreal_status",
+          "unreal_actors",
+          "unreal_assets",
+          "unreal_preview",
+          "jev_triage",
+          "unreal_context",
+          "unreal_asset_details",
+          "unreal_validate",
+          "unreal_capture",
+          "unreal_frame",
+          "unreal_layout_preview",
+          "unreal_actor_details",
+          "unreal_snapshot",
+          "unreal_diff",
+          "unreal_verify",
+          "unreal_spatial_preview",
+          "unreal_plan",
+          "__defer__"
+        ]
+      },
+      "case_id": "unsupported_route"
+    }
+  ],
+  "jev": {
+    "provider": "openrouter",
+    "requested_model": "typesafe/jev-1.13",
+    "models_returned": [
+      "typesafe/jev-1.13-20260917"
+    ],
+    "provider_requests": 3,
+    "max_provider_requests": 3,
+    "cache_hits": 0,
+    "cache_seconds": 0,
+    "automatic_retries": 0,
+    "valid_responses": 3,
+    "errors": 0,
+    "observed_questions": 4,
+    "planned_questions": 4,
+    "raw_label_matches": 4,
+    "gated_label_matches": 4,
+    "recommendations": 3,
+    "abstentions": 1,
+    "usage": {
+      "input_tokens": {
+        "reported_total": 2368,
+        "responses_reporting": 3,
+        "complete_for_all_requests": true
+      },
+      "output_tokens": {
+        "reported_total": 386,
+        "responses_reporting": 3,
+        "complete_for_all_requests": true
+      },
+      "cost": {
+        "reported_total": 9.945599999999999e-05,
+        "responses_reporting": 3,
+        "complete_for_all_requests": true
+      }
+    },
+    "usage_note": "Only provider-reported usage is summed. Missing usage is unknown, not zero; failed calls may incur charges without returning usage. Cost is reported USD.",
+    "cases": [
+      {
+        "id": "asset_selection",
+        "outcome": "valid_response",
+        "helper_contract": "passed",
+        "model_returned": "typesafe/jev-1.13-20260917",
+        "cached": false,
+        "provider_latency_ms": 343.17,
+        "usage": {
+          "input_tokens": 763,
+          "output_tokens": 47,
+          "cost": 3.2046e-05
+        },
+        "questions": [
+          {
+            "id": "asset",
+            "expected": "wood_door",
+            "raw_choice": "wood_door",
+            "outcome": "recommend",
+            "selected": "wood_door",
+            "reason": "thresholds_met",
+            "confidence": 0.96,
+            "probabilities": {
+              "wood_door": 0.97,
+              "metal_crate": 0.0,
+              "__defer__": 0.03
+            },
+            "raw_label_match": true,
+            "gated_label_match": true
+          }
+        ],
+        "elapsed_ms": 343.626,
+        "provider_requests": 1
+      },
+      {
+        "id": "diagnostic_batch",
+        "outcome": "valid_response",
+        "helper_contract": "passed",
+        "model_returned": "typesafe/jev-1.13-20260917",
+        "cached": false,
+        "provider_latency_ms": 228.67,
+        "usage": {
+          "input_tokens": 783,
+          "output_tokens": 150,
+          "cost": 3.2886e-05
+        },
+        "questions": [
+          {
+            "id": "g1",
+            "expected": "cpp_compile",
+            "raw_choice": "cpp_compile",
+            "outcome": "recommend",
+            "selected": "cpp_compile",
+            "reason": "thresholds_met",
+            "confidence": 1.0,
+            "probabilities": {
+              "__defer__": 0.0,
+              "cpp_compile": 1.0,
+              "runtime": 0.0,
+              "asset_reference": 0.0,
+              "shader": 0.0,
+              "packaging": 0.0,
+              "blueprint_compile": 0.0
+            },
+            "raw_label_match": true,
+            "gated_label_match": true
+          },
+          {
+            "id": "g2",
+            "expected": "shader",
+            "raw_choice": "shader",
+            "outcome": "recommend",
+            "selected": "shader",
+            "reason": "thresholds_met",
+            "confidence": 1.0,
+            "probabilities": {
+              "__defer__": 0.0,
+              "cpp_compile": 0.0,
+              "runtime": 0.0,
+              "asset_reference": 0.0,
+              "shader": 1.0,
+              "packaging": 0.0,
+              "blueprint_compile": 0.0
+            },
+            "raw_label_match": true,
+            "gated_label_match": true
+          }
+        ],
+        "elapsed_ms": 228.916,
+        "provider_requests": 1
+      },
+      {
+        "id": "unsupported_route",
+        "outcome": "valid_response",
+        "helper_contract": "passed",
+        "model_returned": "typesafe/jev-1.13-20260917",
+        "cached": false,
+        "provider_latency_ms": 375.42,
+        "usage": {
+          "input_tokens": 822,
+          "output_tokens": 189,
+          "cost": 3.4524e-05
+        },
+        "questions": [
+          {
+            "id": "route",
+            "expected": "__defer__",
+            "raw_choice": "__defer__",
+            "outcome": "defer",
+            "selected": null,
+            "reason": "no_suitable_candidate",
+            "confidence": 0.82,
+            "probabilities": {
+              "unreal_layout_preview": 0.0,
+              "unreal_preview": 0.0,
+              "unreal_actors": 0.0,
+              "unreal_verify": 0.0,
+              "unreal_assets": 0.11,
+              "unreal_status": 0.02,
+              "unreal_frame": 0.0,
+              "unreal_context": 0.03,
+              "__defer__": 0.84,
+              "unreal_diff": 0.0,
+              "unreal_spatial_preview": 0.0,
+              "unreal_snapshot": 0.0,
+              "unreal_validate": 0.0,
+              "unreal_actor_details": 0.0,
+              "unreal_plan": 0.0,
+              "unreal_asset_details": 0.0,
+              "jev_triage": 0.0,
+              "unreal_capture": 0.0
+            },
+            "raw_label_match": true,
+            "gated_label_match": true
+          }
+        ],
+        "elapsed_ms": 375.634,
+        "provider_requests": 1
+      }
+    ]
+  }
+}

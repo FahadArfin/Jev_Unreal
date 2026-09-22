@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
@@ -19,7 +19,9 @@ from .diagnostics import group_diagnostics
 from .errors import JevError
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
 from .selection import AssetCandidate, AssetFilters, rank_candidates
-from .workflows import CATALOG, Candidate, Operation, route, triage
+from .spatial import SpatialRecipe, preview_spatial
+from .verification import Check, SceneSnapshots, SessionIdentity, verify_fresh
+from .workflows import CATALOG, Candidate, ExpectedState, Operation, route, triage
 
 
 def create_server(settings: Settings | None = None) -> FastMCP:
@@ -27,6 +29,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     decisions = DecisionClient(settings)
     bridge = UnrealBridge(settings)
     previews = PreviewTracker(bridge)
+    snapshots = SceneSnapshots(bridge)
     external = ToolCatalog(Path(settings.catalog_file) if settings.catalog_file else None)
 
     @asynccontextmanager
@@ -49,7 +52,10 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "asset filtering and diagnostic grouping work without Jev. Use external catalog "
             "refresh/search/get for exact schemas; discovered tools are never executed here. "
             "Capture returns an image for visual review; validation warnings are not "
-            "gameplay proof."
+            "gameplay proof. Use actor_details/snapshot before changing existing actors. "
+            "Spatial previews bind their measurement state. After apply use fresh unreal_verify "
+            "and unreal_diff, not only apply readback. If apply times out, inspect unreal_plan "
+            "and the scene; never automatically repeat the application."
         ),
         lifespan=lifespan,
     )
@@ -235,6 +241,92 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         return await safely(bridge.call("context", {"query": query, "limit": limit}))
 
     @server.tool(annotations=read)
+    async def unreal_actor_details(
+        actor_paths: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=1024)]],
+            Field(min_length=1, max_length=20),
+        ],
+    ) -> dict[str, Any]:
+        """Inspect exact loaded actors, world bounds, materials and native edit blockers.
+
+        All paths must exist in the editor world. Returns one coherent measurement state;
+        absent bounds and truncated material lists are explicit. No scene change or cloud call.
+        """
+        return await safely(bridge.call("actor_details", {"actor_paths": actor_paths}))
+
+    @server.tool(annotations=read)
+    async def unreal_snapshot(
+        actor_paths: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=1024)]],
+            Field(min_length=1, max_length=20),
+        ],
+    ) -> dict[str, Any]:
+        """Record a selected-actor baseline for later diff; no files, cloud, saves or edits.
+
+        Exact selection only, not the entire scene. Keeps at most 32 snapshots, 2 MiB total,
+        for 15 minutes in this MCP process. Restarting the server clears all snapshot IDs.
+        """
+        return await safely(snapshots.capture(actor_paths))
+
+    @server.tool(annotations=read)
+    async def unreal_diff(
+        snapshot_id: Annotated[str, Field(min_length=1, max_length=64)],
+    ) -> dict[str, Any]:
+        """Compare a retained selected-actor baseline with a fresh authenticated editor read.
+
+        Reports field changes and identity/freshness limits. A missing actor or unavailable
+        inspection is unverifiable, not proof of deletion or a successful edit. No scene change.
+        """
+        return await safely(snapshots.diff(snapshot_id))
+
+    @server.tool(annotations=read)
+    async def unreal_verify(
+        checks: Annotated[list[Check], Field(min_length=1, max_length=64)],
+        expected_identity: SessionIdentity | None = None,
+        expected_revision: Annotated[str | None, Field(min_length=1, max_length=128)] = None,
+    ) -> dict[str, Any]:
+        """Read exact actors again and check explicit transforms, bounds, gaps, materials or labels.
+
+        Returns passed/failed/unverifiable per check, up to 20 selected actors. Missing evidence
+        never passes. Gaps use world-axis bounds, not physics or geometric collision clearance.
+        Use the pre-edit identity after an edit, but not its old revision: edits change revisions.
+        This checks supplied requirements locally; it does not infer them or run gameplay.
+        """
+        return await safely(
+            verify_fresh(
+                bridge,
+                checks,
+                expected_identity=expected_identity,
+                expected_revision=expected_revision,
+            )
+        )
+
+    @server.tool(annotations=read)
+    async def unreal_spatial_preview(recipe: SpatialRecipe) -> dict[str, Any]:
+        """Measure existing actors and preview align, distribute, snap_grid or ground translations.
+
+        Rotation/scale are preserved. Bounds come from the editor; ground targets a specified
+        world Z plane, not terrain tracing. The measured session/world/revision must still match
+        native preview. Review result.preview.plan_id, apply once, then run verification_checks.
+        """
+        return await safely(preview_spatial(bridge, previews, recipe))
+
+    @server.tool(annotations=read)
+    def unreal_plan(
+        plan_id: Annotated[str, Field(min_length=1, max_length=64)],
+    ) -> dict[str, Any]:
+        """Review this process's retained plan and last observed outcome without applying it.
+
+        At most 64 records/2 MiB for 15 minutes. Transport loss/cancellation stays unknown;
+        a successful record can become outdated after later editor changes. Use unreal_verify
+        or unreal_diff for fresh evidence. No Undo, replay, save or recovery after restart occurs.
+        """
+        try:
+            return {"ok": True, "result": previews.journal.get(plan_id)}
+        except JevError as exc:
+            return exc.as_dict()
+
+    @server.tool(annotations=read)
     async def unreal_asset_details(
         path: Annotated[str, Field(min_length=1, max_length=512)],
     ) -> dict[str, Any]:
@@ -291,13 +383,18 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             Field(min_length=1, max_length=20),
         ],
         padding: Annotated[float, Field(ge=1, le=4, strict=True, allow_inf_nan=False)] = 1.2,
+        view: Literal["current", "isometric", "top", "front", "right"] = "current",
     ) -> dict[str, Any]:
         """Frame explicit actors in the current level-editor viewport, without editing geometry.
 
         Requires project binding and a rendered, unlocked editor camera. Validates every target
-        before moving the view. Actor selection is preserved. Follow with unreal_capture.
+        before moving the view. Presets require a perspective viewport and preserve projection.
+        Actor selection is preserved. Follow with unreal_capture.
         """
-        return await safely(bridge.call("frame", {"actor_paths": actor_paths, "padding": padding}))
+        params = {"actor_paths": actor_paths, "padding": padding}
+        if view != "current":
+            params["view"] = view
+        return await safely(bridge.call("frame", params))
 
     @server.tool(annotations=read)
     async def unreal_layout_preview(layout: Layout) -> dict[str, Any]:
@@ -340,15 +437,21 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     @server.tool(annotations=read)
     async def unreal_preview(
         operations: Annotated[list[Operation], Field(min_length=1, max_length=20)],
+        expected_state: ExpectedState | None = None,
     ) -> dict[str, Any]:
-        """Preview primitive/known static mesh spawns or transforms; returns a one-shot plan.
+        """Preview spawns, transforms, material assignments or labels/folders as a one-shot plan.
 
         No scene changes occur. Changes to tracked actor state invalidate a plan. Units: cm,
         rotation [pitch,yaw,roll] degrees. Requires JEV_EXPECTED_PROJECT. Review before applying.
-        Transforms support exact native, unattached StaticMeshActors only, not Blueprint actors.
+        Edits support exact native, unattached StaticMeshActors only, not Blueprint actors.
+        At most one edit per existing actor in a plan. Optional expected_state rejects a changed
+        inspection snapshot before preview; a missing capability requires a plugin update.
         """
         return await safely(
-            previews.preview([op.model_dump(exclude_none=True) for op in operations])
+            previews.preview(
+                [op.model_dump(exclude_none=True) for op in operations],
+                expected_state=expected_state.model_dump() if expected_state else None,
+            )
         )
 
     @server.tool(
@@ -378,6 +481,57 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     def layouts() -> dict[str, Any]:
         """Deterministic layout descriptions and complete example inputs."""
         return LAYOUT_CATALOG
+
+    @server.resource("jev://checks")
+    def check_examples() -> dict[str, Any]:
+        """Typed requirement examples; substitute actor paths from real inspection."""
+        return {
+            "units": "centimeters; rotation [pitch,yaw,roll] degrees",
+            "actor_paths_are_placeholders": True,
+            "examples": [
+                {
+                    "kind": "bottom_z",
+                    "actor_path": "/Temp/Map.Map:PersistentLevel.Cube",
+                    "expected_cm": 0,
+                    "tolerance_cm": 0.1,
+                },
+                {
+                    "kind": "bounds_size",
+                    "actor_path": "/Temp/Map.Map:PersistentLevel.Cube",
+                    "expected_cm": [100, 100, 100],
+                },
+                {
+                    "kind": "label",
+                    "actor_path": "/Temp/Map.Map:PersistentLevel.Cube",
+                    "expected": "Cover",
+                },
+            ],
+            "other_kinds": [
+                "transform_equals",
+                "bounds_anchor",
+                "material_slot",
+                "folder",
+                "min_gap",
+            ],
+            "scope": "Fresh loaded-actor checks; no automatic gameplay or visual acceptance.",
+        }
+
+    @server.prompt()
+    def verified_edit_workflow(goal: str) -> str:
+        """Measure actors, review an edit plan and verify explicit requirements."""
+        return (
+            f"Editing goal: {goal}\n"
+            "Read unreal_context, confirm the intended project, choose exact actor paths and "
+            "capture unreal_snapshot. Inspect actor_details edit blockers and define measurable "
+            "checks from the requested goal. For alignment/spacing use unreal_spatial_preview; "
+            "for materials or labels/folders use unreal_preview with expected_state from the "
+            "latest inspection. Review the plan, apply only authorized changes once, then use "
+            "unreal_verify with the expected identity and unreal_diff with the baseline ID. "
+            "Do not reuse the pre-edit revision for post-edit checks. Frame and capture the "
+            "result for visual review. Report failed and unverifiable checks explicitly. "
+            "If apply is interrupted, inspect unreal_plan and fresh actors without replaying. "
+            "No tool in this workflow saves the map or proves gameplay acceptance."
+        )
 
     @server.prompt()
     def blockout_workflow(goal: str) -> str:

@@ -253,7 +253,10 @@ async def test_malformed_response_and_unknown_errors_are_sanitized(payload):
         await bridge.close()
 
 
-@pytest.mark.parametrize("error_code", ["stale_plan", "expired_plan", "play_mode", "apply_failed"])
+@pytest.mark.parametrize(
+    "error_code",
+    ["stale_plan", "expired_plan", "play_mode", "apply_failed", "material_slot_invalid"],
+)
 async def test_known_editor_failure_codes_are_preserved_without_raw_messages(error_code):
     bridge = UnrealBridge(
         Settings(bridge_token=TOKEN),
@@ -305,5 +308,155 @@ async def test_redirects_do_not_forward_bridge_credentials():
             await bridge.call("status")
         assert caught.value.code == "bridge_error"
         assert len(calls) == 1
+    finally:
+        await bridge.close()
+
+
+@pytest.mark.parametrize(
+    "action,params,required",
+    [
+        ("actor_details", {"actor_paths": ["/Temp/Map.Actor"]}, ["actor_details"]),
+        (
+            "preview",
+            {
+                "operations": [],
+                "expected_state": {"session_id": "s", "world_path": "w", "revision": "r"},
+            },
+            ["preview_expected_state"],
+        ),
+        ("preview", {"operations": [{"op": "set_material"}]}, ["set_material"]),
+        ("preview", {"operations": [{"op": "set_metadata"}]}, ["set_metadata"]),
+        (
+            "frame",
+            {"actor_paths": ["/Temp/Map.Map:PersistentLevel.Cube"], "view": "top"},
+            ["frame_views"],
+        ),
+        (
+            "preview",
+            {
+                "operations": [{"op": "set_material"}, {"op": "set_metadata"}],
+                "expected_state": {"session_id": "s", "world_path": "w", "revision": "r"},
+            },
+            ["preview_expected_state", "set_material", "set_metadata"],
+        ),
+    ],
+)
+async def test_required_native_capabilities_are_checked_as_one_set_before_dispatch(
+    action, params, required
+):
+    advertised = []
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        if body["action"] == "status":
+            return response({"project_file": PROJECT, "capabilities": advertised})
+        return response({"received": body["params"]})
+
+    bridge = UnrealBridge(
+        Settings(bridge_token=TOKEN, expected_project=PROJECT), httpx.MockTransport(handler)
+    )
+    try:
+        # Every missing capability fails before native dispatch, including a
+        # partial advertisement where all the other required flags are present.
+        for missing in required:
+            advertised = [capability for capability in required if capability != missing]
+            previous = len(seen)
+            with pytest.raises(JevError) as caught:
+                await bridge.call(action, params)
+            assert caught.value.code == "capability_unavailable"
+            assert seen[previous:] == [{"action": "status", "params": {}}]
+        advertised = [*required, "future_extension", None, {"not": "a capability"}]
+        result = await bridge.call(action, params)
+        assert result == {"received": params}
+        assert seen[-2:] == [
+            {"action": "status", "params": {}},
+            {"action": action, "params": params},
+        ]
+    finally:
+        await bridge.close()
+
+
+@pytest.mark.parametrize(
+    "capabilities",
+    [None, "actor_details", {"actor_details": True}, True, 1, [], ["Actor_Details"], [1, None, {}]],
+)
+async def test_malformed_or_nonmatching_capabilities_cannot_authorize_new_native_actions(
+    capabilities,
+):
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content)["action"])
+        return response({"project_file": PROJECT, "capabilities": capabilities})
+
+    bridge = UnrealBridge(
+        Settings(bridge_token=TOKEN, expected_project=PROJECT), httpx.MockTransport(handler)
+    )
+    try:
+        with pytest.raises(JevError) as caught:
+            await bridge.call("actor_details", {"actor_paths": ["/Temp/Map.Actor"]})
+        assert caught.value.code == "capability_unavailable"
+        assert seen == ["status"]
+    finally:
+        await bridge.close()
+
+
+async def test_capabilities_are_refreshed_each_call_and_do_not_bypass_project_binding():
+    advertised = ["actor_details"]
+    project = PROJECT
+    seen = []
+
+    def handler(request):
+        action = json.loads(request.content)["action"]
+        seen.append(action)
+        return response({"project_file": project, "capabilities": advertised})
+
+    bridge = UnrealBridge(
+        Settings(bridge_token=TOKEN, expected_project=PROJECT), httpx.MockTransport(handler)
+    )
+    try:
+        await bridge.call("actor_details", {"actor_paths": ["/Temp/Map.Actor"]})
+        advertised = []
+        with pytest.raises(JevError) as caught:
+            await bridge.call("actor_details", {"actor_paths": ["/Temp/Map.Actor"]})
+        assert caught.value.code == "capability_unavailable"
+        advertised = ["actor_details"]
+        project = r"C:\Projects\Other\Other.uproject"
+        with pytest.raises(JevError) as caught:
+            await bridge.call("actor_details", {"actor_paths": ["/Temp/Map.Actor"]})
+        assert caught.value.code == "wrong_project"
+        assert seen == ["status", "actor_details", "status", "status"]
+    finally:
+        await bridge.close()
+
+
+@pytest.mark.parametrize(
+    "action,params",
+    [
+        ("actors", {}),
+        ("frame", {"actor_paths": ["/Temp/Map.Map:PersistentLevel.Cube"], "padding": 1.2}),
+        ("preview", {"operations": [{"op": "set_transform"}]}),
+        ("preview", {"operations": [{"op": "spawn_primitive"}], "expected_state": None}),
+        ("apply", {"plan_id": "legacy-native-plan"}),
+    ],
+)
+async def test_legacy_native_operations_do_not_require_new_capability_advertisements(
+    action, params
+):
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        return status_response() if body["action"] == "status" else response({"received": action})
+
+    bridge = UnrealBridge(
+        Settings(bridge_token=TOKEN, expected_project=PROJECT), httpx.MockTransport(handler)
+    )
+    try:
+        assert await bridge.call(action, params) == {"received": action}
+        assert seen == [{"action": "status", "params": {}}, {"action": action, "params": params}]
     finally:
         await bridge.close()

@@ -3,11 +3,11 @@
 [![Python checks](https://github.com/FahadArfin/Jev_Unreal/actions/workflows/ci.yml/badge.svg)](https://github.com/FahadArfin/Jev_Unreal/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Find the right tools, inspect Unreal, build measured layouts, and verify the results. Jev helps when a semantic choice is useful.**
+**Inspect Unreal, preview measured edits, and verify fresh results. Jev helps when a semantic choice is useful.**
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.2 alpha.** Python MCP server + source-built Unreal editor plugin. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md).
+**Status: 0.3 alpha.** Python MCP server + source-built Unreal editor plugin, with **27 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
@@ -19,10 +19,13 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - Asset candidate filtering by known class, dimensions and collision, with optional Jev selection.
 - Compact editor context: selection, dirty packages, play state, actor metadata and project identity.
 - Exact static mesh bounds, materials, LOD and collision inspection; bounded scene validation warnings.
-- Native viewport framing and PNG capture delivered as MCP image content for visual review.
-- Preview/apply primitive blockouts, existing static mesh placement and supported native actor transforms, with native Undo.
+- Exact actor inspection with world bounds, assigned materials and explicit native edit blockers.
+- Selected-actor snapshots, fresh before/after diffs, and explicit passed/failed/unverifiable checks.
+- Native viewport framing with current/isometric/top/front/right views and PNG capture as MCP image content.
+- Preview/apply primitive blockouts, existing static mesh placement, transforms, material assignments and actor labels/folders, with native Undo.
 - Measured grid, staircase and room recipes, with automatic transform readback checks after apply.
-- Authenticated loopback bridge, project binding, short-lived single-use plans and stale editor-state rejection.
+- Measured alignment, distribution, pivot grid snapping and grounding on a specified plane, preserving rotation and scale.
+- Authenticated loopback bridge, project binding, state-bound previews, single-use plans and process-local plan records.
 - A sample project, adversarial tests, a real MCP/editor smoke test and a provider evaluation harness.
 
 Scene tools need **no model key**. Jev never executes an editor command, generates arbitrary code, or automatically receives project files. Only explicit decision arguments go to the configured cloud provider.
@@ -97,6 +100,9 @@ Portable server command: `uv --directory /path/to/Jev_Unreal run --frozen jev-un
 
 ## Tools
 
+The server exposes 27 tools. New inspect/edit/verify features require the matching
+native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
+
 | Tool | Purpose | Cloud |
 | --- | --- | --- |
 | `jev_status` | Provider counters and editor identity | No |
@@ -112,14 +118,20 @@ Portable server command: `uv --directory /path/to/Jev_Unreal run --frozen jev-un
 | `unreal_status` | Engine/project/session/world identity | No |
 | `unreal_context` | Selection, play state, dirty packages and relevant actors together | No |
 | `unreal_actors` | Bounded actor metadata and transforms | No |
+| `unreal_actor_details` | Exact selected actors, world bounds, materials and edit blockers | No |
+| `unreal_snapshot` | Retain a selected-actor baseline in this MCP process | No |
+| `unreal_diff` | Compare that baseline with a fresh exact-selection read | No |
+| `unreal_verify` | Check explicit requirements against fresh actor details | No |
 | `unreal_assets` | Search `/Game` asset metadata | No |
 | `unreal_asset_details` | Inspect one exact mesh path, bounds, LODs, materials and collision | No |
 | `unreal_validate` | Inspect loaded actors for structural warnings | No |
-| `unreal_frame` | Frame explicit actors in the current editor viewport | No |
+| `unreal_frame` | Frame explicit actors with current/isometric/top/front/right views | No |
 | `unreal_capture` | Return the rendered editor viewport as an MCP image | No |
-| `unreal_preview` | Validate a batch and return a 120-second plan | No |
+| `unreal_preview` | Validate a batch; optional measured state; return a 120-second plan | No |
 | `unreal_layout_preview` | Preview a measured grid, staircase or room | No |
-| `unreal_apply` | Apply once in an Undo transaction; verify native transform readback | No |
+| `unreal_spatial_preview` | Measure actors and preview align/distribute/snap-grid/ground recipes | No |
+| `unreal_apply` | Apply once in an Undo transaction; check native readback | No |
+| `unreal_plan` | Read this process's retained plan and last observed outcome | No |
 
 Example `unreal_preview` arguments:
 
@@ -132,7 +144,17 @@ Example `unreal_preview` arguments:
 }
 ```
 
-Review normalized operations, then pass the returned `plan_id` to `unreal_apply`. Positions are centimeters; rotation is `[pitch,yaw,roll]` in degrees. Maximum 20 operations per plan. Edits during Play/Simulate and stale/reused plans are rejected. Changes remain unsaved until you save in Unreal. After a timeout, inspect the scene before deciding what to do; do not blindly retry.
+Review normalized operations, then pass the returned `plan_id` to `unreal_apply`. Positions are centimeters; rotation is `[pitch,yaw,roll]` in degrees. Maximum 20 operations per plan, with at most one edit per existing actor. Edits during Play/Simulate and stale/reused plans are rejected. Existing-actor edits support exact native, unattached StaticMeshActors with no native edit blockers. Changes remain unsaved until you save in Unreal.
+
+For existing actors, use **inspect → snapshot → preview with measured state → apply once → fresh verify/diff → frame/capture**. A spatial preview obtains the actor bounds itself and binds the plan to that measurement's session/world/revision. Material or label/folder edits can pass the latest inspection's `expected_state` to `unreal_preview`. After apply, verify intended post-edit values against the original project/session/world identity; the old revision is expected to change. [Spatial recipes](docs/SPATIAL_WORKFLOWS.md) and [verification contracts](docs/VERIFICATION.md) explain the limits.
+
+After a timeout or cancellation, read `unreal_plan` and inspect fresh actors before deciding what to do. Unknown outcomes remain unknown; do not replay the plan. Records are best-effort observations, not durable recovery: at most 64 records/2 MiB for 15 minutes. Snapshots have a separate 32-record/2 MiB/15-minute budget. Both are process-local, can be evicted, and disappear on restart. Neither saves a map or restores a scene.
+
+![Three rotated objects after the verified edit workflow, captured natively in Unreal](docs/images/verified-workflow-isometric.png)
+
+0.3 sandbox acceptance: exact bounds, alignment/distribution/grid/ground previews,
+label/folder and material edits, fresh checks, and camera capture. This demonstrates
+the editing workflow; it is not a gameplay or finished-art quality claim.
 
 For a measured staircase, call `unreal_layout_preview` with:
 
@@ -144,9 +166,15 @@ Apply the returned plan, inspect its `verification`, frame the resulting actor p
 
 ![Four-step blockout captured through the native Unreal viewport tool](docs/images/verified-stair-blockout.png)
 
-Actual UE 5.8.2 sandbox output from the MCP smoke test: four measured steps, applied, checked, framed and captured. This is an operation check, not a finished environment.
+Historical v0.2 UE 5.8.2 sandbox output from the MCP smoke test: four measured steps, applied, checked, framed and captured. This is an operation check, not a finished environment or evidence for every v0.3 feature.
 
-Read `jev://layouts` for recipes and `jev://catalog` for built-in routing descriptions. MCP clients that support prompts can use `blockout_workflow` and `diagnostic_workflow` for the complete inspection/verification sequence.
+Read `jev://layouts` for blockout recipes, `jev://checks` for requirement examples, and `jev://catalog` for built-in routing descriptions. MCP clients that support prompts can use `verified_edit_workflow`, `blockout_workflow`, and `diagnostic_workflow`.
+
+For command-line inspection, use `uv run jev-unreal inspect "EXACT_ACTOR_PATH"`.
+`uv run jev-unreal verify checks.json` reads a bounded JSON object containing
+`checks` and optional expected identity/revision; it exits nonzero for failed or
+unverifiable results. `doctor` checks the connection, project binding and required
+workflow capabilities without a provider call. [CLI examples](docs/WORKFLOWS.md#human-friendly-command-line).
 
 External discovery is opt-in: set `JEV_CATALOG_FILE` to a local JSON configuration, or pass `-CatalogFile` to the Windows launcher. It lists metadata from explicitly named loopback Streamable HTTP servers. It never launches a server or proxies arbitrary execution. [Discovery setup, limits and Epic gateway compatibility](docs/TOOL_DISCOVERY.md).
 
@@ -169,14 +197,14 @@ The editor smoke test needs the running sandbox and intentionally creates unsave
 
 For a real evaluation, set the provider key in the process environment and run `uv run python scripts/evaluate.py --output artifacts/jev-evaluation.json`. It spends at most 24 provider requests on public fixtures, disables caching, uses no retries and compares a simple keyword baseline. This small authored smoke set cannot establish production accuracy or coding-agent savings.
 
-With a saved Windows key, `.\scripts\Test-Jev.ps1 -WorkflowSmoke` checks asset selection, batched diagnostics and unsupported-action deferral using at most three provider requests. Its [sanitized report](docs/evaluations/2026-09-22-workflows-v0.2.json) records the fixture and code hashes, usage and individual outcomes.
+With a saved Windows key, `.\scripts\Test-Jev.ps1 -WorkflowSmoke` checks asset selection, batched diagnostics and unsupported-action deferral using at most three provider requests. The [v0.3 sanitized report](docs/evaluations/2026-09-22-workflows-v0.3.json) records fixture and code hashes, usage and individual outcomes for the 17-candidate router. These tiny public fixtures establish provider compatibility, not accuracy or savings across real development tasks.
 
 [`.env.example`](.env.example) lists variables; the server does **not** automatically load `.env`. `JEV_MAX_REQUESTS` defaults to 100 attempted provider calls per server process; it is not a dollar budget. OpenRouter uses `typesafe/jev-1.13` at `/api/alpha/decisions`; alpha contracts may change.
 
 ## Scope and roadmap
 
-Version 0.2 concentrates on discovery, inspection, explicit decision assistance and verified editor workflows. It does not include runtime NPC Blueprint nodes, arbitrary Blueprint graph generation, code execution, asset deletion/import, packaging automation, remote/multiuser hosting, or a Blender executor. Existing Unreal MCP tools remain useful alongside this server; discovery helps find their advertised capabilities without duplicating them.
+Version 0.3 extends discovery and measured blockouts with an inspect/edit/verify loop for selected loaded actors. It does not include runtime NPC Blueprint nodes, arbitrary Blueprint graph generation, code execution, asset deletion/import, packaging automation, durable crash recovery, remote/multiuser hosting, or a Blender executor. Existing Unreal MCP tools remain useful alongside this server; discovery helps find their advertised capabilities without duplicating them.
 
-Next: representative held-out workflow evaluations, additional measured editor operations, multiple-editor support, broader platform validation and a Blender adapter. No game-development speedup has been established. The model-independent discovery and selection layers can be reused for Blender.
+The [prioritized roadmap](docs/ROADMAP.md) covers native review UI, installation/repair, project-owned validation and functional tests, representative workflow evaluations, broader engine/platform support and Blender handoff. These are future work, not current capabilities or adoption guarantees. No game-development speedup has been established.
 
 See [architecture](docs/ARCHITECTURE.md), [research](docs/RESEARCH.md), [provenance](docs/PROVENANCE.md), [contributing](CONTRIBUTING.md), and [security](SECURITY.md). Original code is MIT. Unreal and provider services have separate licenses and terms.

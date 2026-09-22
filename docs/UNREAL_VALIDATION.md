@@ -1,6 +1,6 @@
 # Unreal validation
 
-Jev Editor **0.2.0a1** was rebuilt and exercised locally on Unreal Engine **5.8.2**, Windows 11, on 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin.
+Jev Editor **0.3.0a1** was rebuilt and exercised locally on Unreal Engine **5.8.2**, Windows 11, on 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin.
 
 ## Verified native checks
 
@@ -19,22 +19,37 @@ Jev Editor **0.2.0a1** was rebuilt and exercised locally on Unreal Engine **5.8.
 | `Jev.Editor.CaptureSafety` | Passed | Bounded dimensions, strict types, no arbitrary output path, and explicit missing-viewport failure. |
 | `Jev.Editor.FrameSafety` | Passed | Unique bounded exact actor paths, padding limits, missing targets/viewports, and preservation of actor transforms/count/selection after rejected requests. |
 | `Jev.Editor.StaticMeshPlacement` | Passed | Exact registry mesh placement and native Undo; missing/wrong-class assets, redirectors, malformed paths, and replacement assets that reuse reviewed paths are rejected. |
+| `Jev.Editor.ActorDetails` | Passed | Exact ordered selection, finite world bounds, material assignments, unavailable bounds, missing targets, edit blockers and distinct identity after replacement at the same path. |
+| `Jev.Editor.ExpectedState` | Passed | Strict session/world/revision checks, state changes after measurement, invalid fields and native material/folder changes invalidate stale inspection. |
+| `Jev.Editor.MetadataEdits` | Passed | Labels/folders, strict fields/path validation, one edit per target, native Undo and identity guards. |
+| `Jev.Editor.MaterialEdits` | Passed | Exact material assets/slots, invalid assets and slots, assignment identity, preserved transforms and native Undo. |
+| `Jev.Editor.EditRollback` | Passed | Injected failure after metadata/folder, material, transform and spawn changes restores the baseline; no-op failures preserve earlier user Undo/Redo contexts. |
 
-Final report timestamp: **`2026.09.22-01.53.08`**. Totals: **9 succeeded, 0 failed, 0 warnings, 0 not run, 0 in progress**. Schema tests also verify that oversized responses are rejected by UTF-8 byte size. Machine-specific raw artifacts remain local under `artifacts/unreal-automation/` and `examples/JevSandbox/Saved/Logs/`.
+Final report timestamp: **`2026.09.22-02.39.31`**. Totals: **14 passed (13 clean and one with a warning), 0 failed, 0 not run, 0 in progress**. Schema tests also verify that oversized responses are rejected by UTF-8 byte size. Machine-specific raw artifacts remain local under `artifacts/unreal-automation/` and `examples/JevSandbox/Saved/Logs/`. ActorDetails deliberately exercises an empty-bounds mesh, which emits one Unreal navigation warning; this is reported separately from failed assertions.
 
-The launcher checks report freshness, completion counts, and each of the nine expected test names. Headless execution uses `UnrealEditor-Cmd.exe -NullRHI`; this does not establish rendered capture success. `-NoShaderCompile` is intentionally omitted because combining it with the installed headless engine previously caused a startup crash before tests ran.
+The launcher checks report freshness, completion counts, and each of the 14 expected test names. Headless execution uses `UnrealEditor-Cmd.exe -NullRHI`; this does not establish rendered capture success. `-NoShaderCompile` is intentionally omitted because combining it with the installed headless engine previously caused a startup crash before tests ran.
 
 ## Live editor and visual evidence
 
-The real stdio MCP server discovered **21 tools** and passed `scripts/smoke_editor.py` against the authenticated rendered sandbox editor. `artifacts/editor-smoke-v0.2.json` records engine `5.8.2-56702186+++UE5+Release-5.8` and these checks:
+The real stdio MCP server discovered **27 tools** and passed `scripts/smoke_editor.py` against the authenticated rendered sandbox editor. `artifacts/editor-smoke-v0.3.json` records engine `5.8.2-56702186+++UE5+Release-5.8` and these checks:
 
 - Authentication/origin rejection and exact project identity.
 - Primitive preview without mutation, spawn/transform, consumed-plan rejection and stale-plan rejection.
 - Actor/asset bounds, compact context, exact native mesh measurements, existing static-mesh placement and bounded scene warnings.
 - Preview/application of grid, stairs and room layouts, with **4, 4 and 5 actors** respectively; all three readback verifications passed.
-- Native camera framing followed by a **1014 × 479**, **520,449-byte** PNG from the editor viewport.
+- Native camera framing followed by a **1014 × 479** PNG from the editor viewport.
 
-Initial visual inspection found that viewport invalidation alone could leave old pixels in a background editor capture. The bridge now submits pending world/component updates, explicitly draws that viewport, and flushes rendering commands before reading pixels. After rebuilding and repeating native/live checks, the [saved capture](images/verified-stair-blockout.png) was viewed and confirmed to show the intended four-step staircase in the current frame. Camera metadata also matched the framing result.
+In 0.2, visual inspection found that viewport invalidation alone could leave old pixels in a background editor capture. The bridge submits pending world/component updates, explicitly draws that viewport, and flushes rendering commands before reading pixels. The historical [staircase capture](images/verified-stair-blockout.png) preserves that evidence.
+
+For 0.3, `scripts/smoke_verified_workflows.py` also passed the full exact-inspection,
+snapshot/diff, state-bound preview/apply, measured alignment/distribution/grid/ground,
+metadata/material and fresh-verification loop. Deliberate mismatches failed and
+missing/replaced identity evidence stayed unverifiable. All four perspective camera
+presets produced native captures with matching camera metadata. The
+[isometric](images/verified-workflow-isometric.png) and
+[top](images/verified-workflow-top.png) images visibly show the three rotated test
+objects; front/right views were reviewed too. Objects can occlude one another in
+a given view. A preset does not establish visibility, simulated grounding or art quality.
 
 This is narrow visual acceptance of one blockout and the capture path. It is not gameplay, character traversal, collision simulation, an art review, or confirmation that every scene renders correctly. All smoke-test scene changes remain unsaved; no other game project was modified.
 
@@ -43,11 +58,11 @@ This is narrow visual acceptance of one blockout and the capture path. It is not
 - The bridge starts only with a printable non-space ASCII `JEV_BRIDGE_TOKEN` of 32–256 characters. A token should be randomly generated. The plugin never prints it.
 - The listener explicitly binds `127.0.0.1:9845`; an occupied port fails closed. Requests require the matching loopback Host header and a bearer token, and requests with an Origin header are rejected.
 - Unreal's HTTPServer dispatches the action handler on the game thread. Off-thread invocation is rejected. The plugin only unbinds its own route on shutdown and never stops shared HTTP listeners. Python serializes calls and paces all HTTP requests, including identity checks, to at most **20 per second per client**, below the native **30-per-second** authenticated limit. Throttled operations are not automatically retried.
-- Supported operations are bounded inspection, native viewport framing/capture, allowed primitive spawning, exact existing static-mesh placement, and supported actor transforms. Play/Simulate permits only status and editor-world context. There is no Python, console, deletion, arbitrary file write, map save, asset import, or arbitrary class-construction endpoint.
-- `set_transform` is intentionally restricted to the exact native `AStaticMeshActor` class with no attached parent, attached children, or child-actor ownership. Blueprint-derived actors are rejected because editor movement may run construction scripts with side effects.
+- Supported operations are bounded inspection, native viewport framing/capture, allowed primitive spawning, exact existing static-mesh placement, transforms, existing material assignment and actor labels/folders. Play/Simulate permits only status and editor-world context. There is no Python, console, deletion, arbitrary file write, map save, asset import, or arbitrary class-construction endpoint.
+- Existing-actor edits are intentionally restricted to the exact native `AStaticMeshActor` class with no attached parent, attached children, or child-actor ownership. Blueprint-derived actors are rejected because editor callbacks may run construction scripts with side effects.
 - `spawn_static_mesh` resolves an exact `/Game` or `/Engine` registry object path and accepts only native StaticMesh assets. Redirectors/subobjects are rejected. Preview retains the mesh's weak UObject identity; apply rejects a missing/replaced object even when a replacement reuses its path, and holds resolved meshes strongly during the transaction. This does not fingerprint in-place changes to mesh contents.
-- A plan is bound to the editor session, project, weak world identity, weak target identities, and original scene actor identities. Its revision covers actor identity, object path, class, root path, label, transforms, attachment, hidden/locked state, and the current level. UTF-8 hashing preserves Unicode label changes. It does **not** hash full material, mesh, Blueprint, or asset contents.
-- Plans expire after 120 seconds, contain at most 20 operations, and are consumed on an apply attempt. At most 64 live plans are retained. Preview validation runs before an editor undo transaction is opened. Failures restore the supported transforms and remove newly spawned actors; arbitrary third-party editor callback side effects are outside this guarantee.
+- A plan is bound to the editor session, project, weak world identity, weak target identities, and original scene actor identities. Its revision covers live actor/world/level identity, object path, class, root path, label/folder, transforms, attachment, hidden/locked state and mesh/material assignment identity. UTF-8 hashing preserves Unicode label changes. It does **not** hash full material, mesh, Blueprint, or asset contents. Actor details return session-scoped `instance_id`; fresh verification can reject replacement at a reused object path.
+- Plans expire after 120 seconds, contain at most 20 operations, and are consumed on an apply attempt. At most 64 live plans are retained. Preview validation runs before an editor Undo transaction is opened, and an existing active transaction blocks apply. Failure rollback only undoes the exact Jev transaction GUID; a discarded no-op transaction must not undo the user's preceding action. Supported edits/spawns are restored; arbitrary third-party callback side effects are outside this guarantee. An uncertain restoration returns `rollback_failed` and requires inspection.
 - The MCP layer compares successful apply readback against normalized previews, including actor paths, transforms and applicable mesh identity. Equivalent Euler rotations are accepted. Malformed readback is reported as failed verification rather than hiding an already-applied result. Readback does not certify visual/gameplay behavior; never blindly retry an ambiguous apply.
 - Scene/asset queries return at most **200 entries**. Context/validation report independent truncation/incomplete flags. Extended inspection scans at most 5,000 candidate actors, 64 components/material slots per applicable item, and 400 warnings; asset LOD details are capped at 16.
 - Native capture uses the existing editor viewport, without desktop capture or arbitrary output paths. Requested maximum dimensions are 64–1024; source area is capped at 16 million pixels and compressed PNG at 720 KiB. Existing screenshot/movie operations block bridge capture. Python checks bounded PNG structure/checksums and dimensions before emitting MCP image content; this does not assess visual quality.

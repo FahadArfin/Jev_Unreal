@@ -11,6 +11,30 @@ from .config import Settings
 from .decision import DecisionClient
 from .errors import JevError
 from .layouts import LAYOUT_CATALOG
+from .verification import verify_fresh
+
+WORKFLOW_CAPABILITIES = {
+    "actor_details",
+    "preview_expected_state",
+    "set_material",
+    "set_metadata",
+    "frame_views",
+}
+
+
+def read_checks(path: Path) -> dict:
+    with path.open("rb") as handle:
+        content = handle.read(65537)
+    if len(content) > 65536:
+        raise JevError("request_too_large", "Verification file exceeds 64 KiB.")
+    data = json.loads(content)
+    if (
+        not isinstance(data, dict)
+        or "checks" not in data
+        or set(data) - {"checks", "expected_identity", "expected_revision"}
+    ):
+        raise JevError("invalid_request", "Use checks and optional expected_identity/revision.")
+    return data
 
 
 async def run_command(args, settings: Settings) -> dict:
@@ -39,11 +63,24 @@ async def run_command(args, settings: Settings) -> dict:
             editor = {"ready": False, "error": exc.as_dict()["error"]}
         finally:
             await bridge.close()
+        capabilities = editor.get("identity", {}).get("capabilities", [])
+        available = (
+            {v for v in capabilities if isinstance(v, str)}
+            if isinstance(capabilities, list)
+            else set()
+        )
+        missing_capabilities = sorted(WORKFLOW_CAPABILITIES - available)
         catalog = ToolCatalog(Path(settings.catalog_file) if settings.catalog_file else None)
         return {
             "version": __version__,
-            "ready": editor["ready"] and bool(settings.expected_project),
+            "ready": editor["ready"]
+            and bool(settings.expected_project)
+            and not missing_capabilities,
             "editor": editor,
+            "workflow_compatibility": {
+                "ready": not missing_capabilities,
+                "missing_capabilities": missing_capabilities,
+            },
             "project_bound": bool(settings.expected_project),
             "provider": {
                 "configured": bool(settings.api_key),
@@ -65,11 +102,21 @@ async def run_command(args, settings: Settings) -> dict:
                 else [
                     "Set JEV_EXPECTED_PROJECT to the intended absolute .uproject before edits.",
                 ]
+            )
+            + (
+                ["Rebuild and relaunch the matching JevEditor plugin for verified editing tools."]
+                if editor["ready"] and missing_capabilities
+                else []
             ),
         }
-    if args.command in {"status", "context"}:
+    if args.command in {"status", "context", "inspect", "verify"}:
         bridge = UnrealBridge(settings)
         try:
+            if args.command == "inspect":
+                return await bridge.call("actor_details", {"actor_paths": args.actor_paths})
+            if args.command == "verify":
+                payload = await asyncio.to_thread(read_checks, Path(args.file))
+                return await verify_fresh(bridge, **payload)
             return await bridge.call(args.command)
         finally:
             await bridge.close()
@@ -105,6 +152,12 @@ def main():
     commands.add_parser("serve", help="Run the MCP stdio server")
     commands.add_parser("status", help="Inspect the configured Unreal editor")
     commands.add_parser("context", help="Read compact editor context without a model key")
+    commands.add_parser("inspect", help="Inspect exact actor paths without editing").add_argument(
+        "actor_paths", nargs="+"
+    )
+    commands.add_parser(
+        "verify", help="Check current actors against a bounded JSON checks file"
+    ).add_argument("file")
     commands.add_parser("doctor", help="Check editor connectivity/configuration; no cloud calls")
     commands.add_parser("layouts", help="Show available measured blockout recipes")
     catalog = commands.add_parser("catalog", help="Discover explicitly configured local MCP tools")
@@ -129,6 +182,8 @@ def main():
             result = asyncio.run(run_command(args, settings))
             print(json.dumps(result, indent=2, allow_nan=False))
             if args.command == "doctor" and not result["ready"]:
+                raise SystemExit(1)
+            if args.command == "verify" and result["status"] != "passed":
                 raise SystemExit(1)
     except JevError as exc:
         print(json.dumps(exc.as_dict()), file=sys.stderr)
