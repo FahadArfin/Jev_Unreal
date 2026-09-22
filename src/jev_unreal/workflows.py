@@ -1,8 +1,8 @@
 """Small decision workflows; model recommendations never execute an editor operation."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .decision import DecisionClient
 from .errors import JevError
@@ -11,8 +11,14 @@ CATALOG = {
     "unreal_status": "Inspect the current Unreal editor project, session and world identity.",
     "unreal_actors": "Inspect actor paths, names, classes and transforms in the current level.",
     "unreal_assets": "Search the asset registry by name/path before choosing existing assets.",
-    "unreal_preview": "Preview a batch of primitive blockout spawns or actor transform changes.",
+    "unreal_preview": "Preview primitive or existing static mesh spawns, or actor transform edits.",
     "jev_triage": "Classify an Unreal log excerpt and suggest the next diagnostic category.",
+    "unreal_context": "Inspect current selection, play state, dirty packages and relevant actors.",
+    "unreal_asset_details": "Inspect a known asset path for mesh bounds, LODs and collision data.",
+    "unreal_validate": "Check loaded actors for mesh, material, collision and scale warnings.",
+    "unreal_capture": "Capture the currently rendered editor viewport for visual review.",
+    "unreal_frame": "Frame specific known actors in the editor camera before visual capture.",
+    "unreal_layout_preview": "Preview a measured grid, staircase or room from dimensions.",
 }
 
 
@@ -101,17 +107,82 @@ async def triage(client: DecisionClient, log_excerpt: str) -> dict:
     }
 
 
-Vector = tuple[float, float, float]
+LocationValue = Annotated[float, Field(ge=-1_000_000, le=1_000_000, strict=True)]
+RotationValue = Annotated[float, Field(ge=-36000, le=36000, strict=True)]
+ScaleValue = Annotated[float, Field(ge=0.001, le=1000, strict=True)]
 
 
 class Operation(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    op: Literal["spawn_primitive", "set_transform"]
+    op: Literal["spawn_primitive", "spawn_static_mesh", "set_transform"]
     shape: Literal["Cube", "Sphere", "Cylinder", "Plane"] | None = None
     label: str | None = Field(default=None, min_length=1, max_length=80)
     actor_path: str | None = Field(default=None, min_length=1, max_length=1024)
-    location: Vector | None = None
-    rotation: Vector | None = None
-    scale: Vector | None = None
+    asset_path: str | None = Field(default=None, min_length=1, max_length=512)
+    location: tuple[LocationValue, LocationValue, LocationValue] | None = None
+    rotation: tuple[RotationValue, RotationValue, RotationValue] | None = None
+    scale: tuple[ScaleValue, ScaleValue, ScaleValue] | None = None
+
+    @field_validator("label")
+    @classmethod
+    def valid_label(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip() or any(
+            ord(character) < 32 or ord(character) == 127 for character in value
+        ):
+            raise ValueError("Actor labels must be nonblank and contain no control characters.")
+        try:
+            units = len(value.encode("utf-16-le")) // 2
+        except UnicodeEncodeError:
+            raise ValueError("Actor labels must contain valid Unicode.") from None
+        if units > 80:
+            raise ValueError("Actor labels must contain at most 80 Unreal UTF-16 code units.")
+        return value
+
+    @field_validator("asset_path")
+    @classmethod
+    def exact_asset_path(cls, value: str | None) -> str | None:
+        if value is not None and (
+            not value.startswith(("/Game/", "/Engine/"))
+            or ".." in value
+            or ":" in value
+            or value.count(".") != 1
+            or not all(value.split(".", 1))
+            or any(character.isspace() or ord(character) < 32 for character in value)
+        ):
+            raise ValueError("Use an exact /Game or /Engine asset object path.")
+        return value
+
+    @model_validator(mode="after")
+    def fields_match_operation(self):
+        if self.op == "spawn_primitive":
+            if (
+                self.shape is None
+                or self.label is None
+                or self.actor_path is not None
+                or self.asset_path is not None
+            ):
+                raise ValueError("spawn_primitive requires shape/label; no actor_path/asset_path.")
+        elif self.op == "spawn_static_mesh":
+            if (
+                self.asset_path is None
+                or self.label is None
+                or self.actor_path is not None
+                or self.shape is not None
+            ):
+                raise ValueError("Mesh spawn requires asset_path/label; no shape/actor_path.")
+        elif (
+            self.actor_path is None
+            or not self.actor_path.strip()
+            or self.shape is not None
+            or self.label is not None
+            or self.asset_path is not None
+            or all(value is None for value in (self.location, self.rotation, self.scale))
+        ):
+            raise ValueError(
+                "set_transform requires actor_path and a transform field, without shape or label."
+            )
+        return self
 
     # The editor repeats complete validation, including world-dependent checks.

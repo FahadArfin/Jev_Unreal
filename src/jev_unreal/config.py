@@ -39,6 +39,7 @@ class Settings:
     bridge_url: str = "http://127.0.0.1:9845"
     bridge_token: str = field(default="", repr=False)
     expected_project: str = ""
+    catalog_file: str = ""
     max_requests: int = 100
     cache_seconds: float = 60
     timeout_seconds: float = 15
@@ -80,6 +81,7 @@ class Settings:
                 bridge_url=os.getenv("JEV_BRIDGE_URL", "http://127.0.0.1:9845"),
                 bridge_token=token,
                 expected_project=os.getenv("JEV_EXPECTED_PROJECT", ""),
+                catalog_file=os.getenv("JEV_CATALOG_FILE", ""),
                 max_requests=int(os.getenv("JEV_MAX_REQUESTS", "100")),
             )
         except ValueError:

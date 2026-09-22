@@ -7,7 +7,7 @@ public class JevEditor : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PrivateDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "UnrealEd", "Json", "HTTPServer",
-            "AssetRegistry", "Sockets"
+            "AssetRegistry", "Sockets", "PhysicsCore", "RenderCore", "RHI"
         });
     }
 }

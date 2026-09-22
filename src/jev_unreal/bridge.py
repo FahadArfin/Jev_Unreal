@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import time
 from pathlib import PureWindowsPath
 
 import httpx
@@ -21,6 +22,7 @@ class UnrealBridge:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
         self.settings = settings
         self._lock = asyncio.Lock()
+        self._next_request = 0.0
         self._http = httpx.AsyncClient(
             transport=transport, timeout=15, trust_env=False, follow_redirects=False
         )
@@ -34,12 +36,25 @@ class UnrealBridge:
                 "missing_bridge_token", "Configure a bridge token of at least 32 characters."
             )
         try:
+            # Native bridge accepts 30 authenticated requests/second, including identity reads.
+            # Keep this client's bursts below that ceiling without retrying any operation.
+            delay = self._next_request - time.monotonic()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self._next_request = time.monotonic() + 0.05
             async with self._http.stream(
                 "POST",
                 f"{self.settings.bridge_url}/jev/v1/call",
                 headers={"Authorization": f"Bearer {self.settings.bridge_token}"},
                 json={"action": action, "params": params},
             ) as response:
+                if response.status_code == 429:
+                    raise JevError(
+                        "rate_limited", "Editor request limit reached; no retry was made."
+                    )
+                if response.status_code in {401, 403}:
+                    code = "unauthorized" if response.status_code == 401 else "forbidden"
+                    raise JevError(code, "The editor rejected bridge authentication or origin.")
                 if response.status_code != 200:
                     raise JevError(
                         "bridge_error", f"Editor bridge returned HTTP {response.status_code}."
@@ -72,6 +87,14 @@ class UnrealBridge:
                     "rate_limited",
                     "level_locked",
                     "actor_unsupported",
+                    "asset_not_found",
+                    "asset_unsupported",
+                    "viewport_unavailable",
+                    "capture_failed",
+                    "capture_too_large",
+                    "response_too_large",
+                    "actor_bounds_unavailable",
+                    "viewport_locked",
                 }
                 if code not in known:
                     code = "bridge_error"
@@ -87,7 +110,18 @@ class UnrealBridge:
             raise JevError("bridge_error", "Editor returned an invalid response.") from None
 
     async def call(self, action: str, params: dict | None = None) -> dict:
-        if action not in {"status", "actors", "assets", "preview", "apply"}:
+        if action not in {
+            "status",
+            "actors",
+            "assets",
+            "preview",
+            "apply",
+            "context",
+            "asset_details",
+            "validate",
+            "capture",
+            "frame",
+        }:
             raise JevError("unknown_action", "Operation is not part of the editor allowlist.")
         async with self._lock:
             status = await self._call("status", {})
@@ -99,7 +133,7 @@ class UnrealBridge:
                 raise JevError(
                     "wrong_project", "Connected editor does not match JEV_EXPECTED_PROJECT."
                 )
-            if action in {"preview", "apply"} and not expected:
+            if action in {"preview", "apply", "frame"} and not expected:
                 raise JevError(
                     "project_required", "Set JEV_EXPECTED_PROJECT before editing a scene."
                 )

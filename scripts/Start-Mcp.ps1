@@ -12,7 +12,8 @@ of the intended Unreal project. Standard output is reserved for the MCP protocol
 [CmdletBinding()]
 param(
     [string]$BridgeTokenFile = $env:JEV_BRIDGE_TOKEN_FILE,
-    [string]$ExpectedProject = $env:JEV_EXPECTED_PROJECT
+    [string]$ExpectedProject = $env:JEV_EXPECTED_PROJECT,
+    [string]$CatalogFile = $env:JEV_CATALOG_FILE
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +33,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $jevRepositoryRoot 'pyproject.toml')
 $jevPreviousApiKey = [Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY', 'Process')
 $jevPreviousBridgeToken = [Environment]::GetEnvironmentVariable('JEV_BRIDGE_TOKEN', 'Process')
 $jevPreviousExpectedProject = [Environment]::GetEnvironmentVariable('JEV_EXPECTED_PROJECT', 'Process')
+$jevPreviousCatalogFile = [Environment]::GetEnvironmentVariable('JEV_CATALOG_FILE', 'Process')
 $jevSecureKey = $null
 $jevKeyPointer = [IntPtr]::Zero
 $jevExitCode = 1
@@ -67,6 +69,13 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($ExpectedProject)) {
         [Environment]::SetEnvironmentVariable('JEV_EXPECTED_PROJECT', $ExpectedProject, 'Process')
     }
+    if (-not [string]::IsNullOrWhiteSpace($CatalogFile)) {
+        $jevResolvedCatalog = (Resolve-Path -LiteralPath $CatalogFile -ErrorAction Stop).ProviderPath
+        if (-not (Test-Path -LiteralPath $jevResolvedCatalog -PathType Leaf)) {
+            throw 'JEV_CATALOG_FILE must point to an explicit catalog JSON file.'
+        }
+        [Environment]::SetEnvironmentVariable('JEV_CATALOG_FILE', $jevResolvedCatalog, 'Process')
+    }
 
     & uv --directory $jevRepositoryRoot run --frozen jev-unreal serve
     $jevExitCode = $LASTEXITCODE
@@ -75,6 +84,7 @@ finally {
     [Environment]::SetEnvironmentVariable('OPENROUTER_API_KEY', $jevPreviousApiKey, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_BRIDGE_TOKEN', $jevPreviousBridgeToken, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_EXPECTED_PROJECT', $jevPreviousExpectedProject, 'Process')
+    [Environment]::SetEnvironmentVariable('JEV_CATALOG_FILE', $jevPreviousCatalogFile, 'Process')
     if ($jevKeyPointer -ne [IntPtr]::Zero) {
         [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($jevKeyPointer)
     }

@@ -40,9 +40,7 @@ bool EqualSecret(const FString& Actual, const FString& Expected)
 
 void Reply(const FHttpResultCallback& Complete, const TSharedRef<FJsonObject>& Object, int32 Status = 200)
 {
-    FString Body;
-    const auto Writer = TJsonWriterFactory<>::Create(&Body);
-    FJsonSerializer::Serialize(Object, Writer);
+    const FString Body = FJevEditorBridge::BoundedResponseBody(Object);
     auto Response = FHttpServerResponse::Create(Body, TEXT("application/json; charset=utf-8"));
     Response->Code = static_cast<EHttpServerResponseCodes>(Status);
     Response->Headers.Add(TEXT("Cache-Control"), {TEXT("no-store")});
