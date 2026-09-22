@@ -1,6 +1,32 @@
 # Validation evidence
 
-## Current 0.4 roadmap milestone
+## Current 0.4.0a2 client pacing correction
+
+The first 0.4 release's feature and pull-request matrices passed, but a subsequent
+Windows Python 3.12 [main run](https://github.com/FahadArfin/Jev_Unreal/actions/runs/35684098069)
+failed the real-time request-spacing assertion once. The same commit's release-tag
+matrix passed. This intermittent failure was investigated and corrected rather
+than hidden by rerunning the failed job.
+
+The client now rechecks its monotonic deadline after an early timer wakeup and
+starts the next 50 ms interval after HTTP response cleanup, including failures.
+Slow transport time no longer consumes that interval. Calls remain serialized;
+cancellation propagates and no request is retried. This deliberately favors
+predictable pacing over maximum throughput.
+
+Nine deterministic timing cases exercise early wakeups, slow response/close,
+HTTP/transport/body failures and cancellation during waiting/dispatch/body/close.
+The **85-test bridge suite passed on installed Windows Python 3.12 and 3.13**.
+The full **1,167-test suite passed on Python 3.13.2 in 47.08 seconds**, followed by
+successful locked sync, Ruff and wheel/source checks (raw report:
+`artifacts/roadmap-pytest-alpha2.xml`). The real 39-tool roadmap/reconnect smoke was rerun successfully
+against the existing 0.4 native editor, with zero provider calls and no map save.
+
+This patch changes Python only. The native build, 21-suite, rendered panel,
+two-editor, installation and provider evidence below belongs to the unchanged
+0.4 native feature milestone; those layers are not presented as newly rerun.
+
+## 0.4 roadmap milestone acceptance
 
 Release **0.4.0a1**, validated on **2026-09-22 UTC**. The nine implemented
 foundations in the [roadmap](ROADMAP.md) are bounded alpha features, not completion

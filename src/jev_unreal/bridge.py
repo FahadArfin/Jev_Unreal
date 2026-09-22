@@ -22,6 +22,8 @@ class UnrealBridge:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
         self.settings = settings
         self._lock = asyncio.Lock()
+        self._clock = time.monotonic
+        self._sleep = asyncio.sleep
         self._next_request = 0.0
         self._http = httpx.AsyncClient(
             transport=transport, timeout=15, trust_env=False, follow_redirects=False
@@ -38,32 +40,35 @@ class UnrealBridge:
         try:
             # Native bridge accepts 30 authenticated requests/second, including identity reads.
             # Keep this client's bursts below that ceiling without retrying any operation.
-            delay = self._next_request - time.monotonic()
-            if delay > 0:
-                await asyncio.sleep(delay)
-            self._next_request = time.monotonic() + 0.05
-            async with self._http.stream(
-                "POST",
-                f"{self.settings.bridge_url}/jev/v1/call",
-                headers={"Authorization": f"Bearer {self.settings.bridge_token}"},
-                json={"action": action, "params": params},
-            ) as response:
-                if response.status_code == 429:
-                    raise JevError(
-                        "rate_limited", "Editor request limit reached; no retry was made."
-                    )
-                if response.status_code in {401, 403}:
-                    code = "unauthorized" if response.status_code == 401 else "forbidden"
-                    raise JevError(code, "The editor rejected bridge authentication or origin.")
-                if response.status_code != 200:
-                    raise JevError(
-                        "bridge_error", f"Editor bridge returned HTTP {response.status_code}."
-                    )
-                content = bytearray()
-                async for chunk in response.aiter_bytes():
-                    content.extend(chunk)
-                    if len(content) > 1048576:
-                        raise JevError("bridge_error", "Editor response exceeds 1 MiB.")
+            while (delay := self._next_request - self._clock()) > 0:
+                await self._sleep(delay)
+            try:
+                async with self._http.stream(
+                    "POST",
+                    f"{self.settings.bridge_url}/jev/v1/call",
+                    headers={"Authorization": f"Bearer {self.settings.bridge_token}"},
+                    json={"action": action, "params": params},
+                ) as response:
+                    if response.status_code == 429:
+                        raise JevError(
+                            "rate_limited", "Editor request limit reached; no retry was made."
+                        )
+                    if response.status_code in {401, 403}:
+                        code = "unauthorized" if response.status_code == 401 else "forbidden"
+                        raise JevError(code, "The editor rejected bridge authentication or origin.")
+                    if response.status_code != 200:
+                        raise JevError(
+                            "bridge_error", f"Editor bridge returned HTTP {response.status_code}."
+                        )
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > 1048576:
+                            raise JevError("bridge_error", "Editor response exceeds 1 MiB.")
+            finally:
+                # Include transport/body/close time and failed attempts in the interval.
+                # Cancellation during the preceding wait makes no new HTTP attempt.
+                self._next_request = self._clock() + 0.05
             payload = json.loads(content)
             if not isinstance(payload, dict):
                 raise ValueError

@@ -1,5 +1,6 @@
 """Exercise authentication, project binding and failures without a live editor."""
 
+import asyncio
 import json
 import time
 
@@ -76,6 +77,214 @@ async def test_fast_requests_are_paced_including_identity_reads():
         assert len(observed) == 4
         assert all(b - a >= 0.045 for a, b in zip(observed, observed[1:], strict=False))
     finally:
+        await bridge.close()
+
+
+class PacingClock:
+    """Advance only this bridge's clock, leaving pytest's event-loop clock alone."""
+
+    def __init__(self, early_wakeups=()):
+        self.now = 100.0
+        self.early_wakeups = iter(early_wakeups)
+        self.sleeps = []
+
+    def monotonic(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+    async def sleep(self, delay):
+        self.sleeps.append(delay)
+        self.advance(min(delay, next(self.early_wakeups, delay)))
+
+
+def bridge_with_clock(clock, handler):
+    bridge = UnrealBridge(Settings(bridge_token=TOKEN), httpx.MockTransport(handler))
+    bridge._clock = clock.monotonic
+    bridge._sleep = clock.sleep
+    return bridge
+
+
+async def test_pacing_rechecks_early_wakeups_before_identity_reads_and_operations():
+    clock = PacingClock(early_wakeups=(0.01, 0.02))
+    observed = []
+
+    def handler(request):
+        observed.append((json.loads(request.content)["action"], clock.monotonic()))
+        return status_response()
+
+    bridge = bridge_with_clock(clock, handler)
+    try:
+        await bridge.call("actors")
+        await bridge.call("context")
+        assert [action for action, _ in observed] == ["status", "actors", "status", "context"]
+        assert [instant for _, instant in observed] == pytest.approx(
+            [100.0, 100.05, 100.10, 100.15]
+        )
+        assert clock.sleeps == pytest.approx([0.05, 0.04, 0.02, 0.05, 0.05])
+    finally:
+        await bridge.close()
+
+
+async def test_pacing_interval_starts_after_transport_body_and_close_complete():
+    clock = PacingClock()
+    started, completed = [], []
+
+    class SlowResponse(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            clock.advance(0.07)
+            yield json.dumps({"ok": True, "result": {"project_file": PROJECT}}).encode()
+
+        async def aclose(self):
+            clock.advance(0.04)
+            completed.append(clock.monotonic())
+
+    def handler(request):
+        started.append(clock.monotonic())
+        clock.advance(0.03)
+        return httpx.Response(200, stream=SlowResponse())
+
+    bridge = bridge_with_clock(clock, handler)
+    try:
+        await bridge.call("status")
+        await bridge.call("status")
+        assert len(started) == len(completed) == 2
+        assert completed[0] - started[0] == pytest.approx(0.14)
+        assert started[1] - completed[0] == pytest.approx(0.05)
+        assert clock.sleeps == pytest.approx([0.05])
+    finally:
+        await bridge.close()
+
+
+@pytest.mark.parametrize("failure", ["transport", "status", "body"])
+async def test_failed_http_attempts_still_require_a_full_interval_without_retry(failure):
+    clock = PacingClock()
+    started, completed = [], []
+
+    class FailedResponse(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            clock.advance(0.08)
+            raise httpx.ReadError("synthetic-private-diagnostic")
+            yield b""  # Make this failing body an async iterator.
+
+        async def aclose(self):
+            clock.advance(0.03)
+            completed.append(clock.monotonic())
+
+    def handler(request):
+        started.append(clock.monotonic())
+        if len(started) > 1:
+            return status_response()
+        clock.advance(0.08)
+        if failure == "transport":
+            completed.append(clock.monotonic())
+            raise httpx.ConnectError("synthetic-private-diagnostic", request=request)
+        return httpx.Response(429 if failure == "status" else 200, stream=FailedResponse())
+
+    bridge = bridge_with_clock(clock, handler)
+    try:
+        with pytest.raises(JevError) as caught:
+            await bridge.call("status")
+        assert caught.value.code == (
+            "rate_limited" if failure == "status" else "editor_unavailable"
+        )
+        assert "synthetic-private-diagnostic" not in str(caught.value)
+        assert len(started) == len(completed) == 1
+        await bridge.call("status")
+        assert len(started) == 2
+        assert started[1] - completed[0] == pytest.approx(0.05)
+    finally:
+        await bridge.close()
+
+
+async def test_cancellation_while_pacing_preserves_deadline_without_dispatching():
+    clock = PacingClock()
+    started = []
+    waiting, never = asyncio.Event(), asyncio.Event()
+
+    def handler(request):
+        started.append(clock.monotonic())
+        return status_response()
+
+    async def cancellable_sleep(delay):
+        clock.sleeps.append(delay)
+        clock.advance(0.01)
+        waiting.set()
+        await never.wait()
+
+    bridge = bridge_with_clock(clock, handler)
+    await bridge.call("status")
+    bridge._sleep = cancellable_sleep
+    pending = asyncio.create_task(bridge.call("actors"))
+    try:
+        await asyncio.wait_for(waiting.wait(), timeout=5)
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        assert started == [100.0]
+        assert bridge._next_request == pytest.approx(100.05)
+        bridge._sleep = clock.sleep
+        await bridge.call("status")
+        assert started == pytest.approx([100.0, 100.05])
+        assert clock.sleeps == pytest.approx([0.05, 0.04])
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await bridge.close()
+
+
+@pytest.mark.parametrize("phase", ["entry", "body", "close"])
+async def test_cancellation_during_http_attempt_paces_next_request_after_cleanup(phase):
+    clock = PacingClock()
+    started, completed = [], []
+    waiting, never = asyncio.Event(), asyncio.Event()
+
+    async def pause():
+        clock.advance(0.08)
+        waiting.set()
+        await never.wait()
+
+    class CancelledResponse(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            if phase == "body":
+                await pause()
+            yield json.dumps({"ok": True, "result": {"project_file": PROJECT}}).encode()
+
+        async def aclose(self):
+            try:
+                if phase == "close":
+                    await pause()
+            finally:
+                clock.advance(0.03)
+                completed.append(clock.monotonic())
+
+    async def handler(request):
+        started.append(clock.monotonic())
+        if len(started) > 1:
+            return status_response()
+        if phase == "entry":
+            try:
+                await pause()
+            finally:
+                clock.advance(0.03)
+                completed.append(clock.monotonic())
+        return httpx.Response(200, stream=CancelledResponse())
+
+    bridge = bridge_with_clock(clock, handler)
+    pending = asyncio.create_task(bridge.call("status"))
+    try:
+        await asyncio.wait_for(waiting.wait(), timeout=5)
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        assert len(started) == len(completed) == 1
+        await bridge.call("status")
+        assert len(started) == 2
+        assert started[1] - completed[0] == pytest.approx(0.05)
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
         await bridge.close()
 
 
