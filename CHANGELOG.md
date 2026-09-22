@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0a1
+
+- Added `unreal_mesh_preview`, increasing the MCP catalog to 40 tools. Freshly
+  inspected replacement and copy recipes bind an explicit actor selection and
+  revision to the native preview.
+- Added native `replace_mesh` with explicit preserve-slots/default-material policy,
+  and `duplicate_mesh` for controlled copies of supported native static mesh props.
+  Previews disclose mesh bounds, material slots and copied collision/render settings.
+- Added mesh/settings verification, material override inspection, asset change
+  invalidation and review-panel details for both operations. Copies require fresh,
+  distinct actor identities; the source is retained unchanged.
+- Preserved mesh-default collision inheritance explicitly. Replacement previews
+  refuse incompatible inherited collision defaults before an edit is applied.
+- Mesh edits remain unsaved Undo transactions. Arbitrary cloning, attachments,
+  simulated physics, automatic pivot correction and unknown customizations are
+  outside this bounded adapter. See [mesh workflows](docs/MESH_WORKFLOWS.md) and
+  [validation evidence](docs/VALIDATION.md).
+
 ## 0.4.0a2
 
 Fix an intermittent Windows client request-spacing failure exposed by post-merge

@@ -1,4 +1,4 @@
-# Native editor inspection and edits (bridge 0.4.0)
+# Native editor inspection and edits (bridge 0.5.0)
 
 These actions use the existing authenticated loopback bridge. They execute on the
 editor game thread and do not call a model provider. Requests remain JSON objects
@@ -162,6 +162,15 @@ plans when changing both its placement and its material.
 | `set_transform` | `actor_path` | At least one of `location`, `rotation`, `scale`. |
 | `set_material` | `actor_path`, exact `material_path`, integer `slot` 0–63 | None. |
 | `set_metadata` | `actor_path` | At least one of `label`, `folder`. |
+| `replace_mesh` | `actor_path`, `asset_path`, `material_policy` (`preserve_slots` or `mesh_defaults`) | None. |
+| `duplicate_mesh` | source `actor_path`, new `label` | Absolute `location`, `rotation`, `scale`; omitted values inherit the source. |
+
+The two mesh operations require native bridge 0.5 capabilities. They expose a
+reviewed subset of native static mesh actor behavior; duplication is not a general
+UObject clone. See [mesh workflow contracts](MESH_WORKFLOWS.md) for copied settings,
+material-slot policy, unsupported customizations, pivot/collision limitations and
+fresh verification. Normalized previews include effective materials and overrides,
+component settings and mesh review details. The human review panel displays them.
 
 Material assignment accepts only registry-confirmed native `Material` or
 `MaterialInstanceConstant` assets under `/Game` or `/Engine`; redirectors, dynamic

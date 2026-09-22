@@ -1,6 +1,6 @@
 # Architecture
 
-Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.4 alpha exposes 39 MCP tools. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
+Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.5 alpha exposes 40 MCP tools. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,7 @@ The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{acti
 
 Python reads authenticated status before every operation and compares its project with the configured binding. Preview, apply, camera framing and project-job start/cancel require an explicit project. That binding comes from `JEV_EXPECTED_PROJECT` or a selected [connection profile](CONNECTION_PROFILES.md). A profile selects the project, endpoint and token file together at MCP startup; it does not inherit a legacy token or retarget a running process. Each selected editor uses its own MCP process.
 
-Status advertises bridge version `0.4.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
+Status advertises bridge version `0.5.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
 
 For `validation_start`, Python also puts the authenticated status's exact project,
 session, world and revision into the native request. Native code checks these before
@@ -45,6 +45,15 @@ includes project, session, world, current level and revision. Actor records incl
 an opaque live `instance_id`, transforms, world AABBs, material assignments and
 explicit native edit blockers. Missing bounds and truncated material lists remain
 explicit; AABBs are not collision geometry.
+
+Mesh recipes use the same exact actor selection to replace a mesh or create a
+controlled native copy. Their normalized preview retains effective/override
+materials, bounded component settings, local mesh bounds and collision metadata.
+Weak identities, selected metadata fingerprints and a conservative editor asset
+property-change counter invalidate reviewed plans when those observations change.
+These guards do not hash all mesh geometry or sandbox third-party callbacks.
+Fresh checks verify the declared mesh state after application; rendered and
+gameplay/collision acceptance remain separate.
 
 `SceneSnapshots` retains a selected-actor baseline. A later diff obtains fresh
 details, requires matching project/session/world and live actor instances, and

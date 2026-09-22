@@ -4,6 +4,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
 #include "Misc/App.h"
+#include "Serialization/JsonSerializer.h"
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -54,6 +55,25 @@ FString ErrorText(const TSharedPtr<FJsonObject>& Response)
     const TSharedPtr<FJsonObject>* Error = nullptr;
     if (!Response || !Response->TryGetObjectField(TEXT("error"), Error)) return TEXT("Unexpected editor response. Refresh inspection.");
     return String(*Error, TEXT("code")) + TEXT(": ") + String(*Error, TEXT("message"));
+}
+
+FString MeshDetails(const TSharedPtr<FJsonObject>& Operation, const TSharedPtr<FJsonObject>& Baseline)
+{
+    // Keep the complete bounded native review visible, including collision channel
+    // responses and null material overrides which a compact summary would lose.
+    auto Details = MakeShared<FJsonObject>();
+    auto Before = MakeShared<FJsonObject>();
+    if (Baseline)
+        for (const TCHAR* Field : {TEXT("material_slot_count"), TEXT("material_override_count"), TEXT("materials"), TEXT("mesh_settings")})
+            if (const auto Value = Baseline->TryGetField(Field)) Before->SetField(Field, Value);
+    Details->SetObjectField(TEXT("before"), Before);
+    auto After = MakeShared<FJsonObject>();
+    for (const TCHAR* Field : {TEXT("material_slot_count"), TEXT("material_override_count"), TEXT("materials"), TEXT("mesh_settings"), TEXT("mesh_review")})
+        if (const auto Value = Operation->TryGetField(Field)) After->SetField(Field, Value);
+    Details->SetObjectField(TEXT("after"), After);
+    FString Encoded;
+    FJsonSerializer::Serialize(Details, TJsonWriterFactory<>::Create(&Encoded));
+    return TEXT("Reviewed material, collision and mesh details:\n") + Encoded + TEXT("\n");
 }
 }
 
@@ -143,6 +163,26 @@ FString FJevEditorReviewPanel::DescribeReview(const TSharedPtr<FJsonObject>& Rec
         {
             Text += FString::Printf(TEXT("Material slot %d: %s → %s\nTransform unchanged.\n"), static_cast<int32>(Operation->GetNumberField(TEXT("slot"))),
                 *JevReview::String(Baseline, TEXT("material_path")), *JevReview::String(Operation, TEXT("material_path")));
+        }
+        else if (Op == TEXT("replace_mesh") || Op == TEXT("duplicate_mesh"))
+        {
+            if (Op == TEXT("replace_mesh"))
+            {
+                Text += TEXT("Replace mesh: ") + JevReview::String(Baseline, TEXT("static_mesh_path")) + TEXT(" → ") + JevReview::String(Operation, TEXT("asset_path")) + TEXT("\n");
+                Text += TEXT("Material policy: ") + JevReview::String(Operation, TEXT("material_policy")) + TEXT("\nActor identity, transform, label and folder remain. Geometry, local bounds and collision shapes follow the replacement mesh.\n");
+                Text += JevReview::String(Operation, TEXT("material_policy")) == TEXT("preserve_slots")
+                    ? TEXT("Keep effective source materials by slot index; slot names are not matched.\n")
+                    : TEXT("Clear all component overrides and use the replacement mesh's default materials.\n");
+            }
+            else
+            {
+                Text += TEXT("Create controlled mesh copy: ") + JevReview::String(Operation, TEXT("label")) + TEXT("\nSource: ") + JevReview::String(Operation, TEXT("actor_path")) + TEXT("\nMesh: ") + JevReview::String(Operation, TEXT("asset_path")) + TEXT("\n");
+                Text += TEXT("Creates a new actor with the reviewed materials and settings. Source stays unchanged. Extra components, physics simulation and unsupported customized properties are refused.\n");
+                for (const TCHAR* Field : {TEXT("location"), TEXT("rotation"), TEXT("scale")})
+                    Text += FString(Field) + TEXT(": ") + JevReview::DisplayVector(Baseline, Field) + TEXT(" → ") + JevReview::DisplayVector(Operation, Field) + TEXT("\n");
+            }
+            Text += TEXT("Folder: ") + (JevReview::String(Operation, TEXT("folder")).IsEmpty() ? TEXT("(root)") : JevReview::String(Operation, TEXT("folder"))) + TEXT("\n");
+            Text += JevReview::MeshDetails(Operation, Baseline);
         }
         else
         {

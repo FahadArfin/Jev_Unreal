@@ -535,6 +535,16 @@ async def test_redirects_do_not_forward_bridge_credentials():
         ),
         ("preview", {"operations": [{"op": "set_material"}]}, ["set_material"]),
         ("preview", {"operations": [{"op": "set_metadata"}]}, ["set_metadata"]),
+        ("preview", {"operations": [{"op": "replace_mesh"}]}, ["replace_mesh"]),
+        ("preview", {"operations": [{"op": "duplicate_mesh"}]}, ["duplicate_mesh"]),
+        (
+            "preview",
+            {
+                "operations": [{"op": "replace_mesh"}, {"op": "duplicate_mesh"}],
+                "expected_state": {"session_id": "s", "world_path": "w", "revision": "r"},
+            },
+            ["preview_expected_state", "replace_mesh", "duplicate_mesh"],
+        ),
         (
             "frame",
             {"actor_paths": ["/Temp/Map.Map:PersistentLevel.Cube"], "view": "top"},

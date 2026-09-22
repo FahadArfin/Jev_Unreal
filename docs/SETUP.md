@@ -57,7 +57,7 @@ to authenticate and verify the running editor. Native bridge ports use
 `JEV_BRIDGE_PORT` and must be between 1024 and 65535. The default is 9845.
 
 Doctor's overall readiness requires both core inspect/edit/verify capabilities
-and the 0.4 project-tool capabilities. An older connected editor remains visible
+and the project-tool capabilities, including 0.5 mesh editing. An older connected editor remains visible
 under `editor` and `workflow_compatibility`, while `project_workflow_compatibility`
 lists exactly which feature groups need an upgrade. Rebuild and relaunch the
 matching source plugin, then rerun doctor. A ready capability report does not

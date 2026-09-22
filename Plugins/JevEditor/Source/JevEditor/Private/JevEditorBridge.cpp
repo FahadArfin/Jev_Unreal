@@ -11,6 +11,7 @@
 #include "HAL/PlatformTime.h"
 #include "LevelUtils.h"
 #include "Materials/MaterialInterface.h"
+#include "PhysicsEngine/BodySetup.h"
 #include "Misc/Base64.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/Paths.h"
@@ -18,6 +19,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/MemoryWriter.h"
 #include "UObject/ObjectKey.h"
+#include "UObject/UObjectGlobals.h"
 
 namespace Jev
 {
@@ -63,12 +65,136 @@ FString ObjectIdentity(const UObject* Object)
     return FBase64::Encode(Bytes);
 }
 
+FString JsonFingerprint(const TSharedRef<FJsonObject>& State)
+{
+    FString Encoded;
+    auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Encoded);
+    FJsonSerializer::Serialize(State, Writer);
+    const FTCHARToUTF8 Bytes(*Encoded);
+    return FMD5::HashBytes(reinterpret_cast<const uint8*>(Bytes.Get()), Bytes.Length());
+}
+
 }
 
 FJevEditorBridge::FJevEditorBridge(TFunction<double()> InClock)
     : SessionId(FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens)), Clock(MoveTemp(InClock))
 {
     if (!Clock) Clock = [] { return FPlatformTime::Seconds(); };
+    // Conservative, bounded invalidation: editor changes to any mesh/material/body
+    // invalidate reviewed scene state, including changes to material ancestors.
+    AssetChangeHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddLambda([this](UObject* Object, FPropertyChangedEvent&)
+    {
+        for (UObject* Current = Object; Current; Current = Current->GetOuter())
+            if (Current->IsA<UStaticMesh>() || Current->IsA<UMaterialInterface>() || Current->IsA<UBodySetup>())
+            { ++AssetChangeEpoch; break; }
+    });
+}
+
+FJevEditorBridge::~FJevEditorBridge()
+{
+    FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(AssetChangeHandle);
+}
+
+FJevEditorBridge::FMeshSettings FJevEditorBridge::CaptureMeshSettings(AStaticMeshActor* Actor) const
+{
+    FMeshSettings Settings;
+    const UStaticMeshComponent* Component = Actor->GetStaticMeshComponent();
+    Settings.Mobility = static_cast<uint8>(Component->Mobility);
+    Settings.CollisionMode = static_cast<uint8>(Component->BodyInstance.GetCollisionEnabled(false));
+    Settings.CollisionObjectType = static_cast<uint8>(Component->GetCollisionObjectType());
+    Settings.CollisionProfile = Component->GetCollisionProfileName();
+    Settings.bUseMeshDefaultCollision = Component->bUseDefaultCollision;
+    for (int32 Channel = 0; Channel < 32; ++Channel) Settings.CollisionResponses.Add(static_cast<uint8>(Component->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Channel))));
+    Settings.bActorCollisionEnabled = Actor->GetActorEnableCollision();
+    Settings.bCastShadow = Component->CastShadow;
+    Settings.bVisible = Component->IsVisible();
+    Settings.bHiddenInGame = Component->bHiddenInGame;
+    Settings.bActorHiddenInGame = Actor->IsHidden();
+    Settings.bActorHiddenInEditor = Actor->IsTemporarilyHiddenInEditor();
+    Settings.ActorTags = Actor->Tags;
+    Settings.ComponentTags = Component->ComponentTags;
+    return Settings;
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::MeshSettingsSnapshot(const FMeshSettings& Settings) const
+{
+    auto Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("mobility"), Settings.Mobility == EComponentMobility::Static ? TEXT("Static") : Settings.Mobility == EComponentMobility::Stationary ? TEXT("Stationary") : TEXT("Movable"));
+    Result->SetNumberField(TEXT("collision_mode"), Settings.CollisionMode);
+    Result->SetStringField(TEXT("collision_profile"), Settings.CollisionProfile.ToString());
+    Result->SetBoolField(TEXT("use_mesh_default_collision"), Settings.bUseMeshDefaultCollision);
+    Result->SetNumberField(TEXT("collision_object_type"), Settings.CollisionObjectType);
+    TArray<TSharedPtr<FJsonValue>> Responses;
+    for (uint8 Value : Settings.CollisionResponses) Responses.Add(MakeShared<FJsonValueNumber>(Value));
+    Result->SetArrayField(TEXT("collision_responses"), Responses);
+    Result->SetBoolField(TEXT("actor_collision_enabled"), Settings.bActorCollisionEnabled);
+    Result->SetBoolField(TEXT("cast_shadow"), Settings.bCastShadow);
+    Result->SetBoolField(TEXT("visible"), Settings.bVisible);
+    Result->SetBoolField(TEXT("hidden_in_game"), Settings.bHiddenInGame);
+    Result->SetBoolField(TEXT("actor_hidden_in_game"), Settings.bActorHiddenInGame);
+    Result->SetBoolField(TEXT("actor_hidden_in_editor"), Settings.bActorHiddenInEditor);
+    const auto Tags = [](const TArray<FName>& Names)
+    {
+        TArray<TSharedPtr<FJsonValue>> Values;
+        for (int32 I = 0; I < FMath::Min(Names.Num(), 32); ++I) Values.Add(MakeShared<FJsonValueString>(Names[I].ToString().Left(128)));
+        return Values;
+    };
+    Result->SetArrayField(TEXT("actor_tags"), Tags(Settings.ActorTags));
+    Result->SetArrayField(TEXT("component_tags"), Tags(Settings.ComponentTags));
+    Result->SetBoolField(TEXT("tags_truncated"), Settings.ActorTags.Num() > 32 || Settings.ComponentTags.Num() > 32 || Settings.ActorTags.ContainsByPredicate([](FName Name) { return Name.ToString().Len() > 128; }) || Settings.ComponentTags.ContainsByPredicate([](FName Name) { return Name.ToString().Len() > 128; }));
+    return Result;
+}
+
+TSharedRef<FJsonObject> FJevEditorBridge::MeshAssetSnapshot(UStaticMesh* Mesh) const
+{
+    auto Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("path"), GetPathNameSafe(Mesh));
+    if (!IsValid(Mesh)) return Result;
+    Result->SetStringField(TEXT("instance_id"), Jev::ObjectIdentity(Mesh));
+    Result->SetStringField(TEXT("lighting_guid"), Mesh->GetLightingGuid().ToString());
+    const FBoxSphereBounds Bounds = Mesh->GetBounds();
+    Result->SetArrayField(TEXT("local_bounds_center_cm"), Jev::Vector(Bounds.Origin));
+    Result->SetArrayField(TEXT("local_bounds_extent_cm"), Jev::Vector(Bounds.BoxExtent));
+    Result->SetNumberField(TEXT("material_slot_count"), Mesh->GetStaticMaterials().Num());
+    TArray<TSharedPtr<FJsonValue>> Slots;
+    for (int32 I = 0; I < FMath::Min(Mesh->GetStaticMaterials().Num(), 64); ++I)
+    {
+        const auto& Slot = Mesh->GetStaticMaterials()[I];
+        auto Item = MakeShared<FJsonObject>();
+        Item->SetStringField(TEXT("slot_name"), Slot.MaterialSlotName.ToString());
+        Item->SetStringField(TEXT("imported_slot_name"), Slot.ImportedMaterialSlotName.ToString());
+        Item->SetStringField(TEXT("material_fingerprint"), MaterialAssetFingerprint(Slot.MaterialInterface.Get()));
+        Slots.Add(MakeShared<FJsonValueObject>(Item));
+    }
+    Result->SetArrayField(TEXT("slots"), Slots);
+    const UBodySetup* Body = Mesh->GetBodySetup();
+    Result->SetStringField(TEXT("body_instance_id"), Jev::ObjectIdentity(Body));
+    if (IsValid(Body))
+    {
+        Result->SetStringField(TEXT("body_guid"), Body->BodySetupGuid.ToString());
+        Result->SetNumberField(TEXT("collision_trace_mode"), static_cast<uint8>(Body->CollisionTraceFlag));
+        Result->SetNumberField(TEXT("simple_collision_shapes"), Body->AggGeom.GetElementCount());
+        auto Defaults = MakeShared<FJsonObject>();
+        Defaults->SetStringField(TEXT("profile"), Body->DefaultInstance.GetCollisionProfileName().ToString());
+        Defaults->SetNumberField(TEXT("mode"), static_cast<uint8>(Body->DefaultInstance.GetCollisionEnabled(false)));
+        Defaults->SetNumberField(TEXT("object_type"), static_cast<uint8>(Body->DefaultInstance.GetObjectType()));
+        TArray<TSharedPtr<FJsonValue>> Responses;
+        for (int32 Channel = 0; Channel < 32; ++Channel) Responses.Add(MakeShared<FJsonValueNumber>(static_cast<uint8>(Body->DefaultInstance.GetResponseToChannel(static_cast<ECollisionChannel>(Channel)))));
+        Defaults->SetArrayField(TEXT("responses"), Responses);
+        Result->SetObjectField(TEXT("default_collision"), Defaults);
+    }
+    Result->SetStringField(TEXT("pivot_semantics"), TEXT("Mesh local origin remains the actor transform origin; bounds center can move when mesh geometry changes."));
+    return Result;
+}
+
+FString FJevEditorBridge::MeshAssetFingerprint(UStaticMesh* Mesh) const
+{
+    return Jev::JsonFingerprint(MeshAssetSnapshot(Mesh));
+}
+
+FString FJevEditorBridge::MaterialAssetFingerprint(UMaterialInterface* Material) const
+{
+    return IsValid(Material) ? GetPathNameSafe(Material) + TEXT("|") + Jev::ObjectIdentity(Material) + TEXT("|") + Material->GetLightingGuid().ToString() : TEXT("null");
 }
 
 TSharedRef<FJsonObject> FJevEditorBridge::Error(const FString& Code, const FString& Message)
@@ -116,7 +242,9 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
         else Result->SetField(TEXT("static_mesh_path"), MakeShared<FJsonValueNull>());
         Result->SetBoolField(TEXT("collision_enabled"), Component->GetCollisionEnabled() != ECollisionEnabled::NoCollision);
         Result->SetStringField(TEXT("collision_profile"), Component->GetCollisionProfileName().ToString());
+        Result->SetObjectField(TEXT("mesh_settings"), MeshSettingsSnapshot(CaptureMeshSettings(const_cast<AStaticMeshActor*>(StaticActor))));
         Result->SetNumberField(TEXT("material_slot_count"), Component->GetNumMaterials());
+        Result->SetNumberField(TEXT("material_override_count"), Component->GetNumOverrideMaterials());
         TArray<TSharedPtr<FJsonValue>> Materials;
         for (int32 Slot = 0; Slot < FMath::Min(Component->GetNumMaterials(), 64); ++Slot)
         {
@@ -125,6 +253,9 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
             UMaterialInterface* Assigned = Component->GetEditorMaterial(Slot);
             if (IsValid(Assigned)) Material->SetStringField(TEXT("path"), Assigned->GetPathName());
             else Material->SetField(TEXT("path"), MakeShared<FJsonValueNull>());
+            UMaterialInterface* Override = Component->OverrideMaterials.IsValidIndex(Slot) ? Component->OverrideMaterials[Slot].Get() : nullptr;
+            if (IsValid(Override)) Material->SetStringField(TEXT("override_path"), Override->GetPathName());
+            else Material->SetField(TEXT("override_path"), MakeShared<FJsonValueNull>());
             Materials.Add(MakeShared<FJsonValueObject>(Material));
         }
         Result->SetArrayField(TEXT("materials"), Materials);
@@ -165,12 +296,22 @@ FString FJevEditorBridge::ActorEditFingerprint(AActor* Actor) const
     State->SetStringField(TEXT("folder"), Actor->GetFolderPath().IsNone() ? TEXT("") : Actor->GetFolderPath().ToString());
     State->SetBoolField(TEXT("editable"), Actor->IsEditable());
     State->SetBoolField(TEXT("label_editable"), Actor->IsActorLabelEditable());
+    State->SetStringField(TEXT("actor_id"), Jev::ObjectIdentity(Actor));
+    State->SetStringField(TEXT("level_id"), Jev::ObjectIdentity(Actor->GetLevel()));
+    State->SetStringField(TEXT("transform"), Actor->GetActorTransform().ToString());
+    State->SetArrayField(TEXT("pivot_offset"), Jev::Vector(Actor->GetPivotOffset()));
     if (const AStaticMeshActor* StaticActor = Cast<AStaticMeshActor>(Actor))
     {
         const UStaticMeshComponent* Component = StaticActor->GetStaticMeshComponent();
         const UStaticMesh* Mesh = Component->GetStaticMesh();
         State->SetStringField(TEXT("mesh"), GetPathNameSafe(Mesh));
         State->SetStringField(TEXT("mesh_id"), Jev::ObjectIdentity(Mesh));
+        State->SetStringField(TEXT("mesh_fingerprint"), MeshAssetFingerprint(const_cast<UStaticMesh*>(Mesh)));
+        State->SetObjectField(TEXT("mesh_settings"), MeshSettingsSnapshot(CaptureMeshSettings(const_cast<AStaticMeshActor*>(StaticActor))));
+        State->SetStringField(TEXT("component_id"), Jev::ObjectIdentity(Component));
+        TArray<TSharedPtr<FJsonValue>> Components;
+        for (const UActorComponent* Item : Actor->GetComponents()) Components.Add(MakeShared<FJsonValueString>(Jev::ObjectIdentity(Item)));
+        State->SetArrayField(TEXT("component_ids"), Components);
         State->SetNumberField(TEXT("material_count"), Component->GetNumMaterials());
         State->SetNumberField(TEXT("override_count"), Component->GetNumOverrideMaterials());
         const FBox Bounds = Actor->GetComponentsBoundingBox(true, false);
@@ -187,17 +328,14 @@ FString FJevEditorBridge::ActorEditFingerprint(AActor* Actor) const
             const UMaterialInterface* Override = Component->OverrideMaterials.IsValidIndex(Slot) ? Component->OverrideMaterials[Slot].Get() : nullptr;
             Material->SetStringField(TEXT("path"), GetPathNameSafe(Effective));
             Material->SetStringField(TEXT("id"), Jev::ObjectIdentity(Effective));
+            Material->SetStringField(TEXT("content"), MaterialAssetFingerprint(const_cast<UMaterialInterface*>(Effective)));
             Material->SetStringField(TEXT("override_path"), GetPathNameSafe(Override));
             Material->SetStringField(TEXT("override_id"), Jev::ObjectIdentity(Override));
             Materials.Add(MakeShared<FJsonValueObject>(Material));
         }
         State->SetArrayField(TEXT("materials"), Materials);
     }
-    FString Encoded;
-    auto Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Encoded);
-    FJsonSerializer::Serialize(State, Writer);
-    const FTCHARToUTF8 Bytes(*Encoded);
-    return FMD5::HashBytes(reinterpret_cast<const uint8*>(Bytes.Get()), Bytes.Length());
+    return Jev::JsonFingerprint(State);
 }
 
 FString FJevEditorBridge::Revision(UWorld* World) const
@@ -217,7 +355,7 @@ FString FJevEditorBridge::Revision(UWorld* World) const
         Entries.Last() += TEXT("|") + Jev::ObjectIdentity(Actor) + TEXT("|") + ActorEditFingerprint(Actor);
     }
     Entries.Sort();
-    const FString State = SessionId + TEXT("|") + Jev::ProjectPath() + TEXT("|") + World->GetPathName() + TEXT("|") + Jev::ObjectIdentity(World) + TEXT("|") + GetPathNameSafe(World->GetCurrentLevel()) + TEXT("|") + Jev::ObjectIdentity(World->GetCurrentLevel()) + TEXT("|") + FString::Join(Entries, TEXT("\n"));
+    const FString State = SessionId + TEXT("|") + LexToString(AssetChangeEpoch) + TEXT("|") + Jev::ProjectPath() + TEXT("|") + World->GetPathName() + TEXT("|") + Jev::ObjectIdentity(World) + TEXT("|") + GetPathNameSafe(World->GetCurrentLevel()) + TEXT("|") + Jev::ObjectIdentity(World->GetCurrentLevel()) + TEXT("|") + FString::Join(Entries, TEXT("\n"));
     const FTCHARToUTF8 Bytes(*State);
     return FMD5::HashBytes(reinterpret_cast<const uint8*>(Bytes.Get()), Bytes.Length());
 }

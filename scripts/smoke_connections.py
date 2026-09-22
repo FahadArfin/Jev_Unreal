@@ -29,7 +29,7 @@ PROJECTS = {
     "primary": ROOT / "examples/JevSandbox/JevSandbox.uproject",
     "installed": ROOT / "artifacts/install-acceptance/JevSandbox/JevSandbox.uproject",
 }
-REPORT = ROOT / "artifacts/connections-smoke-v0.4.json"
+REPORT = ROOT / "artifacts/connections-smoke-v0.5.json"
 CUBE = "/Engine/BasicShapes/Cube.Cube"
 RULES = {
     "localization": "/Script/DataValidation.EditorValidator_Localization",
@@ -84,7 +84,7 @@ async def connect(stack: AsyncExitStack, path: Path, profile: ConnectionProfile)
     session = await stack.enter_async_context(ClientSession(read, write))
     await session.initialize()
     tools = (await session.list_tools()).tools
-    require(len(tools) == 39, "Each selected MCP server must expose the matching 39-tool catalog.")
+    require(len(tools) == 40, "Each selected MCP server must expose the matching 40-tool catalog.")
     return session
 
 
@@ -257,7 +257,7 @@ async def run(profiles_path: Path):
                 sessions[name] = await connect(stack, profiles_path, profiles[name])
                 initial[name] = await context(sessions[name], PROJECTS[name])
                 status = initial[name]
-                require(status["bridge_version"] == "0.4.0", "Rebuild both native plugins for 0.4.")
+                require(status["bridge_version"] == "0.5.0", "Rebuild both native plugins for 0.5.")
                 require(
                     {"plan_status", "validation_start", "validation_job"}
                     <= set(status["capabilities"]),
@@ -270,7 +270,7 @@ async def run(profiles_path: Path):
                     "session_id": status["session_id"],
                     "engine_version": status["engine_version"],
                     "bridge_version": status["bridge_version"],
-                    "mcp_tools": 39,
+                    "mcp_tools": 40,
                     "initial_actor_count": status["examined_actors"],
                 }
             require(

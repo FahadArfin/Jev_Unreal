@@ -24,6 +24,7 @@ CATALOG = {
     "unreal_diff": "Compare selected actors with a recorded baseline to identify actual changes.",
     "unreal_verify": "Check fresh actor measurements against explicit expected results.",
     "unreal_spatial_preview": "Preview actor alignment, distribution, grid snapping or grounding.",
+    "unreal_mesh_preview": "Preview mesh replacement or copies of selected native mesh actors.",
     "unreal_plan": "Review a tracked plan and its last known apply outcome; never retries it.",
     "unreal_pending_plans": "List pending native plans shared with the Unreal review panel.",
     "unreal_blueprint_inspect": "Inspect an open Blueprint's graphs, pins and stored errors.",
@@ -142,13 +143,20 @@ class ExpectedState(BaseModel):
 class Operation(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     op: Literal[
-        "spawn_primitive", "spawn_static_mesh", "set_transform", "set_material", "set_metadata"
+        "spawn_primitive",
+        "spawn_static_mesh",
+        "set_transform",
+        "set_material",
+        "set_metadata",
+        "replace_mesh",
+        "duplicate_mesh",
     ]
     shape: Literal["Cube", "Sphere", "Cylinder", "Plane"] | None = None
     label: str | None = Field(default=None, min_length=1, max_length=80)
     actor_path: str | None = Field(default=None, min_length=1, max_length=1024)
     asset_path: str | None = Field(default=None, min_length=1, max_length=512)
     material_path: str | None = Field(default=None, min_length=1, max_length=512)
+    material_policy: Literal["preserve_slots", "mesh_defaults"] | None = None
     slot: int | None = Field(default=None, ge=0, le=63, strict=True)
     folder: str | None = Field(default=None, max_length=256)
     location: tuple[LocationValue, LocationValue, LocationValue] | None = None
@@ -208,9 +216,11 @@ class Operation(BaseModel):
             "set_transform": {"actor_path"},
             "set_material": {"actor_path", "material_path", "slot"},
             "set_metadata": {"actor_path"},
+            "replace_mesh": {"actor_path", "asset_path", "material_policy"},
+            "duplicate_mesh": {"actor_path", "label"},
         }[self.op]
         allowed = required | {"op"}
-        if self.op in {"spawn_primitive", "spawn_static_mesh", "set_transform"}:
+        if self.op in {"spawn_primitive", "spawn_static_mesh", "set_transform", "duplicate_mesh"}:
             allowed |= transforms
         elif self.op == "set_metadata":
             allowed |= {"label", "folder"}

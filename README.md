@@ -7,7 +7,7 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.4 alpha.** Python MCP server + source-built Unreal editor plugin, with **39 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.5 alpha.** Python MCP server + source-built Unreal editor plugin, with **40 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
@@ -25,6 +25,7 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - Preview/apply primitive blockouts, existing static mesh placement, transforms, material assignments and actor labels/folders, with native Undo.
 - Measured grid, staircase and room recipes, with automatic transform readback checks after apply.
 - Measured alignment, distribution, pivot grid snapping and grounding on a specified plane, preserving rotation and scale.
+- Reviewed placeholder mesh replacement with an explicit material policy, plus controlled copies of native props with fresh mesh/material/settings checks. See [mesh workflows](docs/MESH_WORKFLOWS.md).
 - **Window → Jev Review**: inspect selected actors, preview translation/naming/folders, review MCP plans and apply once inside Unreal.
 - Native plan receipts that survive an MCP reconnect while the editor stays open.
 - Already-loaded native Blueprint graphs, variables, pins and stored compiler messages; direct asset dependencies and recorded import provenance.
@@ -65,6 +66,10 @@ uv run jev-unreal doctor
 ```
 
 Initialization creates a random token under `%LOCALAPPDATA%\JevUnreal`, sets this shell's environment, and targets the isolated `examples/JevSandbox` project. Keep the editor open. The bridge token is separate from your provider key. The default port is **9845**; each additional editor needs its own `JEV_BRIDGE_PORT` and matching connection profile. [Multiple editor setup](docs/CONNECTION_PROFILES.md).
+
+For automated rendered sandbox sessions, `Launch-Unreal.ps1 -Unattended` suppresses
+interactive startup prompts while retaining viewport rendering. Verify live
+`status` before scene work; a listening port alone does not prove editor readiness.
 
 For your own project, use the [reviewed installer](docs/SETUP.md). It previews exact source changes and project enablement before applying:
 
@@ -129,7 +134,7 @@ are ignored. `jev-unreal profiles list FILE` lists bindings without reading toke
 
 ## Tools
 
-The server exposes 39 tools. New project workflows require the matching
+The server exposes 40 tools. New project workflows require the matching
 native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 
 | Tool | Purpose | Cloud |
@@ -159,6 +164,7 @@ native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 | `unreal_preview` | Validate a batch; optional measured state; return a 120-second plan | No |
 | `unreal_layout_preview` | Preview a measured grid, staircase or room | No |
 | `unreal_spatial_preview` | Measure actors and preview align/distribute/snap-grid/ground recipes | No |
+| `unreal_mesh_preview` | Preview mesh replacement or controlled prop copies from fresh actor inspection | No |
 | `unreal_apply` | Apply once in an Undo transaction; check native readback | No |
 | `unreal_plan` | Read native session receipt, with explicitly marked local fallback | No |
 | `unreal_pending_plans` | List pending native previews shared with Jev Review | No |

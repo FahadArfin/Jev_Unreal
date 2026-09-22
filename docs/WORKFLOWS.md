@@ -1,11 +1,15 @@
 # Practical workflows
 
 All examples are MCP tool arguments. Start with `unreal_context` and confirm the
-intended project. The 0.4 alpha exposes 39 tools. Local editor, discovery search,
+intended project. The 0.5 alpha exposes 40 tools. Local editor, discovery search,
 layout/spatial recipes, snapshots, verification, asset filtering and diagnostic
 grouping require no provider key. Optional Jev requests are explicit, bounded
 judgments; they do not execute an operation. Replace every example actor/asset
 path and state token with values from your own current editor inspection.
+
+For placeholder replacement and repeated props, follow the
+[mesh inspect → preview → apply → verify workflow](MESH_WORKFLOWS.md). It requires
+the 0.5 native plugin and exposes material/collision choices in the plan.
 
 ## Edit existing actors with fresh evidence
 
@@ -17,7 +21,8 @@ path and state token with values from your own current editor inspection.
    its `snapshot_id` and project/session/world identity. This is selected-actor
    evidence, not a scene backup.
 4. Define measurable post-edit requirements. Use `unreal_spatial_preview` for
-   geometric translations, or `unreal_preview` for explicit supported operations
+   geometric translations, `unreal_mesh_preview` for reviewed replacement/copy
+   recipes, or `unreal_preview` for explicit supported operations
    with `expected_state` from the latest measurement. Review the normalized plan.
 5. Apply the returned plan once, within its 120-second lifetime and the user's
    authorized scope. Inspect `applied` and immediate `verification` separately.
