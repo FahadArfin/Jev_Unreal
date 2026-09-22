@@ -107,6 +107,10 @@ FJevEditorBridge::FMeshSettings FJevEditorBridge::CaptureMeshSettings(AStaticMes
     for (int32 Channel = 0; Channel < 32; ++Channel) Settings.CollisionResponses.Add(static_cast<uint8>(Component->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Channel))));
     Settings.bActorCollisionEnabled = Actor->GetActorEnableCollision();
     Settings.bCastShadow = Component->CastShadow;
+    Settings.bReceivesDecals = Component->bReceivesDecals;
+    Settings.bRenderCustomDepth = Component->bRenderCustomDepth;
+    Settings.CustomDepthStencilValue = Component->CustomDepthStencilValue;
+    Settings.TranslucencySortPriority = Component->TranslucencySortPriority;
     Settings.bVisible = Component->IsVisible();
     Settings.bHiddenInGame = Component->bHiddenInGame;
     Settings.bActorHiddenInGame = Actor->IsHidden();
@@ -129,6 +133,10 @@ TSharedRef<FJsonObject> FJevEditorBridge::MeshSettingsSnapshot(const FMeshSettin
     Result->SetArrayField(TEXT("collision_responses"), Responses);
     Result->SetBoolField(TEXT("actor_collision_enabled"), Settings.bActorCollisionEnabled);
     Result->SetBoolField(TEXT("cast_shadow"), Settings.bCastShadow);
+    Result->SetBoolField(TEXT("receives_decals"), Settings.bReceivesDecals);
+    Result->SetBoolField(TEXT("render_custom_depth"), Settings.bRenderCustomDepth);
+    Result->SetNumberField(TEXT("custom_depth_stencil_value"), Settings.CustomDepthStencilValue);
+    Result->SetNumberField(TEXT("translucency_sort_priority"), Settings.TranslucencySortPriority);
     Result->SetBoolField(TEXT("visible"), Settings.bVisible);
     Result->SetBoolField(TEXT("hidden_in_game"), Settings.bHiddenInGame);
     Result->SetBoolField(TEXT("actor_hidden_in_game"), Settings.bActorHiddenInGame);

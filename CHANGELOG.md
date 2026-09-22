@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0a1
+
+- Added ten MCP tools (54 total) covering the next ten roadmap engineering slices.
+- Added project-approved ordinary Blueprint math-input literal previews, native Undo
+  and fresh compilation. Pin editing requires a separate local policy switch.
+- Added scalar/vector material-instance and native light edits plus repeatable
+  perspective camera poses, with expiring one-shot plans and native readback receipts.
+- Extended mesh copies to decal reception, custom depth/stencil and translucent
+  sorting, preserving existing refusal and fresh-verification rules.
+- Added approved-surface trace placement, slope/overlap refusal, bounded mesh/import
+  dependency diagnosis, native Recast route/agent checks, stored skeleton/animation
+  compatibility and Widget Blueprint design-tree diagnostics.
+- Added bounded editor timing/memory captures, cancellation and comparisons that
+  reject incomplete or mismatched measurements. No GPU or productivity claim.
+- Added native failure/Undo tests, rendered red-to-green material and camera-restore
+  evidence, official MCP schema/transport checks and domain workflow documentation.
+- These are bounded initial scopes; wider graph operations, hierarchy copies,
+  DCC round trips, pawn movement, runtime UI and independent user studies remain open.
+
 ## 0.7.0a1
 
 - Added four MCP tools for project-approved Blueprint compile targets, state-bound

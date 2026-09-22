@@ -243,6 +243,10 @@ bool FJevMeshDuplicateTest::RunTest(const FString& Parameters)
     Component->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
     Source->SetActorEnableCollision(false);
     Component->SetCastShadow(false);
+    Component->SetReceivesDecals(false);
+    Component->SetRenderCustomDepth(true);
+    Component->SetCustomDepthStencilValue(87);
+    Component->SetTranslucentSortPriority(-3);
     Component->SetVisibility(false);
     Component->SetHiddenInGame(true);
     Source->SetActorHiddenInGame(true);
@@ -312,9 +316,9 @@ bool FJevMeshGuardsTest::RunTest(const FString& Parameters)
     Component->BodyInstance.bSimulatePhysics = true;
     TestEqual(TEXT("Simulation blocks mesh changes"), ErrorCode(Preview(Bridge, {Replace(Source, Sphere)})), FString(TEXT("actor_unsupported")));
     Component->BodyInstance.bSimulatePhysics = false;
-    Component->SetRenderCustomDepth(true);
+    Component->SetRenderInMainPass(false);
     TestEqual(TEXT("Unsupported nondefault rendering is not silently lost"), ErrorCode(Preview(Bridge, {Copy})), FString(TEXT("actor_unsupported")));
-    Component->SetRenderCustomDepth(false);
+    Component->SetRenderInMainPass(true);
     FBoolProperty* AngularOverride = FindFProperty<FBoolProperty>(FBodyInstance::StaticStruct(), TEXT("bOverrideMaxAngularVelocity"));
     if (!TestNotNull(TEXT("Native angular velocity override flag is available"), AngularOverride)) return false;
     AngularOverride->SetPropertyValue_InContainer(&Component->BodyInstance, true);

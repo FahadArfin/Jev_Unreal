@@ -1,8 +1,34 @@
 # Unreal validation
 
-Jev Editor **0.7.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
+Jev Editor **0.8.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
 
-## Current 0.7 project workflows
+## Current 0.8 domain workflows
+
+The final licensed native build passed in **6.24 seconds**. Editor report
+**`2026.09.22-06.42.47`** records **40/40 passed** (37 clean, three existing
+warning-bearing suites). Rendered report **`2026.09.22-06.43.26`** records
+**4/4 passed**, zero warnings. No failed, skipped or incomplete tests.
+
+New suites: `BlueprintPinWorkflow`, `DomainMaterials`, `DomainLights`,
+`DomainSurface`, `DomainAssets`, `DomainRigWidgets`, `DomainPerformance`, and
+rendered `DomainMaterialsCamera`. Existing mesh-copy tests now preserve and check
+the four extended rendering settings. Existing gameplay recipes exercise the
+domain Recast path query and negative requirements against actual built nav data.
+
+The official stdio client discovers **54 tools** with native bridge **0.8.0**.
+Baseline, roadmap/reconnect, mesh and domain smoke scripts passed in the isolated
+sandbox. Surface placement has fresh transform readback; camera changes have
+capture/restoration and one-shot receipts; timing jobs retain complete measured
+samples and explicit comparison limits. No provider calls were needed.
+
+Native material scalar/vector and Blueprint literal edits have actual Undo and
+compile/readback evidence. One rendered unlit prop visibly changed red to green.
+Stored widget/rig inspection does not prove runtime UI or animation behavior, and
+navigation paths do not prove pawn movement or accessibility. See the detailed
+[0.8 validation](VALIDATION.md#current-08-domain-workflows) and
+[supported domain operations](DOMAIN_WORKFLOWS.md).
+
+## Historical 0.7 project workflows
 
 The final licensed incremental build passed in **7.45 seconds**. Native report
 **`2026.09.22-05.31.37`** records **33/33 passed**: 30 clean and three suites with

@@ -7,11 +7,18 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from .bridge import UnrealBridge
+from .domain_workflows import Strict
 from .errors import JevError
 from .workflows import ExpectedState
 
 TargetId = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")]
 PlanId = Annotated[str, Field(min_length=1, max_length=64)]
+
+
+class PinEdit(Strict):
+    node_id: Annotated[str, Field(min_length=32, max_length=36, pattern=r"^[A-Fa-f0-9-]+$")]
+    pin_id: Annotated[str, Field(min_length=32, max_length=36, pattern=r"^[A-Fa-f0-9-]+$")]
+    value: Annotated[str, Field(min_length=1, max_length=32)]
 
 
 def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
@@ -66,6 +73,28 @@ def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
         visual acceptance. Requires explicit expected project configuration; no PIE/simulation.
         """
         return await call("blueprint_compile", {"plan_id": plan_id})
+
+    @server.tool(annotations=preview)
+    async def unreal_blueprint_pin_preview(
+        target_id: TargetId, pin_edit: PinEdit, expected_state: ExpectedState
+    ) -> dict[str, Any]:
+        """Preview one unconnected bool/int/real input literal on an approved native math node.
+
+        Supports Add_IntInt, Multiply_IntInt, Add_DoubleDouble, Multiply_DoubleDouble and
+        Not_PreBool in a loaded ordinary Blueprint approved for compilation. Inspect graph
+        node/pin GUIDs first. No new nodes, links, object defaults or arbitrary expressions.
+        Commit using unreal_blueprint_compile: it edits in an Undo transaction and compiles.
+        Compiler failure retains the edit for explicit Undo/correction. Callbacks are trusted
+        project code; complete rollback and runtime/semantic success are not guaranteed.
+        """
+        return await call(
+            "blueprint_pin_preview",
+            {
+                "target_id": target_id,
+                "pin_edit": pin_edit.model_dump(),
+                "expected_state": expected_state.model_dump(),
+            },
+        )
 
     @server.tool(annotations=read)
     async def unreal_blueprint_compile_receipt(plan_id: PlanId) -> dict[str, Any]:

@@ -45,6 +45,10 @@ class MeshSettings(BaseModel):
     )
     actor_collision_enabled: bool
     cast_shadow: bool
+    receives_decals: bool
+    render_custom_depth: bool
+    custom_depth_stencil_value: int = Field(ge=0, le=255)
+    translucency_sort_priority: int = Field(ge=-32767, le=32767)
     visible: bool
     hidden_in_game: bool
     actor_hidden_in_game: bool

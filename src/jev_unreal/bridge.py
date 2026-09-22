@@ -156,6 +156,14 @@ class UnrealBridge:
             "blueprint_compile_preview",
             "blueprint_compile",
             "blueprint_compile_receipt",
+            "blueprint_pin_preview",
+            "workflow_inspect",
+            "workflow_preview",
+            "workflow_apply",
+            "workflow_receipt",
+            "performance_start",
+            "performance_job",
+            "performance_cancel",
             "asset_dependencies",
             "asset_import_info",
             "validation_rules",
@@ -190,6 +198,11 @@ class UnrealBridge:
                     "functional_cancel",
                     "blueprint_compile_preview",
                     "blueprint_compile",
+                    "blueprint_pin_preview",
+                    "workflow_preview",
+                    "workflow_apply",
+                    "performance_start",
+                    "performance_cancel",
                 }
                 and not expected
             ):
@@ -199,6 +212,11 @@ class UnrealBridge:
             if action == "status":
                 return status
             required_capabilities = set()
+            if (
+                action.startswith(("workflow_", "performance_"))
+                or action == "blueprint_pin_preview"
+            ):
+                required_capabilities.add(action)
             if action in {
                 "pending_plans",
                 "plan_status",
@@ -269,7 +287,15 @@ class UnrealBridge:
                     "expected_project": actual,
                     "expected_state": state,
                 }
-            if action in {"blueprint_compile_preview", "blueprint_compile"}:
+            if action in {
+                "blueprint_compile_preview",
+                "blueprint_compile",
+                "blueprint_pin_preview",
+                "workflow_preview",
+                "workflow_apply",
+                "performance_start",
+                "performance_cancel",
+            }:
                 if len(actual) > 2048 or any(ord(character) < 32 for character in actual):
                     raise JevError("bridge_error", "Editor returned an invalid project identity.")
                 params = {**(params or {}), "expected_project": actual}

@@ -145,6 +145,7 @@ bool FJevEditorBridge::SupportsMeshOperation(AStaticMeshActor* Actor, bool bDupl
         !JevEdits::ValidTags(Actor->Tags) || !JevEdits::ValidTags(Component->ComponentTags) ||
         Component->GetCollisionProfileName().ToString().Len() > 128 || Component->BodyInstance.GetMaskFilter() != 0) return false;
     if (Component->Mobility > EComponentMobility::Movable || Component->BodyInstance.GetCollisionEnabled(false) > ECollisionEnabled::QueryAndProbe || Component->GetCollisionObjectType() >= 32) return false;
+    if (Component->CustomDepthStencilValue < 0 || Component->CustomDepthStencilValue > 255 || FMath::Abs(static_cast<int64>(Component->TranslucencySortPriority)) > 32767) return false;
     for (int32 Channel = 0; Channel < 32; ++Channel)
         if (Component->GetCollisionResponseToChannel(static_cast<ECollisionChannel>(Channel)) > ECR_Block) return false;
     if (Component->bUseDefaultCollision && (!IsValid(Component->GetStaticMesh()->GetBodySetup()) || !JevEdits::SameCollision(Component->BodyInstance, Component->GetStaticMesh()->GetBodySetup()->DefaultInstance)))
@@ -166,7 +167,7 @@ bool FJevEditorBridge::SupportsMeshOperation(AStaticMeshActor* Actor, bool bDupl
     const AStaticMeshActor* Defaults = GetDefault<AStaticMeshActor>();
     const UStaticMeshComponent* DefaultComponent = Defaults->GetStaticMeshComponent();
     const TSet<FName> ActorFields = {TEXT("ActorLabel"), TEXT("FolderPath"), TEXT("FolderGuid"), TEXT("Tags"), TEXT("bHidden"), TEXT("bHiddenEdTemporary"), TEXT("bActorEnableCollision")};
-    const TSet<FName> ComponentFields = {TEXT("StaticMesh"), TEXT("OverrideMaterials"), TEXT("RelativeLocation"), TEXT("RelativeRotation"), TEXT("RelativeScale3D"), TEXT("Mobility"), TEXT("BodyInstance"), TEXT("bUseDefaultCollision"), TEXT("CastShadow"), TEXT("bVisible"), TEXT("bHiddenInGame"), TEXT("ComponentTags")};
+    const TSet<FName> ComponentFields = {TEXT("StaticMesh"), TEXT("OverrideMaterials"), TEXT("RelativeLocation"), TEXT("RelativeRotation"), TEXT("RelativeScale3D"), TEXT("Mobility"), TEXT("BodyInstance"), TEXT("bUseDefaultCollision"), TEXT("CastShadow"), TEXT("bVisible"), TEXT("bHiddenInGame"), TEXT("ComponentTags"), TEXT("bReceivesDecals"), TEXT("bRenderCustomDepth"), TEXT("CustomDepthStencilValue"), TEXT("TranslucencySortPriority")};
     TSet<FName> BodyFields = {TEXT("CollisionProfileName"), TEXT("CollisionEnabled"), TEXT("ObjectType"), TEXT("CollisionResponses")};
     // Body construction/registration fills these cached values from project settings.
     // They are not copied and are irrelevant while their explicit override is off.
@@ -225,6 +226,14 @@ bool FJevEditorBridge::SetMeshSettings(AStaticMeshActor* Actor, const FMeshSetti
     Actor->SetActorEnableCollision(Settings.bActorCollisionEnabled);
     if (!Valid()) return false;
     Component->SetCastShadow(Settings.bCastShadow);
+    if (!Valid()) return false;
+    Component->SetReceivesDecals(Settings.bReceivesDecals);
+    if (!Valid()) return false;
+    Component->SetRenderCustomDepth(Settings.bRenderCustomDepth);
+    if (!Valid()) return false;
+    Component->SetCustomDepthStencilValue(Settings.CustomDepthStencilValue);
+    if (!Valid()) return false;
+    Component->SetTranslucentSortPriority(Settings.TranslucencySortPriority);
     if (!Valid()) return false;
     Component->SetVisibility(Settings.bVisible, false);
     if (!Valid()) return false;

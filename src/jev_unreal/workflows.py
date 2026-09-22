@@ -31,6 +31,19 @@ CATALOG = {
     "unreal_blueprint_compile_targets": "Discover approved loaded Blueprint compile targets.",
     "unreal_blueprint_compile_preview": "Preview a state-bound compile of an approved Blueprint.",
     "unreal_blueprint_compile": "Compile one reviewed Blueprint plan once; read fresh diagnostics.",
+    "unreal_blueprint_pin_preview": "Preview an approved Blueprint math literal edit and compile.",
+    "unreal_workflow_inspect": (
+        "Inspect material parameters, lights, cameras, import dependencies, skeletons, "
+        "Widget trees, terrain surfaces or native navigation."
+    ),
+    "unreal_workflow_preview": "Preview a material parameter, light or viewport pose change.",
+    "unreal_workflow_apply": "Apply one reviewed domain change once with native readback.",
+    "unreal_workflow_receipt": "Read domain edit outcomes without replaying an uncertain apply.",
+    "unreal_surface_preview": "Preview surface placement with slope and overlap checks.",
+    "unreal_performance_start": "Measure editor timing and memory with a named capture protocol.",
+    "unreal_performance_job": "Read native timing capture progress and measured results.",
+    "unreal_performance_cancel": "Cancel an owned timing capture while retaining partial evidence.",
+    "unreal_performance_compare": "Compare timing captures and configured regression thresholds.",
     "unreal_blueprint_compile_receipt": "Read a retained compile outcome without retrying.",
     "unreal_asset_dependencies": "Inspect direct asset references or referencers in the registry.",
     "unreal_asset_import_info": "Read recorded import provenance without opening source files.",

@@ -7,7 +7,7 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.7 alpha.** Python MCP server + source-built Unreal editor plugin, with **44 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.8 alpha.** Python MCP server + source-built Unreal editor plugin, with **54 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
@@ -30,6 +30,7 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - Native plan receipts that survive an MCP reconnect while the editor stays open.
 - Already-loaded native Blueprint graphs, variables, pins and stored compiler messages; direct asset dependencies and recorded import provenance.
 - Widget/animation Blueprint inspection and project-approved, one-shot [compile review and fresh diagnostics](docs/BLUEPRINT_WORKFLOWS.md), with retained outcomes after MCP reconnects.
+- [Ten domain workflows](docs/DOMAIN_WORKFLOWS.md): approved Blueprint math literals, material parameters, extended mesh-copy settings, collision-surface placement, import/dependency diagnosis, lights and camera poses, native navigation checks, editor timing comparisons, skeleton/animation checks and stored Widget tree diagnostics. Each declares its supported scope.
 - Explicitly approved native Data Validation rules with bounded jobs, cancellation and authoritative valid/invalid/not-validated results.
 - Named project-owned functional tests in an existing standalone PIE session, with native results, timeout and owned cleanup.
 - Source-only [door, navigation, interaction and combat recipes](docs/GAMEPLAY_RECIPES.md) with isolated setup, cleanup and reproducible negative cases.
@@ -138,7 +139,7 @@ are ignored. `jev-unreal profiles list FILE` lists bindings without reading toke
 
 ## Tools
 
-The server exposes 44 tools. New project workflows require the matching
+The server exposes 54 tools. New project workflows require the matching
 native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 
 | Tool | Purpose | Cloud |

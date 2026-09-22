@@ -67,3 +67,11 @@ Successful compilation establishes compiler acceptance at that moment. It does
 not establish widget layout quality, animation correctness, gameplay behavior,
 packaged behavior or compatibility with every project compiler extension. Use
 project-owned functional tests and human review for those acceptance decisions.
+
+## Reviewed primitive pin edits (0.8)
+
+`unreal_blueprint_pin_preview` adds a separate opt-in literal-edit plan. Enable
+`bEnablePinEdits=true` alongside the existing exact compile target policy. Commit
+with `unreal_blueprint_compile`; its receipt distinguishes the pin edit from the
+fresh compiler verdict. Native Undo records the edit; compiler failure retains
+it for explicit correction or Undo. See the [supported nodes and pin constraints](DOMAIN_WORKFLOWS.md#1-reviewed-blueprint-literal-edits).

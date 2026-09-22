@@ -22,7 +22,19 @@ WORKFLOW_CAPABILITIES = {
 }
 
 PROJECT_WORKFLOW_FEATURES = {
-    "mesh_editing": ("Mesh replacement and duplication", {"replace_mesh", "duplicate_mesh"}),
+    "domain_workflows": (
+        "Material, light, camera, terrain, DCC, rig, UI and navigation workflows",
+        {"workflow_inspect", "workflow_preview", "workflow_apply", "workflow_receipt"},
+    ),
+    "blueprint_pin_editing": ("Reviewed Blueprint literal edits", {"blueprint_pin_preview"}),
+    "editor_measurements": (
+        "Bounded editor performance measurements",
+        {"performance_start", "performance_job", "performance_cancel"},
+    ),
+    "mesh_editing": (
+        "Mesh replacement and duplication",
+        {"replace_mesh", "duplicate_mesh", "mesh_extended_settings"},
+    ),
     "plan_review": ("Native plan review", {"pending_plans", "plan_status"}),
     "blueprint_inspection": ("Blueprint inspection", {"blueprint_inspect"}),
     "blueprint_compilation": (
@@ -200,7 +212,7 @@ async def run_command(args, settings: Settings) -> dict:
             )
             + (
                 [
-                    "Rebuild and relaunch the matching JevEditor 0.7 or later for: "
+                    "Rebuild and relaunch the matching JevEditor 0.8 or later for: "
                     + ", ".join(
                         feature["label"]
                         for feature in project_features.values()

@@ -13,6 +13,13 @@
 #include "UObject/StrongObjectPtr.h"
 #include "UObject/UObjectGlobals.h"
 #include "WidgetBlueprint.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
+#include "K2Node_CallFunction.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Editor.h"
+#include "ScopedTransaction.h"
 
 namespace JevBlueprint
 {
@@ -118,6 +125,39 @@ bool Editing(const TSharedRef<FJsonObject>& Identity)
     return Identity->TryGetBoolField(TEXT("play_in_editor"), bPie) && Identity->TryGetBoolField(TEXT("simulating"), bSimulating) && !bPie && !bSimulating;
 }
 
+UEdGraphPin* EditablePin(UBlueprint* BP, const FString& NodeId, const FString& PinId)
+{
+    if (!BP || BP->GetClass() != UBlueprint::StaticClass()) return nullptr;
+    TArray<UEdGraph*> Graphs; BP->GetAllGraphs(Graphs);
+    if (Graphs.Num() > 128) return nullptr;
+    for (UEdGraph* Graph : Graphs)
+    {
+        if (!Graph || !Graph->GetSchema() || Graph->GetSchema()->GetClass() != UEdGraphSchema_K2::StaticClass() || Graph->Nodes.Num() > 2048) continue;
+        for (UEdGraphNode* Node : Graph->Nodes)
+        {
+            if (!Node || Node->NodeGuid.ToString() != NodeId || Node->GetClass() != UK2Node_CallFunction::StaticClass()) continue;
+            const UFunction* Function = CastChecked<UK2Node_CallFunction>(Node)->GetTargetFunction();
+            const TSet<FName> Functions = {TEXT("Add_IntInt"), TEXT("Multiply_IntInt"), TEXT("Add_DoubleDouble"), TEXT("Multiply_DoubleDouble"), TEXT("Not_PreBool")};
+            if (!Function || Function->GetOuter()->GetPathName() != TEXT("/Script/Engine.KismetMathLibrary") || !Functions.Contains(Function->GetFName())) return nullptr;
+            for (UEdGraphPin* Pin : Node->Pins)
+                if (Pin && Pin->PinId.ToString() == PinId && Pin->Direction == EGPD_Input && Pin->LinkedTo.IsEmpty() && !Pin->bDefaultValueIsIgnored && !Pin->bDefaultValueIsReadOnly && !Pin->bOrphanedPin && !Pin->ParentPin && Pin->SubPins.IsEmpty() && !Pin->PinType.IsContainer() && !Pin->PinType.bIsReference &&
+                    (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Int || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Real || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean)) return Pin;
+        }
+    }
+    return nullptr;
+}
+
+bool PinValue(UEdGraphPin* Pin, const FString& Value)
+{
+    if (!Pin || Value.IsEmpty() || Value.Len() > 32) return false;
+    if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean) return Value == TEXT("true") || Value == TEXT("false");
+    double Number = 0;
+    if (!LexTryParseString(Number, *Value) || !FMath::IsFinite(Number) || FMath::Abs(Number) > 1000000) return false;
+    for (TCHAR C : Value) if (!((C >= '0' && C <= '9') || C == '-' || C == '+' || C == '.' || C == 'e' || C == 'E')) return false;
+    if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Int && (Value.Contains(TEXT(".")) || Value.Contains(TEXT("e"), ESearchCase::IgnoreCase))) return false;
+    return Pin->GetSchema()->IsPinDefaultValid(Pin, Value, nullptr, FText::GetEmpty()).IsEmpty();
+}
+
 void SideEffects(const TSharedRef<FJsonObject>& Result)
 {
     Result->SetBoolField(TEXT("save_requested"), false);
@@ -142,6 +182,7 @@ struct FJevBlueprintTools::FPlan
     bool bDirty = false;
     EBlueprintStatus Status = BS_Unknown;
     bool bConsumed = false;
+    FString NodeId, PinId, PinBefore, PinAfter;
 };
 
 FJevBlueprintTools::FJevBlueprintTools(TFunction<double()> InClock)
@@ -165,7 +206,7 @@ bool FJevBlueprintTools::IsSupportedClass(const UClass* Class)
 
 bool FJevBlueprintTools::HandlesAction(const FString& Action)
 {
-    return Action == TEXT("blueprint_compile_targets") || Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_compile") || Action == TEXT("blueprint_compile_receipt");
+    return Action == TEXT("blueprint_compile_targets") || Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_pin_preview") || Action == TEXT("blueprint_compile") || Action == TEXT("blueprint_compile_receipt");
 }
 
 void FJevBlueprintTools::Prune()
@@ -196,6 +237,8 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Targets(const TSharedRef<FJsonObject
     }
     Result->SetArrayField(TEXT("targets"), Rows);
     Result->SetBoolField(TEXT("compiled"), false);
+    bool PinEdits = false; GConfig->GetBool(Section, TEXT("bEnablePinEdits"), PinEdits, GGameIni);
+    Result->SetBoolField(TEXT("pin_editing_enabled"), PinEdits && Config.bEnabled && Config.bValid);
     SideEffects(Result);
     return Success(Result);
 }
@@ -205,7 +248,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
     using namespace JevBlueprint;
     FString TargetId, Project;
     const TSharedPtr<FJsonObject>* State = nullptr;
-    if (!Only(Params, {TEXT("target_id"), TEXT("expected_project"), TEXT("expected_state")}) || !Text(Params, TEXT("target_id"), TargetId, 64) || !Alias(TargetId) || !Text(Params, TEXT("expected_project"), Project, 4096) || !Params->TryGetObjectField(TEXT("expected_state"), State))
+    if (!Only(Params, {TEXT("target_id"), TEXT("expected_project"), TEXT("expected_state"), TEXT("pin_edit")}) || !Text(Params, TEXT("target_id"), TargetId, 64) || !Alias(TargetId) || !Text(Params, TEXT("expected_project"), Project, 4096) || !Params->TryGetObjectField(TEXT("expected_state"), State))
         return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply one target_id, exact expected_project and expected_state."));
     if (Project != Identity->GetStringField(TEXT("project_file"))) return FJevEditorBridge::Error(TEXT("wrong_project"), TEXT("Connected project differs from the requested project."));
     if (!SameState(*State, Identity)) return FJevEditorBridge::Error(TEXT("stale_plan"), TEXT("Inspect the current editor identity before creating a compile preview."));
@@ -220,6 +263,16 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
     if (Plans.Num() >= MaximumPlans) return FJevEditorBridge::Error(TEXT("too_many_plans"), TEXT("The bounded compile receipt store is full; wait for older receipts to expire."));
     const FString PlanId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
     auto Plan = MakeShared<FPlan>();
+    if (Params->HasField(TEXT("pin_edit")))
+    {
+        bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnablePinEdits"), Enabled, GGameIni);
+        if (!Enabled) return FJevEditorBridge::Error(TEXT("target_not_allowed"), TEXT("Enable bEnablePinEdits explicitly in the project BlueprintCompilation policy."));
+        const TSharedPtr<FJsonObject>* Edit = nullptr;
+        if (!Params->TryGetObjectField(TEXT("pin_edit"), Edit) || !Only(*Edit, {TEXT("node_id"), TEXT("pin_id"), TEXT("value")}) || !Text(*Edit, TEXT("node_id"), Plan->NodeId, 64) || !Text(*Edit, TEXT("pin_id"), Plan->PinId, 64) || !Text(*Edit, TEXT("value"), Plan->PinAfter, 32)) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply exact node_id, pin_id and a bounded primitive literal."));
+        UEdGraphPin* Pin = EditablePin(BP, Plan->NodeId, Plan->PinId);
+        if (!PinValue(Pin, Plan->PinAfter) || Pin->DefaultValue.Len() > 64) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Only bounded unlinked primitive inputs on the documented native math nodes are editable."));
+        Plan->PinBefore = Pin->DefaultValue;
+    }
     Plan->TargetId = TargetId; Plan->AssetPath = *Asset; Plan->Target = BP;
     Plan->Identity = Base(Identity); Plan->Epoch = ChangeEpoch; Plan->CreatedAt = Clock();
     Plan->bDirty = BP->GetOutermost()->IsDirty(); Plan->Status = BP->Status;
@@ -237,6 +290,14 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
     Result->SetNumberField(TEXT("expires_in_seconds"), PreviewSeconds);
     Result->SetStringField(TEXT("review"), TEXT("Compile this exact loaded asset once. Review the asset and trusted project compiler code before committing. A stale or failed attempt consumes the plan; never retry a timed-out commit without reading its receipt."));
     SideEffects(Result);
+    if (!Plan->PinId.IsEmpty())
+    {
+        auto Diff = MakeShared<FJsonObject>();
+        Diff->SetStringField(TEXT("node_id"), Plan->NodeId); Diff->SetStringField(TEXT("pin_id"), Plan->PinId);
+        Diff->SetStringField(TEXT("before"), Plan->PinBefore); Diff->SetStringField(TEXT("after"), Plan->PinAfter);
+        Result->SetObjectField(TEXT("pin_edit"), Diff);
+        Result->SetStringField(TEXT("edit_failure_policy"), TEXT("One native Undo transaction records the literal edit. Compiler failure retains the edit and diagnostics for explicit human Undo or correction; compiler callback side effects are not rolled back."));
+    }
     Plan->Receipt = Result; Plans.Add(PlanId, Plan);
     return Success(Result);
 }
@@ -273,6 +334,22 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Compile(const TSharedPtr<FJsonObject
     if (GCompilingBlueprint || BP->bBeingCompiled || BP->bQueuedForCompilation) return Reject(TEXT("editor_busy"), TEXT("Unreal is compiling a Blueprint, or this target is already compiling or queued."));
     TGuardValue<bool> Guard(bCompiling, true);
     TStrongObjectPtr<UBlueprint> KeepAlive(BP);
+    TUniquePtr<FScopedTransaction> EditTransaction;
+    if (!Plan->PinId.IsEmpty())
+    {
+        UEdGraphPin* Pin = EditablePin(BP, Plan->NodeId, Plan->PinId);
+        bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnablePinEdits"), Enabled, GGameIni);
+        if (!Enabled) return Reject(TEXT("policy_invalid"), TEXT("Project pin editing approval changed."));
+        if (!PinValue(Pin, Plan->PinAfter) || Pin->DefaultValue != Plan->PinBefore) return Reject(TEXT("stale_plan"), TEXT("The reviewed graph pin changed."));
+        if (!GEditor || !GEditor->CanTransact() || GEditor->IsTransactionActive() || GIsTransacting) return Reject(TEXT("editor_busy"), TEXT("A separate Undo transaction is required."));
+        EditTransaction = MakeUnique<FScopedTransaction>(NSLOCTEXT("JevEditor", "PinEdit", "Edit Jev Blueprint literal"));
+        BP->Modify(); Pin->GetOwningNode()->Modify();
+        Pin->GetSchema()->TrySetDefaultValue(*Pin, Plan->PinAfter);
+        FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+        Plan->Receipt->SetStringField(TEXT("pin_value_after_edit"), Pin->DefaultValue);
+        Plan->Receipt->SetBoolField(TEXT("pin_edit_applied"), Pin->DefaultValue == Plan->PinAfter);
+        if (Pin->DefaultValue != Plan->PinAfter) return Reject(TEXT("apply_failed"), TEXT("The schema did not retain the requested literal; inspect the asset and Undo transaction."));
+    }
     Plan->Receipt->SetStringField(TEXT("status"), TEXT("running"));
     Plan->Receipt->SetBoolField(TEXT("compiled"), true);
     FCompilerResultsLog Log;
@@ -328,7 +405,11 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Execute(const FString& Action, const
         return Success((*Found)->Receipt.ToSharedRef());
     }
     if (bCompiling) return FJevEditorBridge::Error(TEXT("job_busy"), TEXT("A Blueprint compilation callback is already running."));
-    if (Action == TEXT("blueprint_compile_preview")) return Preview(Params, Identity);
+    if (Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_pin_preview"))
+    {
+        if (!Params || (Action == TEXT("blueprint_pin_preview")) != Params->HasField(TEXT("pin_edit"))) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Pin editing requires the explicit pin preview action."));
+        return Preview(Params, Identity);
+    }
     if (Action == TEXT("blueprint_compile")) return Compile(Params, Identity);
     return FJevEditorBridge::Error(TEXT("unknown_action"), TEXT("Unsupported Blueprint action."));
 }

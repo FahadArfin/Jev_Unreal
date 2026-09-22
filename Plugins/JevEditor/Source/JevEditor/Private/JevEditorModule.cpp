@@ -2,6 +2,7 @@
 #include "JevEditorFunctionalTools.h"
 #include "JevEditorProjectTools.h"
 #include "JevEditorBlueprintTools.h"
+#include "JevEditorWorkflowTools.h"
 #include "JevEditorReviewPanel.h"
 
 #include "Containers/Ticker.h"
@@ -134,6 +135,7 @@ public:
         ProjectTools = MakeUnique<FJevProjectTools>();
         FunctionalTools = MakeUnique<FJevFunctionalTools>();
         BlueprintTools = MakeUnique<FJevBlueprintTools>();
+        WorkflowTools = MakeUnique<FJevWorkflowTools>();
         ReviewPanel->SetBridge(Bridge.Get());
         TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FJevEditorModule::Tick));
         UE_LOG(LogJevEditor, Display, TEXT("Jev editor bridge listening at http://127.0.0.1:%u/jev/v1/call (authentication required)."), BridgePort);
@@ -147,6 +149,7 @@ public:
         if (FunctionalTools) FunctionalTools->Shutdown();
         FunctionalTools.Reset();
         BlueprintTools.Reset();
+        WorkflowTools.Reset();
         if (ReviewPanel) ReviewPanel->Unregister();
         ReviewPanel.Reset();
         if (Router && Route) Router->UnbindRoute(Route);
@@ -170,9 +173,9 @@ private:
         return Response->TryGetBoolField(TEXT("ok"), bOk) && bOk && Response->TryGetObjectField(TEXT("result"), Result) ? *Result : nullptr;
     }
 
-    bool Tick(float)
+    bool Tick(float DeltaSeconds)
     {
-        if ((!ProjectTools || !ProjectTools->HasActiveJob()) && (!FunctionalTools || !FunctionalTools->HasActiveJob())) return true;
+        if ((!ProjectTools || !ProjectTools->HasActiveJob()) && (!FunctionalTools || !FunctionalTools->HasActiveJob()) && (!WorkflowTools || !WorkflowTools->HasActiveJob())) return true;
         const auto Current = Identity();
         if (!Current)
         {
@@ -182,6 +185,7 @@ private:
         }
         if (ProjectTools && Current) ProjectTools->Tick(Current.ToSharedRef());
         if (FunctionalTools && Current) FunctionalTools->Tick(Current.ToSharedRef());
+        if (WorkflowTools && Current) WorkflowTools->Tick(Current.ToSharedRef(), DeltaSeconds);
         return true;
     }
 
@@ -237,7 +241,7 @@ private:
         }
         FString Action;
         if (Object->TryGetStringField(TEXT("action"), Action) &&
-            ((ProjectTools && FJevProjectTools::HandlesAction(Action)) || (FunctionalTools && FJevFunctionalTools::HandlesAction(Action)) || (BlueprintTools && FJevBlueprintTools::HandlesAction(Action))))
+            ((ProjectTools && FJevProjectTools::HandlesAction(Action)) || (FunctionalTools && FJevFunctionalTools::HandlesAction(Action)) || (BlueprintTools && FJevBlueprintTools::HandlesAction(Action)) || (WorkflowTools && FJevWorkflowTools::HandlesAction(Action))))
         {
             const TSharedPtr<FJsonObject>* Params = nullptr;
             bool bValid = Object->TryGetObjectField(TEXT("params"), Params);
@@ -245,10 +249,11 @@ private:
             const auto Current = Identity();
             if (!bValid) Reply(Complete, FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Use action and an object params only.")));
             else if (!Current) Reply(Complete, FJevEditorBridge::Error(TEXT("editor_unavailable"), TEXT("Editor identity is unavailable.")));
-            else if ((Action == TEXT("validation_start") && (FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob())) ||
-                (Action == TEXT("functional_start") && (ProjectTools->HasActiveJob() || BlueprintTools->HasActiveJob())) ||
-                (Action == TEXT("blueprint_compile") && (ProjectTools->HasActiveJob() || FunctionalTools->HasActiveJob())))
+            else if ((Action == TEXT("validation_start") && (FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())) ||
+                (Action == TEXT("functional_start") && (ProjectTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())) ||
+                ((Action == TEXT("blueprint_compile") || Action == TEXT("workflow_apply") || Action == TEXT("performance_start")) && (ProjectTools->HasActiveJob() || FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())))
                 Reply(Complete, FJevEditorBridge::Error(TEXT("job_busy"), TEXT("Another project job is active.")));
+            else if (FJevWorkflowTools::HandlesAction(Action)) Reply(Complete, WorkflowTools->Execute(Action, *Params, Current.ToSharedRef()));
             else if (FJevBlueprintTools::HandlesAction(Action)) Reply(Complete, BlueprintTools->Execute(Action, *Params, Current.ToSharedRef()));
             else if (FJevFunctionalTools::HandlesAction(Action)) Reply(Complete, FunctionalTools->Execute(Action, *Params, Current.ToSharedRef()));
             else Reply(Complete, ProjectTools->Execute(Action, *Params, Current.ToSharedRef()));
@@ -263,6 +268,7 @@ private:
     TUniquePtr<FJevProjectTools> ProjectTools;
     TUniquePtr<FJevFunctionalTools> FunctionalTools;
     TUniquePtr<FJevBlueprintTools> BlueprintTools;
+    TUniquePtr<FJevWorkflowTools> WorkflowTools;
     TUniquePtr<FJevEditorReviewPanel> ReviewPanel;
     FTSTicker::FDelegateHandle TickHandle;
     TSharedPtr<IHttpRouter> Router;
