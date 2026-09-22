@@ -10,6 +10,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
 #include "Editor.h"
 #include "Engine/PointLight.h"
@@ -24,7 +25,9 @@
 #include "Misc/ScopeExit.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UObject/Package.h"
+#include "UObject/UnrealType.h"
 #include "WidgetBlueprint.h"
+#include "Widgets/Text/STextBlock.h"
 
 namespace JevWorkflowTests
 {
@@ -159,6 +162,35 @@ bool FJevDomainRigWidgets::RunTest(const FString&)
     R = Tools.Execute(TEXT("workflow_inspect"), Query(TEXT("widgets"), BP->GetPathName()), Identity()); if (!TestTrue(TEXT("stored widget tree"), R->GetBoolField(TEXT("ok")))) return false;
     TestEqual(TEXT("three widget identities"), R->GetObjectField(TEXT("result"))->GetArrayField(TEXT("widgets")).Num(), 3); TestFalse(TEXT("no runtime construction"), R->GetObjectField(TEXT("result"))->GetBoolField(TEXT("runtime_instantiated")));
     TestFalse(TEXT("no Slate instance created by inspection"), Button->GetCachedWidget().IsValid());
+    auto CachedRoot = Root->TakeWidget();
+    auto* CanvasSlot = CastChecked<UCanvasPanelSlot>(Button->Slot);
+    auto* LayoutProperty = FindFProperty<FStructProperty>(UCanvasPanelSlot::StaticClass(), TEXT("LayoutData"));
+    auto* StoredLayout = LayoutProperty->ContainerPtrToValuePtr<FAnchorData>(CanvasSlot); StoredLayout->Offsets.Right = 123; StoredLayout->Offsets.Bottom = 45;
+    auto CachedButton = Button->TakeWidget(); CachedButton->SetEnabled(false); CachedButton->SetVisibility(EVisibility::Collapsed);
+    auto CachedText = StaticCastSharedRef<STextBlock>(Text->TakeWidget()); int32 BindingCalls = 0;
+    CachedText->SetText(TAttribute<FText>::CreateLambda([&BindingCalls] { ++BindingCalls; return FText::FromString(TEXT("Bound Slate text")); }));
+    BindingCalls = 0;
+    R = Tools.Execute(TEXT("workflow_inspect"), Query(TEXT("widgets"), BP->GetPathName()), Identity());
+    for (const auto& RowValue : R->GetObjectField(TEXT("result"))->GetArrayField(TEXT("widgets")))
+    {
+        const auto Row = RowValue->AsObject();
+        if (Row->GetStringField(TEXT("name")) == TEXT("Action"))
+        {
+            TestTrue(TEXT("stored enabled ignores cached Slate value"), Row->GetBoolField(TEXT("stored_enabled")));
+            TestEqual(TEXT("stored visibility ignores cached Slate value"), Row->GetNumberField(TEXT("stored_visibility")), static_cast<double>(ESlateVisibility::Visible));
+            TestEqual(TEXT("stored canvas size ignores cached Slate slot"), Row->GetArrayField(TEXT("canvas_size"))[0]->AsNumber(), 123.0);
+        }
+        if (Row->GetStringField(TEXT("name")) == TEXT("Label")) TestEqual(TEXT("stored text ignores cached Slate binding"), Row->GetStringField(TEXT("stored_text")), FString(TEXT("Inspect me")));
+    }
+    TestEqual(TEXT("inspection never evaluates Slate text binding"), BindingCalls, 0);
+    StoredLayout->Anchors.Maximum = FVector2D(1, 1); StoredLayout->Offsets.Right = 0; StoredLayout->Offsets.Bottom = 0;
+    R = Tools.Execute(TEXT("workflow_inspect"), Query(TEXT("widgets"), BP->GetPathName()), Identity());
+    for (const auto& RowValue : R->GetObjectField(TEXT("result"))->GetArrayField(TEXT("widgets"))) if (RowValue->AsObject()->GetStringField(TEXT("name")) == TEXT("Action"))
+    {
+        TestTrue(TEXT("stretched margins are not reported as actual size"), RowValue->AsObject()->HasTypedField<EJson::Null>(TEXT("canvas_size")));
+        TestFalse(TEXT("zero stretch margins are not zero-sized widgets"), RowValue->AsObject()->GetBoolField(TEXT("zero_canvas_size")));
+    }
+    CachedText->SetText(FText::FromString(TEXT("Detached test binding")));
     return true;
 }
 

@@ -12,14 +12,14 @@ have explicit supported scopes and remaining acceptance work in the
 | --- | --- | --- |
 | Python tests | **1,451 passed** on Python 3.13 | Typed schemas, transport/project/capability gates, official stdio discovery, recipe/readback contracts and measurement rejection/accounting. These are not Unreal or live-provider tests. |
 | Locked environment and packaging | `uv sync --locked --all-extras`, Ruff and `uv build` passed | Source/wheel construction; no licensed Unreal binary is distributed. |
-| Licensed native build | Successful compile/link, **4.56 seconds** final incremental build | Native UE 5.8.2 compilation; build duration is not a performance benchmark. |
+| Licensed native build | Successful compile/link, **6.24 seconds** final incremental build | Native UE 5.8.2 compilation; build duration is not a performance benchmark. |
 | Editor automation | **40/40 suites passed** | 37 clean and three warning-bearing suites; no failed, skipped or incomplete suites. |
 | Rendered automation | **4/4 suites passed**, zero warnings | Existing review UI tests plus actual red/green material rendering and viewport pose restoration. |
 | Live official MCP | **54 tools**, authenticated bridge **0.8.0** | Baseline, roadmap/reconnect, mesh and new domain smoke workflows in the exact sandbox. |
 | Provider evaluation | **Zero new provider requests** | No Jev routing-efficiency, GPU bottleneck or game-development speedup claim. |
 
-Final editor report: **`2026.09.22-06.32.50`**. Final rendered report:
-**`2026.09.22-06.33.30`**. The warning-bearing suites retain the earlier
+Final editor report: **`2026.09.22-06.42.47`**. Final rendered report:
+**`2026.09.22-06.43.26`**. The warning-bearing suites retain the earlier
 empty-bounds, missing Recast/crowd-manager and typed-element engine warnings;
 the new domain suites passed cleanly.
 
@@ -47,6 +47,11 @@ checks receipt replay refusal and policy/type refusals, and completes two native
 20-sample timing captures. The comparison explicitly makes no significance claim.
 These are editor ticker intervals, including observer overhead and idle/UI work,
 not frame-synchronized GPU/render costs or packaged gameplay performance.
+
+A final native regression constructs cached Slate content that differs from stored
+widget data. Inspection reads fixed known serialized properties, preserves the
+stored enabled/visibility/text/canvas values and never evaluates the text binding.
+Stretched-anchor margins are reported separately from actual fixed-anchor sizes.
 
 An earlier live attempt exposed missing identity fields in native domain inspection
 responses. The placement wrapper refused to preview. The fix retains the identity

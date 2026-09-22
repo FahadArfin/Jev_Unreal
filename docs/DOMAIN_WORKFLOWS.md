@@ -220,8 +220,10 @@ skin-weight validation or DCC file access occurs. Those remain acceptance work.
 Query `widgets` with an exact loaded native Widget Blueprint. Traverse up to 256
 stored design-tree widgets and report parent/class, stored visibility/enabled
 state, native button focusability, bounded text and binding presence, text-overflow
-policy, canvas size and fixed anchors. Inspection creates no Slate/runtime widgets
-and executes no text bindings.
+policy, stored canvas offsets and fixed-anchor sizes. Stretched-anchor margins are
+not reported as actual sizes. Inspection reads fixed serialized fields even when
+the designer has cached Slate widgets; it creates no runtime widgets and executes
+no text bindings.
 
 Zero sizes/fixed anchors are review hints. They do not prove clipping or broken
 focus: DPI, layout, named-slot/user-widget content, runtime bindings and localization

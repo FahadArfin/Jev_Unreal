@@ -4,9 +4,9 @@ Jev Editor **0.8.0** has native automation evidence on Unreal Engine **5.8.2**, 
 
 ## Current 0.8 domain workflows
 
-The final licensed native build passed in **4.56 seconds**. Editor report
-**`2026.09.22-06.32.50`** records **40/40 passed** (37 clean, three existing
-warning-bearing suites). Rendered report **`2026.09.22-06.33.30`** records
+The final licensed native build passed in **6.24 seconds**. Editor report
+**`2026.09.22-06.42.47`** records **40/40 passed** (37 clean, three existing
+warning-bearing suites). Rendered report **`2026.09.22-06.43.26`** records
 **4/4 passed**, zero warnings. No failed, skipped or incomplete tests.
 
 New suites: `BlueprintPinWorkflow`, `DomainMaterials`, `DomainLights`,

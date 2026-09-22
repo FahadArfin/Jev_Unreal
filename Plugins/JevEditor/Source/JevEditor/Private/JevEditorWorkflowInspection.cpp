@@ -16,6 +16,7 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "StaticMeshResources.h"
 #include "WidgetBlueprint.h"
+#include "UObject/UnrealType.h"
 
 namespace JevWorkflow
 {
@@ -117,6 +118,11 @@ TSharedRef<FJsonObject> Widgets(const TSharedPtr<FJsonObject>& P)
     if (!Only(P, {TEXT("kind"), TEXT("target_path")}) || !Text(P, TEXT("target_path"), Path)) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply an exact Widget Blueprint path."));
     auto* BP = Cast<UWidgetBlueprint>(Loaded(Path));
     if (!BP || BP->GetClass() != UWidgetBlueprint::StaticClass() || !BP->WidgetTree) return FJevEditorBridge::Error(TEXT("asset_not_loaded"), TEXT("Open a native Widget Blueprint with a widget tree."));
+    const auto* EnabledProperty = FindFProperty<FBoolProperty>(UWidget::StaticClass(), TEXT("bIsEnabled"));
+    const auto* VisibilityProperty = FindFProperty<FEnumProperty>(UWidget::StaticClass(), TEXT("Visibility"));
+    const auto* TextProperty = FindFProperty<FTextProperty>(UTextBlock::StaticClass(), TEXT("Text"));
+    const auto* LayoutProperty = FindFProperty<FStructProperty>(UCanvasPanelSlot::StaticClass(), TEXT("LayoutData"));
+    if (!EnabledProperty || !VisibilityProperty || !TextProperty || !LayoutProperty || LayoutProperty->Struct != FAnchorData::StaticStruct()) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("This engine's stored widget property layout is not supported."));
     // Traverse only native panel children; do not create widgets or invoke bound getters.
     TArray<UWidget*> Queue; if (BP->WidgetTree->RootWidget) Queue.Add(BP->WidgetTree->RootWidget);
     TSet<UWidget*> Seen; TArray<TSharedPtr<FJsonValue>> Rows; bool Truncated = false;
@@ -124,18 +130,27 @@ TSharedRef<FJsonObject> Widgets(const TSharedPtr<FJsonObject>& P)
     {
         UWidget* W = Queue[I]; if (!IsValid(W) || Seen.Contains(W)) continue; Seen.Add(W);
         auto Row = MakeShared<FJsonObject>(); Row->SetStringField(TEXT("name"), W->GetName().Left(128)); Row->SetStringField(TEXT("class"), W->GetClass()->GetPathName()); Row->SetStringField(TEXT("parent"), GetNameSafe(W->GetParent()).Left(128));
-        Row->SetNumberField(TEXT("stored_visibility"), static_cast<int32>(W->GetVisibility())); Row->SetBoolField(TEXT("stored_enabled"), W->GetIsEnabled());
+        // These three public getters consult cached Slate state when a designer is
+        // open. Read fixed serialized property offsets instead; never call a
+        // getter supplied by a request, property binding or custom widget class.
+        Row->SetNumberField(TEXT("stored_visibility"), VisibilityProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(VisibilityProperty->ContainerPtrToValuePtr<void>(W)));
+        Row->SetBoolField(TEXT("stored_enabled"), EnabledProperty->GetPropertyValue(EnabledProperty->ContainerPtrToValuePtr<void>(W)));
         if (W->GetClass() == UButton::StaticClass()) Row->SetBoolField(TEXT("stored_focusable"), CastChecked<UButton>(W)->GetIsFocusable());
         if (W->GetClass() == UTextBlock::StaticClass())
         {
-            auto* T = CastChecked<UTextBlock>(W); const FString Stored = T->GetText().ToString();
+            auto* T = CastChecked<UTextBlock>(W); const FString Stored = TextProperty->ContainerPtrToValuePtr<FText>(T)->ToString();
             Row->SetStringField(TEXT("stored_text"), Stored.Left(512)); Row->SetBoolField(TEXT("text_truncated"), Stored.Len() > 512); Row->SetBoolField(TEXT("text_bound"), T->TextDelegate.IsBound());
             Row->SetNumberField(TEXT("overflow_policy"), static_cast<int32>(T->GetTextOverflowPolicy()));
         }
         if (auto* Slot = Cast<UCanvasPanelSlot>(W->Slot))
         {
-            auto Size = Slot->GetSize(); Row->SetArrayField(TEXT("canvas_size"), {MakeShared<FJsonValueNumber>(Size.X), MakeShared<FJsonValueNumber>(Size.Y)});
-            const auto Anchors = Slot->GetAnchors(); Row->SetBoolField(TEXT("fixed_canvas_anchors"), Anchors.Minimum == Anchors.Maximum); Row->SetBoolField(TEXT("zero_canvas_size"), Size.X <= 0 || Size.Y <= 0);
+            const auto& Layout = *LayoutProperty->ContainerPtrToValuePtr<FAnchorData>(Slot);
+            const bool Fixed = Layout.Anchors.Minimum == Layout.Anchors.Maximum;
+            const FVector2D Size(Layout.Offsets.Right, Layout.Offsets.Bottom);
+            Row->SetArrayField(TEXT("canvas_offsets"), {MakeShared<FJsonValueNumber>(Layout.Offsets.Left), MakeShared<FJsonValueNumber>(Layout.Offsets.Top), MakeShared<FJsonValueNumber>(Layout.Offsets.Right), MakeShared<FJsonValueNumber>(Layout.Offsets.Bottom)});
+            if (Fixed) Row->SetArrayField(TEXT("canvas_size"), {MakeShared<FJsonValueNumber>(Size.X), MakeShared<FJsonValueNumber>(Size.Y)});
+            else Row->SetField(TEXT("canvas_size"), MakeShared<FJsonValueNull>());
+            Row->SetBoolField(TEXT("fixed_canvas_anchors"), Fixed); Row->SetBoolField(TEXT("zero_canvas_size"), Fixed && (Size.X <= 0 || Size.Y <= 0));
         }
         Rows.Add(MakeShared<FJsonValueObject>(Row));
         if (auto* Panel = Cast<UPanelWidget>(W)) for (int32 C = 0; C < Panel->GetChildrenCount(); ++C)
