@@ -46,16 +46,16 @@ if ($AutomationTests -or $RenderedReviewTest) {
     $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
     $passedCount = [int]$report.succeeded + [int]$report.succeededWithWarnings
     if ($RenderedReviewTest) {
-        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 2) { throw 'Rendered review automation failed or incomplete.' }
-        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow')) {
+        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 3) { throw 'Rendered review automation failed or incomplete.' }
+        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow', 'Jev.Rendered.ReviewNarrowAccessibility')) {
             $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
             if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected rendered automation test did not pass: $expectedTest" }
         }
         Write-Output 'Rendered review automation passed. Inspect Saved/Automation/Jev/Review*.png for visual acceptance.'
         return
     }
-    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 27) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
-    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback', 'Jev.Editor.ReviewPresentation', 'Jev.Editor.ReviewRecovery')) {
+    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 33) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
+    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback', 'Jev.Editor.ReviewPresentation', 'Jev.Editor.ReviewRecovery', 'Jev.Editor.BlueprintVariants', 'Jev.Editor.BlueprintCompileWorkflow', 'Jev.Editor.BlueprintCompileGuards', 'Jev.Editor.ValidatorCompatibility', 'Jev.Editor.GameplayRecipes', 'Jev.Editor.ReviewAccessibleNames')) {
         $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
         if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected Unreal automation test did not pass: $expectedTest" }
     }

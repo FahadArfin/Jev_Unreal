@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.0a1
+
+- Added four MCP tools for project-approved Blueprint compile targets, state-bound
+  previews, one-shot compilation and retained diagnostics. The catalog now has
+  44 tools. Inspection also supports exact native Widget and Animation Blueprints.
+- Added reviewed interrupted-install recovery with write-ahead receipts, exact
+  before/after file hashes and a kernel-held lease. Recovery preserves concurrent
+  edits and distinguishes incomplete operations from committed installs.
+- Added selected-validator compatibility metadata and clearer non-verdict reasons;
+  queued jobs recheck scene revision before the first trusted callback.
+- Added project-owned door, navigation, interaction and combat functional recipes,
+  including setup, owned cleanup and deliberately failing cases.
+- Improved narrow review layouts and native accessibility feedback, with explicit
+  automation and manual acceptance boundaries.
+- Added preregistered, counterbalanced workflow studies with exact evidence hashes,
+  explicit missing/failure denominators and paired comparisons. This does not
+  establish an independent productivity advantage.
+
+See [validation evidence](docs/VALIDATION.md) for actual completed checks and
+remaining real-user, clean-host and representative-project acceptance.
+
 ## 0.6.0a1
 
 - Reworked native plan review into readable Before/After fields for all seven

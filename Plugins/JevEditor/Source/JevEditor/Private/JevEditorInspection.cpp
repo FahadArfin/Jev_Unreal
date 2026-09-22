@@ -104,12 +104,12 @@ TSharedRef<FJsonObject> FJevEditorBridge::StatusSnapshot(UWorld* World) const
     Result->SetStringField(TEXT("world_path"), World->GetPathName());
     Result->SetStringField(TEXT("current_level"), GetPathNameSafe(World->GetCurrentLevel()));
     Result->SetStringField(TEXT("revision"), Revision(World));
-    Result->SetStringField(TEXT("bridge_version"), TEXT("0.6.0"));
+    Result->SetStringField(TEXT("bridge_version"), TEXT("0.7.0"));
     Result->SetBoolField(TEXT("play_in_editor"), GEditor->PlayWorld != nullptr);
     Result->SetBoolField(TEXT("simulating"), GEditor->bIsSimulatingInEditor);
     Result->SetBoolField(TEXT("editor_world"), true);
     TArray<TSharedPtr<FJsonValue>> Capabilities;
-    for (const TCHAR* Capability : {TEXT("status"), TEXT("context"), TEXT("actors"), TEXT("actor_details"), TEXT("assets"), TEXT("asset_details"), TEXT("validate"), TEXT("capture"), TEXT("frame"), TEXT("frame_views"), TEXT("preview"), TEXT("preview_expected_state"), TEXT("set_material"), TEXT("set_metadata"), TEXT("apply"), TEXT("pending_plans"), TEXT("plan_status"), TEXT("blueprint_inspect"), TEXT("asset_dependencies"), TEXT("asset_import_info"), TEXT("validation_rules"), TEXT("validation_start"), TEXT("validation_job"), TEXT("validation_cancel"), TEXT("functional_tests"), TEXT("functional_start"), TEXT("functional_job"), TEXT("functional_cancel")})
+    for (const TCHAR* Capability : {TEXT("status"), TEXT("context"), TEXT("actors"), TEXT("actor_details"), TEXT("assets"), TEXT("asset_details"), TEXT("validate"), TEXT("capture"), TEXT("frame"), TEXT("frame_views"), TEXT("preview"), TEXT("preview_expected_state"), TEXT("set_material"), TEXT("set_metadata"), TEXT("apply"), TEXT("pending_plans"), TEXT("plan_status"), TEXT("blueprint_inspect"), TEXT("blueprint_compile_targets"), TEXT("blueprint_compile_preview"), TEXT("blueprint_compile"), TEXT("blueprint_compile_receipt"), TEXT("asset_dependencies"), TEXT("asset_import_info"), TEXT("validation_rules"), TEXT("validation_start"), TEXT("validation_job"), TEXT("validation_cancel"), TEXT("functional_tests"), TEXT("functional_start"), TEXT("functional_job"), TEXT("functional_cancel")})
         Capabilities.Add(MakeShared<FJsonValueString>(Capability));
     Capabilities.Add(MakeShared<FJsonValueString>(TEXT("replace_mesh")));
     Capabilities.Add(MakeShared<FJsonValueString>(TEXT("duplicate_mesh")));

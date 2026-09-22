@@ -27,7 +27,8 @@ public:
 
 #if WITH_DEV_AUTOMATION_TESTS
     // In-process fixture only; never registered as an authenticated bridge action.
-    static TSharedRef<SWidget> CreateForTesting(FJevEditorBridge& Bridge);
+    static TSharedRef<SWidget> CreateForTesting(FJevEditorBridge& Bridge, bool bExpandLabels = false,
+        TFunction<void(const FString&)> OnAnnouncement = {});
 #endif
 
 private:

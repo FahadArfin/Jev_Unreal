@@ -1,0 +1,1 @@
+FORMAT EXAMPLE ONLY. One full attempt per trial; corrections stay inside elapsed time. Replace with a concrete intervention and retry policy.

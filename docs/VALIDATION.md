@@ -1,6 +1,70 @@
 # Validation evidence
 
-## Current 0.6 native review workflow acceptance
+## Current 0.7 immediate-priority implementation
+
+Tests ran on the existing Windows development host with Python **3.13.2** and
+licensed Unreal **5.8.2**, using only the isolated JevSandbox for editor operations.
+This release implements engineering work across all six immediate priorities;
+it does not complete the external acceptance studies in the roadmap.
+
+| Layer | Result | Scope |
+| --- | --- | --- |
+| Python | **1,363 passed**, **78.45 seconds** | Includes interrupted-install recovery, malformed receipts, stale-plan protection, Blueprint bindings and paired-study bookkeeping. Primarily local/synthetic contracts. |
+| Dependencies/lint/package | Locked extras sync, Ruff and wheel/source build passed | No licensed engine binaries or private evidence distributed. |
+| Licensed native build | Successful compilation/link, **7.45 seconds** final incremental build | Engine-header/toolchain warnings remain; this duration is not a performance benchmark. |
+| Editor automation | **33/33 suites passed**, 30 clean and three warning-bearing suites | Zero failed/skipped/incomplete suites; four empty-bounds, absent-Recast/crowd-manager and typed-element warning entries. |
+| Rendered automation | **3/3 suites passed**, zero warnings | Native keyboard routing, semantic names, narrow expanded-label layout, requested announcements and native captures. |
+| Source installer lifecycle | **14/14 checks passed** using actual 0.6 and 0.7 plugin sources | Two disposable Blueprint-style/C++-style descriptors on this host; no engine compilation of those descriptors or clean-host claim. |
+| Live MCP | **44 tools**, authenticated bridge **0.7.0** | Baseline inspect/preview/apply/verify/capture, reconnect receipts, compile-policy refusal and mesh workflow checks in the exact sandbox. |
+| Saved launcher | **44 tools**, correct sandbox and bridge **0.7.0** | Existing encrypted key configuration worked; **zero provider requests**. |
+
+The final editor report is **`2026.09.22-05.31.37`**; the rendered report is
+**`2026.09.22-05.29.26`**. New suites cover native Widget/Animation Blueprint
+inspection, successful and deliberately failed fresh compilation, one-shot and
+stale/policy/expiry/compiler-busy guards, native validator helper conventions and
+engine-rule behavior, and actual focusable accessibility names.
+
+`Jev.Editor.GameplayRecipes` runs four passing recipes, four deliberate gameplay
+regressions and a repeated door run through the named functional adapter. Door
+rotation/collision, interaction range and one-use state, real ApplyDamage/health,
+and a complete Recast path are observed. Owned subjects are cleaned up and the
+fixture waits for its own PIE teardown. Earlier navigation fixtures failed because
+the first build ran while Unreal held a load lock and the spawned bounds volume
+had no brush model. The final fixture waits for engine unlock, uses Unreal's volume
+factory and verifies actual bounds. Failed fixture runs are not counted as passes.
+
+Rendered captures were viewed at [320 pixels with expanded English labels](images/review-panel-v0.7-narrow-pseudo.png)
+and [after keyboard error activation](images/review-panel-v0.7-narrow-result.png).
+Long labels wrap and the result is reachable. The announcement test observes the
+request to Unreal's accessibility layer, not operating-system delivery or speech.
+No physical keyboard, actual screen reader, translated language or representative
+artist acceptance is claimed.
+
+Installer source fingerprints are **`d48d7f2ced5af92714cb6dbb184647023851eb14d1da2fb3eeb04c405c481fad`**
+for 0.6 and **`1e191c3431cda3ca03160ed109bfc644e782039652abeaa0d16fe280684bd658`**
+for 0.7. Each descriptor passed baseline install, modified-source refusal, actual
+child-process termination during upgrade plus exact baseline recovery, successful
+upgrade, repair and removal/preservation checks. Unit regressions also cover an
+active operating-system lease, real Windows sharing denial, malformed receipt
+fields and refusal to replay a closed rollback against a later successful install.
+This does not prove power-loss durability or fresh-machine onboarding.
+
+The workflow-study format example intentionally contains **zero observations**.
+Tests verify preregistered method order, matched state/configuration/criteria hashes,
+all planned trials in completion denominators, failures in measured time, unknown
+costs and explicit human-versus-automated evidence. No direct-agent/keyword/Jev
+full-workflow productivity study or new provider benchmark was performed in 0.7.
+The earlier eight-case live routing run remains historical evidence only.
+
+Local raw reports remain ignored under `artifacts/pytest-v07.xml`,
+`build-v07-final.log`, `unreal-automation/`, `unreal-rendered/`,
+`setup-lifecycle-v07-final-report.json`, `editor-smoke-v0.7.json`,
+`roadmap-smoke-v0.7.json`, `mesh-workflows-v0.7.json` and
+`saved-launcher-v0.7.json`. Multiple-editor and wider-platform checks were not rerun
+for this milestone. See the [community acceptance protocol](COMMUNITY_ACCEPTANCE.md)
+for the remaining human, clean-host, real-project and independent-study work.
+
+## Historical 0.6 native review workflow acceptance
 
 The 0.6 alpha improves the human review workflow while retaining the same 40 MCP
 tools and execution contracts. Tests used the exact isolated JevSandbox on

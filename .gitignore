@@ -58,4 +58,5 @@ Desktop.ini
 /examples/JevSandbox/Config/DefaultInput.ini
 **/.JevEditorBackups/
 **/.JevEditor.install.lock
+**/.JevEditor.setup.lease
 **/.jev-install.json

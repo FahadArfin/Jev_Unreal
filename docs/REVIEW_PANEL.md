@@ -5,8 +5,16 @@ The panel uses the same native preview, plan receipt and apply implementation as
 MCP. It works without a Jev/OpenRouter key. A configured bridge token is required
 to enable controls; a disabled panel explains the startup problem.
 
-The 0.6 alpha separates readable changes, technical detail and the latest outcome.
-The bridge protocol and MCP catalog remain unchanged at 40 tools.
+The panel separates readable changes, technical detail and the latest outcome.
+The images below document the 0.6 baseline; newer accessibility checks are listed
+in [validation evidence](VALIDATION.md).
+
+Version 0.7 also has a [320-pixel expanded-label capture](images/review-panel-v0.7-narrow-pseudo.png)
+and [scrolled error/result view](images/review-panel-v0.7-narrow-result.png).
+These use deliberately expanded English strings, not an actual translation.
+Labels wrap inside the narrow panel and the error remains reachable after native
+keyboard activation. Actual screen-reader delivery and representative users are
+covered by the separate [community acceptance protocol](COMMUNITY_ACCEPTANCE.md).
 
 ![Jev Review 0.6 initial inspection and preparation view](images/review-panel-v0.6.png)
 
@@ -58,7 +66,21 @@ field, or refreshing the list does not apply a plan. Activate the focused **Appl
 reviewed plan once** button when ready. The panel never approves automatically,
 retries an interrupted apply, saves a map, or sends scene information to a model.
 
-Fixed interface labels use Unreal localization-ready text. Translations and
+Fixed interface labels use Unreal localization-ready text. Action, checkbox and
+section labels wrap in narrow panels. Numeric fields and selectable text name
+the actual focusable descendants, including their axis and units, as well as the
+outer field. Explicit result changes request an accessible announcement capped at
+512 characters when engine accessibility is active. Passive polling does not
+announce countdowns or repeat the last result. The full result remains readable
+and copyable in its text field.
+
+`Jev.Editor.ReviewAccessibleNames` checks semantic names on focusable descendants.
+`Jev.Rendered.ReviewNarrowAccessibility` exercises a 320-pixel panel, synthetically
+expanded English labels, explicit error focus and announcement requests across a
+passive refresh. Its native captures are `ReviewPanelNarrowPseudo.png` and
+`ReviewPanelNarrowResult.png` under the sandbox Saved/Automation/Jev directory.
+The expansion is a layout stress fixture, not a translation. The observer checks
+announcement requests, not OS or screen-reader delivery. Translations and
 localized-layout acceptance are not supplied. Keyboard-focused automation and
 rendered captures, where recorded in [validation](VALIDATION.md), do not establish
 screen-reader support, broad accessibility or representative artist usability;

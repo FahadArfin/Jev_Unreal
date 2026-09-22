@@ -15,6 +15,50 @@ TOKEN = "test-only-bridge-token-01234567890123456789"
 PROJECT = r"C:\Projects\Disposable\Disposable.uproject"
 
 
+@pytest.mark.parametrize("action", ["blueprint_compile_preview", "blueprint_compile"])
+async def test_compile_requests_bind_authenticated_project_and_preserve_reviewed_state(action):
+    seen = []
+    state = {"session_id": "reviewed-session", "world_path": "/Game/Map", "revision": "old"}
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        if body["action"] == "status":
+            return response({"project_file": PROJECT, "capabilities": [action]})
+        return response({"compiled": False})
+
+    bridge = UnrealBridge(
+        Settings(bridge_token=TOKEN, expected_project=PROJECT), httpx.MockTransport(handler)
+    )
+    try:
+        await bridge.call(action, {"expected_state": state, "expected_project": "forged"})
+    finally:
+        await bridge.close()
+    assert seen[1]["params"]["expected_project"] == PROJECT
+    assert seen[1]["params"]["expected_state"] == state
+
+
+@pytest.mark.parametrize("action", ["blueprint_compile_preview", "blueprint_compile"])
+async def test_compile_requires_explicit_project_and_supported_plugin(action):
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content)["action"])
+        return status_response()
+
+    for expected, code in [("", "project_required"), (PROJECT, "capability_unavailable")]:
+        bridge = UnrealBridge(
+            Settings(bridge_token=TOKEN, expected_project=expected), httpx.MockTransport(handler)
+        )
+        try:
+            with pytest.raises(JevError) as error:
+                await bridge.call(action, {"plan_id": "never-dispatched"})
+            assert error.value.code == code
+        finally:
+            await bridge.close()
+    assert seen == ["status", "status"]
+
+
 def response(result=None):
     return httpx.Response(200, json={"ok": True, "result": result or {}})
 

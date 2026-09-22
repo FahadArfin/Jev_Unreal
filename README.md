@@ -7,7 +7,7 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.6 alpha.** Python MCP server + source-built Unreal editor plugin, with **40 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.7 alpha.** Python MCP server + source-built Unreal editor plugin, with **44 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
@@ -29,11 +29,15 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - **Window → Jev Review**: inspect selected actors, preview translation/naming/folders, read explicit before/after changes, and apply once inside Unreal. Keyboard-focusable review/results, expandable technical details and separate refresh diagnostics support deliberate human review. See [review workflow](docs/REVIEW_PANEL.md).
 - Native plan receipts that survive an MCP reconnect while the editor stays open.
 - Already-loaded native Blueprint graphs, variables, pins and stored compiler messages; direct asset dependencies and recorded import provenance.
+- Widget/animation Blueprint inspection and project-approved, one-shot [compile review and fresh diagnostics](docs/BLUEPRINT_WORKFLOWS.md), with retained outcomes after MCP reconnects.
 - Explicitly approved native Data Validation rules with bounded jobs, cancellation and authoritative valid/invalid/not-validated results.
 - Named project-owned functional tests in an existing standalone PIE session, with native results, timeout and owned cleanup.
+- Source-only [door, navigation, interaction and combat recipes](docs/GAMEPLAY_RECIPES.md) with isolated setup, cleanup and reproducible negative cases.
 - Reviewed source installation/update/repair/removal, diagnostics, retained backups and protection for modified/untracked files.
+- Reviewed interrupted-install recovery with write-ahead receipts, exact hash checks and an exclusive operating-system lease.
 - Explicit editor connection profiles with separate ports, tokens and exact project bindings.
 - Reproducible keyword/Jev routing comparisons, separate answer keys and imported human-reviewed workflow evidence.
+- Preregistered paired workflow studies with counterbalanced trials, matched evidence hashes and explicit missing/failure accounting. See [benchmarks](docs/BENCHMARKS.md) and the [community acceptance protocol](docs/COMMUNITY_ACCEPTANCE.md).
 - Authenticated loopback bridge, project binding, state-bound previews and single-use plans.
 - A sample project, adversarial tests, a real MCP/editor smoke test and a provider evaluation harness.
 
@@ -134,7 +138,7 @@ are ignored. `jev-unreal profiles list FILE` lists bindings without reading toke
 
 ## Tools
 
-The server exposes 40 tools. New project workflows require the matching
+The server exposes 44 tools. New project workflows require the matching
 native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 
 | Tool | Purpose | Cloud |
@@ -169,6 +173,10 @@ native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 | `unreal_plan` | Read native session receipt, with explicitly marked local fallback | No |
 | `unreal_pending_plans` | List pending native previews shared with Jev Review | No |
 | `unreal_blueprint_inspect` | Read loaded native Blueprint graph/pin identities and stored diagnostics | No |
+| `unreal_blueprint_compile_targets` | Discover project-approved compile aliases without loading assets | No |
+| `unreal_blueprint_compile_preview` | Review an exact state-bound Blueprint compile plan | No |
+| `unreal_blueprint_compile` | Compile that plan once and retain fresh bounded diagnostics | No |
+| `unreal_blueprint_compile_receipt` | Inspect an earlier compile outcome without retrying | No |
 | `unreal_asset_dependencies` | Page direct Asset Registry dependencies or referencers | No |
 | `unreal_asset_import_info` | Read recorded source basenames/timestamps/hashes without opening files | No |
 | `unreal_validation_rules` | List project-approved native asset rules and availability | No |

@@ -8,9 +8,10 @@ schemas. They do not send assets to Jev or any cloud service.
 
 `unreal_blueprint_inspect(asset_path, graph_limit=16, node_limit=128, pin_limit=512)`
 reads one exact, already-loaded `/Game/.../Asset.Asset` or `/Engine/.../Asset.Asset`
-native `UBlueprint`. Open the Blueprint in Unreal first if the response is
-`asset_not_loaded`. Widget Blueprints, animation Blueprints, redirectors and other
-derived asset classes are outside this initial scope.
+native `UBlueprint`, `UWidgetBlueprint` or `UAnimBlueprint`. Open the Blueprint in
+Unreal first if the response is `asset_not_loaded`. Other subclasses and redirectors
+remain unsupported. Widget trees and animation runtime state are not graph inspection.
+Use the separate [reviewed compile workflow](BLUEPRINT_WORKFLOWS.md) for fresh diagnostics.
 
 The result contains existing compile status, parent/generated class, local variable
 names/types/GUIDs, graph paths/GUIDs, node classes/GUIDs/positions, pin types/GUIDs,
@@ -89,6 +90,8 @@ an editor replacement between the status read and mutation cannot run rules for
 another session or project. `unreal_validation_job(job_id)` returns
 progress and evidence; `unreal_validation_cancel(job_id)` retains completed results
 and cancels remaining work. One job may run at a time.
+The revision is checked again before the first queued callback; editing the scene
+while the job waits cancels it with `revision_changed_before_start`.
 
 Each editor tick processes one asset/rule pair through the actual
 `UEditorValidatorBase::ValidateLoadedAsset` API in a fresh validator instance.
@@ -106,6 +109,12 @@ requests no automatic fix/save, and does not invoke every globally registered
 validator, `UObject::IsDataValid`, recursive dependency validation or
 `PostAssetValidation`. Rules requiring shared instances or global post-validation
 aggregation are therefore not supported by this adapter.
+Discovery and receipts expose `instance_lifetime` and
+`post_asset_validation_called` so clients can check this contract explicitly.
+Each result identifies `validator_class`, `validator_enabled`, and
+`not_validated_reason` (`validator_disabled` or `not_applicable_or_no_verdict`).
+`package_dirty_changed` describes only the observed selected-package dirty bit;
+an already-dirty package can still change without a new transition.
 Receipts use `save_requested=false`, `saved=null` and
 `callback_side_effects_tracked=false`; they do not assert that project code never
 saved or changed anything. Callback reentry cannot start or cancel another job.
@@ -129,6 +138,20 @@ The integration uses UE 5.8's installed `EditorValidatorBase.h`,
 describes the existing project-rule systems this adapter builds on.
 
 ## Validation coverage
+
+The compatibility fixtures exercise the following contracts on the licensed local
+engine. They are reproducible examples, not acceptance from outside production teams:
+
+| Rule or pattern | Adapter coverage | Boundary |
+| --- | --- | --- |
+| Engine localization validator | Nonlocalized registered project asset receives its native verdict. | A project's localized asset tree still needs its own positive and negative fixtures. |
+| Engine material validator | Disabled material-platform configuration remains `not_validated`. | No shader-platform compatibility or shader compilation claim follows from this case. |
+| Project naming rule with `AssetPasses` / `AssetFails` / `AssetWarning` | Native helper diagnostics and verdicts are retained; mutable instance state is isolated per asset. | This tests the API conventions, not a universal naming standard. |
+| Validator that dirties the selected package | Before/after dirty transition is reported and the adapter requests no save. | Changes to other objects or files are not comprehensively tracked. |
+| Shared-instance or `PostAssetValidation` cleanup | Explicitly unsupported; global hooks are not called. | Rewrite the rule to finish within each callback or use Unreal's full validation subsystem outside this bridge. |
+
+`Jev.Editor.ValidatorCompatibility` covers these cases and the queued revision
+guard. Cancellation, timeout and policy revocation remain covered separately.
 
 Native source fixtures create unsaved in-memory assets and a Blueprint with known
 stored node diagnostics. `Jev.Editor.BlueprintInspection` checks identities,

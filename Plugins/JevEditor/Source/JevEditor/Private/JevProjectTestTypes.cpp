@@ -40,3 +40,25 @@ void UJevProjectFixtureAsset::GetAssetRegistryTags(FAssetRegistryTagsContext Con
     Super::GetAssetRegistryTags(Context);
     if (!ImportMetadata.IsEmpty()) Context.AddTag(FAssetRegistryTag(TEXT("SourceFile"), ImportMetadata, FAssetRegistryTag::TT_Hidden));
 }
+
+bool UJevCompatibilityFixtureValidator::bAutomationEnabled = false;
+int32 UJevCompatibilityFixtureValidator::PostCalls = 0;
+
+bool UJevCompatibilityFixtureValidator::CanValidateAsset_Implementation(const FAssetData& Data, UObject* Asset, FDataValidationContext& Context) const
+{
+    return bAutomationEnabled && Asset && Asset->IsA<UJevProjectFixtureAsset>();
+}
+
+EDataValidationResult UJevCompatibilityFixtureValidator::ValidateLoadedAsset_Implementation(const FAssetData& Data, UObject* Asset, FDataValidationContext& Context)
+{
+    ++InstanceCalls;
+    if (InstanceCalls != 1) AssetFails(Asset, FText::FromString(TEXT("Validator instance state leaked across assets.")));
+    else if (Asset->GetName().StartsWith(TEXT("Bad_"))) AssetFails(Asset, FText::FromString(TEXT("Project naming convention rejected this asset.")));
+    else AssetPasses(Asset);
+    if (Asset->GetName().StartsWith(TEXT("Dirty_")))
+    {
+        Asset->MarkPackageDirty();
+        AssetWarning(Asset, FText::FromString(TEXT("Fixture intentionally dirtied its package; no save was requested.")));
+    }
+    return GetValidationResult();
+}

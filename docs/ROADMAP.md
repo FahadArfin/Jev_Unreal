@@ -57,15 +57,33 @@ Native key-event fixtures cover deliberate application and focus behavior.
 Representative artist, physical-keyboard, screen-reader and translated-language
 acceptance remain open; automation is not a substitute for those studies.
 
-## Next priorities
+Version 0.7 implements the next engineering pass across all six immediate priorities:
+
+| Priority | New implementation | Acceptance still required |
+| --- | --- | --- |
+| Review accessibility | Wrapped narrow-layout labels, names on focusable inputs, bounded explicit-action accessibility announcements and expanded-label rendered fixtures. | Artists/designers, physical keyboards, actual assistive software and reviewed translations. |
+| Installation reliability | Write-ahead recovery receipts, exact hash-bound recovery plans, active-process exclusion and process-crash/locked-file regressions. | Clean Windows hosts and additional supported toolchains; no power-loss guarantee. |
+| Validator compatibility | Explicit lifecycle/cleanup limits, native helper-result coverage, engine-rule fixtures, dirty transitions and queued-revision protection. | Representative project validators and shader-platform configuration. |
+| Blueprint diagnostics | Loaded native Widget/Animation Blueprint inspection; allowlisted state-bound compile previews, one-shot compilation and retained fresh diagnostics. | Real project compiler extensions and subclass-specific runtime/visual acceptance. |
+| Gameplay recipes | Project-owned door, interaction, combat and native-navigation recipes with setup, cleanup and deliberate regressions. | Adaptation to each game's mechanics; nav paths do not prove pawn movement or multiplayer. |
+| Measured usefulness | Frozen trial protocols, counterbalanced method order, evidence-bound observations, paired comparisons and missing/failure accounting. | An independently evaluated representative study; no claimed speedup from harness tests. |
+
+See [Blueprint workflows](BLUEPRINT_WORKFLOWS.md), [gameplay recipes](GAMEPLAY_RECIPES.md),
+[setup recovery](SETUP.md), [study protocol](BENCHMARKS.md) and
+[validation evidence](VALIDATION.md). Engineering coverage and external acceptance
+are tracked separately so these features do not become unsupported readiness claims.
+The [community acceptance protocol](COMMUNITY_ACCEPTANCE.md) provides concrete
+observed tasks and clean-host/project matrices for collecting the remaining evidence.
+
+## Next acceptance priorities and later features
 
 | Priority | Feature/workflow | Why it matters | Evidence required before calling it ready |
 | --- | --- | --- | --- |
 | Next | Representative review-panel usability and accessibility | Validate the 0.6 review and keyboard foundations with artists/designers and assistive workflows. | Observed task completion, physical keyboard and screen-reader behavior, accessible errors and translated-language review. |
 | Next | Fresh-machine install and upgrade acceptance | Turn the source installer into a demonstrated onboarding path across supported toolchains. | Clean Windows hosts, missing dependencies, Blueprint-only/C++ projects, previous releases, locked files and recovery after interruption. |
 | Next | Real-project validator compatibility | Establish which common native rules work with the selected-rule adapter and how their side effects behave. | Representative project fixtures, documented unsupported shared/global state, cleanup and cancellation evidence. |
-| Next | Blueprint coverage and reviewed compile diagnostics | Cover useful Blueprint subclasses and fresh compile results before considering graph repairs. | Subclass-specific contracts, before/after identity, compile side-effect handling and known failing/working projects. |
-| Next | Reusable project-owned gameplay recipes | Help projects author door, navigation, interaction and combat tests on top of the implemented named-test adapter. | Real project acceptance criteria, isolated setup/teardown and reproducible negative cases. |
+| Next | Broader Blueprint compile acceptance | Exercise the implemented Widget/Animation inspection and reviewed compiler workflow on representative project assets. | Subclass-specific runtime contracts, compiler extensions and known failing/working projects. |
+| Next | Project adoption of gameplay recipes | Adapt the implemented door, navigation, interaction and combat examples to real project requirements. | Project-owned acceptance criteria, setup/teardown and reproducible negative cases. |
 | Next | Independent real workflow study | Determine when Jev improves routing, completion quality, correction time and total cost using the implemented benchmark harness. | Separately held answer keys; direct-agent, keyword and Jev baselines; representative tasks; full-workflow evidence and all failures. |
 | Later | Reviewed Blueprint edits | Add bounded graph operations with compile checks and before/after diffs. | Transaction recovery, pin/type validation and semantic tests; project-specific construction side effects considered. |
 | Later | Material parameter workflows | Inspect instances, change exposed parameters, compare rendered results. | Known parameter types, parent/asset identity, dependency checks and visual regression tests. |

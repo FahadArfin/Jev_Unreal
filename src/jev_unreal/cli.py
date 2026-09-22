@@ -25,6 +25,15 @@ PROJECT_WORKFLOW_FEATURES = {
     "mesh_editing": ("Mesh replacement and duplication", {"replace_mesh", "duplicate_mesh"}),
     "plan_review": ("Native plan review", {"pending_plans", "plan_status"}),
     "blueprint_inspection": ("Blueprint inspection", {"blueprint_inspect"}),
+    "blueprint_compilation": (
+        "Reviewed Blueprint compilation",
+        {
+            "blueprint_compile_targets",
+            "blueprint_compile_preview",
+            "blueprint_compile",
+            "blueprint_compile_receipt",
+        },
+    ),
     "asset_dependencies": ("Asset dependencies", {"asset_dependencies"}),
     "import_provenance": ("Asset import provenance", {"asset_import_info"}),
     "asset_validation": (
@@ -57,7 +66,16 @@ def read_checks(path: Path) -> dict:
 
 
 def setup_command(args) -> dict:
-    from .setup import apply_plan, inspect_setup, plan_install, plan_uninstall, read_plan
+    from .setup import (
+        apply_plan,
+        apply_recovery_plan,
+        inspect_setup,
+        list_recovery,
+        plan_install,
+        plan_recovery,
+        plan_uninstall,
+        read_plan,
+    )
 
     if args.setup_command == "inspect":
         return inspect_setup(
@@ -68,8 +86,14 @@ def setup_command(args) -> dict:
         )
     if args.setup_command == "apply":
         return apply_plan(read_plan(args.file))
+    if args.setup_command == "recover":
+        return apply_recovery_plan(read_plan(args.file))
+    if args.setup_command == "recovery":
+        return list_recovery(args.project)
     result = (
-        plan_install(args.project, args.source_plugin)
+        plan_recovery(args.project, args.operation)
+        if args.setup_command == "recovery-plan"
+        else plan_install(args.project, args.source_plugin)
         if args.setup_command == "plan"
         else plan_uninstall(args.project)
     )
@@ -176,7 +200,7 @@ async def run_command(args, settings: Settings) -> dict:
             )
             + (
                 [
-                    "Rebuild and relaunch the matching JevEditor 0.5 or later for: "
+                    "Rebuild and relaunch the matching JevEditor 0.7 or later for: "
                     + ", ".join(
                         feature["label"]
                         for feature in project_features.values()
@@ -261,6 +285,18 @@ def main():
     setup_commands.add_parser("apply", help="Apply an unchanged reviewed JSON plan").add_argument(
         "file"
     )
+    setup_commands.add_parser(
+        "recover", help="Apply an unchanged reviewed recovery plan"
+    ).add_argument("file")
+    setup_commands.add_parser(
+        "recovery", help="List interrupted installation receipts"
+    ).add_argument("--project", required=True)
+    recovery = setup_commands.add_parser(
+        "recovery-plan", help="Preview exact interrupted-install recovery"
+    )
+    recovery.add_argument("--project", required=True)
+    recovery.add_argument("--operation", required=True)
+    recovery.add_argument("--output")
     catalog = commands.add_parser("catalog", help="Discover explicitly configured local MCP tools")
     catalog_commands = catalog.add_subparsers(dest="catalog_command", required=True)
     catalog_commands.add_parser("status", help="Refresh and summarize the configured catalog")

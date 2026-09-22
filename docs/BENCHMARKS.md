@@ -185,3 +185,94 @@ requires repeated real tasks with matched project revisions, actor state, model 
 prompts, hardware, tools, acceptance criteria and intervention policy. Record failures
 as well as successes and report uncertainty. These helpers collect comparable evidence;
 they cannot make an alpha plugin production-ready by themselves.
+
+## Preregister paired full-workflow trials
+
+`python -m jev_unreal.studies` adds a separate repeated-workflow study format. It
+freezes **direct-agent, keyword and Jev** trials before outcomes are imported. It
+does not execute an agent, send provider calls or edit Unreal. The existing routing
+harness remains useful for isolated next-tool decisions; this study format binds
+complete workflows to their initial state and acceptance criteria.
+
+Start with [the public format example](../examples/benchmarks/study-format/protocol.json).
+Its text artifacts describe an empty synthetic fixture, and its observation file
+contains **zero runs**. They demonstrate the format and make no efficiency claim:
+
+```powershell
+uv run python -m jev_unreal.studies plan examples/benchmarks/study-format/protocol.json --output artifacts/my-study-manifest.json
+uv run python -m jev_unreal.studies score artifacts/my-study-manifest.json examples/benchmarks/study-format/empty-observations.json --evidence-map examples/benchmarks/study-format/evidence-map.json --output artifacts/my-study-empty-report.json
+```
+
+Use `schema protocol`, `schema manifest` or `schema observations` for the strict
+JSON schemas. Output creation is exclusive: choose a new path for each manifest or
+report. The CLI accepts up to 16 observation files and rejects duplicate trials or
+attempt IDs across them, so a later successful retry cannot silently replace a
+failed trial. Corrections and retries *within* one planned workflow belong in its
+elapsed time, correction time and failure count. New full attempts need new
+preregistered repetitions.
+
+A protocol declares pseudonymous participant IDs, repetitions, a seed and tasks.
+Each task records an initial-state artifact hash, a goal hash, an acceptance-criteria
+artifact hash, named automated or human criteria, and a completion deadline. The
+protocol also fixes hashes for environment, allowed tools, intervention policy and
+each method's model/prompt/configuration artifact. Record actual versions and
+hardware in those local artifacts; a convenient label alone is not sufficient.
+
+The manifest uses SHA-256 ordering, with all six possible method orders appearing
+once per six paired task blocks. This is deterministic across runs and balances
+position counts over complete groups of six. A smaller final group is incomplete.
+Each block is one participant, task and repetition with all three methods. Reset
+the project to the declared initial state before each trial. Counterbalancing does
+not eliminate learning, carryover, tool familiarity or authored-task bias. Keep the
+frozen manifest under version control or an independent timestamp before collecting
+outcomes; its hash alone does not prove when it was written.
+
+### Evidence and measurement rules
+
+Every observation must match its trial, method, initial state, acceptance criteria,
+method configuration, environment and policies. Record all predeclared criteria,
+including failed or unmeasured ones. Passing requires every criterion to pass within
+the declared deadline. An automated observation cannot pass a criterion declared
+as requiring a human. Human observations need explicit reviewer IDs and are
+labelled `human_attested`; the harness never invents or verifies a person's review.
+
+An `automated_observation` can record native verification, functional-test results
+and machine-observed elapsed time without pretending a human accepted it. Reports
+keep the declared provenance (`authored_synthetic_pilot`, `real_project_pilot` or
+`independent_study`) and always state `independence_verified: false`. A local authored
+pilot remains a pilot even when its engine operations and timestamps are real.
+
+`elapsed_seconds` includes corrections; `correction_seconds` cannot exceed it.
+Failure events and tool calls are explicit counts. Total workflow cost includes
+routing, execution and retries already counted in that workflow. Report unknown
+cost as `null`, not zero. A reported cost requires a source and evidence artifact;
+`local_no_provider` is allowed only with zero cost. Do not add routing cost again
+to a total that already includes it.
+
+Unlike the older optional-evidence imports, study scoring **requires** local files
+for every referenced hash, including the preregistered control artifacts. Supply
+an exact SHA-256-to-file-path JSON map with `--evidence-map`. Each file is checked
+against its digest, with 16 MiB per file and 512 MiB total limits. Keep paths and
+private traces local. Reports contain counts and hashes, not evidence contents or
+paths. A matching artifact hash verifies file identity; it does not prove honest
+timing, that a live scene was actually reset, independent recruitment or human review.
+
+### Read the paired report
+
+Reports show each method's planned, observed, missing, passed, failed, unverifiable,
+timed-out and cancelled counts. Every planned trial stays in the completion-rate
+denominator. Failure time remains in measured elapsed totals. Cost totals include
+only reported costs and include an explicit coverage count and completeness flag.
+
+Pairwise reports compare methods within the same participant/task/repetition, both
+overall and per task. Deltas are `right_minus_left`; elapsed and correction deltas
+include observed failures. Cost pairs require both costs, and missing pairs remain
+visible. Successful pairs and discordant pass/fail pairs are counted separately.
+These conditional means should be read beside completion and missingness; a method
+that fails quickly must not be described as faster at completing the task.
+
+For two or more observed participants, paired metrics include a deterministic
+1,000-draw participant-cluster bootstrap interval. Repeated tasks from one
+participant stay together in each resample. One participant has no interval.
+Small samples, non-independent participants and systematic missingness can still
+make intervals unreliable. The report emits no general speedup conclusion.

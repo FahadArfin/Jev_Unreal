@@ -1,0 +1,1 @@
+FORMAT EXAMPLE ONLY. Move a selected test actor by a predeclared displacement, then verify its transform.
