@@ -1,0 +1,26 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Examples",
+  "Description": "Minimal isolated editor project for testing Jev Unreal.",
+  "AdditionalPluginDirectories": [
+    "../../Plugins"
+  ],
+  "Modules": [
+    {
+      "Name": "JevSandbox",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "JevEditor",
+      "Enabled": true
+    },
+    {
+      "Name": "AndroidFileServer",
+      "Enabled": false
+    }
+  ]
+}

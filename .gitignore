@@ -1,0 +1,58 @@
+# Python, packaging, and local development
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+.tox/
+
+# Private configuration and credentials; examples contain placeholders only.
+.env
+.env.*
+!.env.example
+.local/
+*.dpapi
+*.key
+*.pem
+*.pfx
+*bridge-token*.txt
+*bridge_token*.txt
+secrets/
+credentials/
+
+# Unreal-generated data. Keep source, descriptors, and Content in version control.
+**/Binaries/
+**/DerivedDataCache/
+**/Intermediate/
+**/Saved/
+**/.vs/
+*.sln
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.xcodeproj/
+*.xcworkspace/
+
+# Editor and OS local state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+
+# Local evidence and machine-specific client configuration
+/artifacts/
+/.codex/
+# Automatically generated editor input defaults in the test harness
+/examples/JevSandbox/Config/DefaultInput.ini

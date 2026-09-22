@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible problem in Jev_Unreal.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security vulnerabilities, follow SECURITY.md. Never paste API keys,
+        bridge tokens, private project content, or unredacted environment dumps.
+  - type: input
+    id: revision
+    attributes:
+      label: Version or commit
+      description: Include the Jev_Unreal commit or release.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, exact Unreal version, and MCP client.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Prefer a minimal example in a disposable project.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted logs or screenshots
+      description: Share only the minimum relevant output. Remove all credentials.
