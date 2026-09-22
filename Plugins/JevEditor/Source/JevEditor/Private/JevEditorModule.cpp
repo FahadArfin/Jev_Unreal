@@ -1,5 +1,9 @@
 #include "JevEditorBridge.h"
+#include "JevEditorFunctionalTools.h"
+#include "JevEditorProjectTools.h"
+#include "JevEditorReviewPanel.h"
 
+#include "Containers/Ticker.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
 #include "HttpServerModule.h"
@@ -19,7 +23,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogJevEditor, Log, All);
 
 namespace
 {
-constexpr uint32 BridgePort = 9845;
 constexpr int32 MaximumBodyBytes = 65536;
 
 const TArray<FString>* Header(const FHttpServerRequest& Request, const FString& Name)
@@ -55,6 +58,23 @@ public:
     virtual void StartupModule() override
     {
         if (IsRunningCommandlet()) return;
+        ReviewPanel = MakeUnique<FJevEditorReviewPanel>();
+        ReviewPanel->Register();
+        ReviewPanel->SetBridge(nullptr, TEXT("Bridge is disabled. Configure the token and restart this editor."));
+        const FString PortText = FPlatformMisc::GetEnvironmentVariable(TEXT("JEV_BRIDGE_PORT"));
+        if (!PortText.IsEmpty())
+        {
+            bool bValidPort = PortText.Len() <= 5;
+            for (TCHAR C : PortText) bValidPort &= C >= '0' && C <= '9';
+            const int32 ParsedPort = bValidPort ? FCString::Atoi(*PortText) : 0;
+            if (ParsedPort < 1024 || ParsedPort > 65535)
+            {
+                ReviewPanel->SetBridge(nullptr, TEXT("JEV_BRIDGE_PORT must be an integer from 1024 to 65535."));
+                UE_LOG(LogJevEditor, Error, TEXT("Bridge disabled: invalid JEV_BRIDGE_PORT."));
+                return;
+            }
+            BridgePort = static_cast<uint32>(ParsedPort);
+        }
         Token = FPlatformMisc::GetEnvironmentVariable(TEXT("JEV_BRIDGE_TOKEN"));
         bool bValidToken = Token.Len() >= 32 && Token.Len() <= 256;
         for (TCHAR Character : Token) bValidToken &= Character >= 33 && Character <= 126;
@@ -77,7 +97,8 @@ public:
             Address->SetPort(BridgePort);
             if (!Probe || !bValidIp || !Probe->Bind(*Address))
             {
-                UE_LOG(LogJevEditor, Error, TEXT("Bridge disabled: loopback port 9845 is already occupied or unavailable."));
+                ReviewPanel->SetBridge(nullptr, TEXT("The configured loopback port is occupied or unavailable. Select a unique JEV_BRIDGE_PORT and restart."));
+                UE_LOG(LogJevEditor, Error, TEXT("Bridge disabled: loopback port %u is already occupied or unavailable."), BridgePort);
                 return;
             }
         }
@@ -87,7 +108,7 @@ public:
         // This is an in-memory engine config override and is never flushed to disk.
         TArray<FString> Overrides;
         GConfig->GetArray(TEXT("HTTPServer.Listeners"), TEXT("ListenerOverrides"), Overrides, GEngineIni);
-        Overrides.Insert(TEXT("(Port=9845,BindAddress=127.0.0.1,ReuseAddressAndPort=false,MaxConnectionsAcceptPerFrame=4,ConnectionsBacklogSize=16)"), 0);
+        Overrides.Insert(FString::Printf(TEXT("(Port=%u,BindAddress=127.0.0.1,ReuseAddressAndPort=false,MaxConnectionsAcceptPerFrame=4,ConnectionsBacklogSize=16)"), BridgePort), 0);
         GConfig->SetArray(TEXT("HTTPServer.Listeners"), TEXT("ListenerOverrides"), Overrides, GEngineIni);
         TSet<FString> Sections = { TEXT("HTTPServer.Listeners") };
         FCoreDelegates::TSOnConfigSectionsChanged().Broadcast(GEngineIni, Sections);
@@ -109,11 +130,22 @@ public:
             UE_LOG(LogJevEditor, Error, TEXT("Bridge disabled: its route is already occupied."));
             return;
         }
-        UE_LOG(LogJevEditor, Display, TEXT("Jev editor bridge listening at http://127.0.0.1:9845/jev/v1/call (authentication required)."));
+        ProjectTools = MakeUnique<FJevProjectTools>();
+        FunctionalTools = MakeUnique<FJevFunctionalTools>();
+        ReviewPanel->SetBridge(Bridge.Get());
+        TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FJevEditorModule::Tick));
+        UE_LOG(LogJevEditor, Display, TEXT("Jev editor bridge listening at http://127.0.0.1:%u/jev/v1/call (authentication required)."), BridgePort);
     }
 
     virtual void ShutdownModule() override
     {
+        if (TickHandle.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+        if (ProjectTools) ProjectTools->Shutdown();
+        ProjectTools.Reset();
+        if (FunctionalTools) FunctionalTools->Shutdown();
+        FunctionalTools.Reset();
+        if (ReviewPanel) ReviewPanel->Unregister();
+        ReviewPanel.Reset();
         if (Router && Route) Router->UnbindRoute(Route);
         Route.Reset();
         Router.Reset();
@@ -123,6 +155,33 @@ public:
     }
 
 private:
+    TSharedPtr<FJsonObject> Identity()
+    {
+        if (!Bridge) return nullptr;
+        auto Request = MakeShared<FJsonObject>();
+        Request->SetStringField(TEXT("action"), TEXT("status"));
+        Request->SetObjectField(TEXT("params"), MakeShared<FJsonObject>());
+        const auto Response = Bridge->Execute(Request);
+        bool bOk = false;
+        const TSharedPtr<FJsonObject>* Result = nullptr;
+        return Response->TryGetBoolField(TEXT("ok"), bOk) && bOk && Response->TryGetObjectField(TEXT("result"), Result) ? *Result : nullptr;
+    }
+
+    bool Tick(float)
+    {
+        if ((!ProjectTools || !ProjectTools->HasActiveJob()) && (!FunctionalTools || !FunctionalTools->HasActiveJob())) return true;
+        const auto Current = Identity();
+        if (!Current)
+        {
+            if (ProjectTools) ProjectTools->Shutdown();
+            if (FunctionalTools) FunctionalTools->Shutdown();
+            return true;
+        }
+        if (ProjectTools && Current) ProjectTools->Tick(Current.ToSharedRef());
+        if (FunctionalTools && Current) FunctionalTools->Tick(Current.ToSharedRef());
+        return true;
+    }
+
     bool HandleRequest(const FHttpServerRequest& Request, const FHttpResultCallback& Complete)
     {
         if (!IsInGameThread() || !Bridge)
@@ -136,7 +195,7 @@ private:
             return true;
         }
         const auto* Host = Header(Request, TEXT("Host"));
-        if (!Host || Host->Num() != 1 || (*Host)[0] != TEXT("127.0.0.1:9845"))
+        if (!Host || Host->Num() != 1 || (*Host)[0] != FString::Printf(TEXT("127.0.0.1:%u"), BridgePort))
         {
             Reply(Complete, FJevEditorBridge::Error(TEXT("forbidden"), TEXT("The Host header must identify the loopback bridge.")), 403);
             return true;
@@ -173,12 +232,33 @@ private:
             Reply(Complete, FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Body must be a JSON object.")), 400);
             return true;
         }
-        Reply(Complete, Bridge->Execute(Object));
+        FString Action;
+        if (Object->TryGetStringField(TEXT("action"), Action) &&
+            ((ProjectTools && FJevProjectTools::HandlesAction(Action)) || (FunctionalTools && FJevFunctionalTools::HandlesAction(Action))))
+        {
+            const TSharedPtr<FJsonObject>* Params = nullptr;
+            bool bValid = Object->TryGetObjectField(TEXT("params"), Params);
+            for (const auto& Field : Object->Values) bValid &= Field.Key == TEXT("action") || Field.Key == TEXT("params");
+            const auto Current = Identity();
+            if (!bValid) Reply(Complete, FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Use action and an object params only.")));
+            else if (!Current) Reply(Complete, FJevEditorBridge::Error(TEXT("editor_unavailable"), TEXT("Editor identity is unavailable.")));
+            else if ((Action == TEXT("validation_start") && FunctionalTools->HasActiveJob()) ||
+                (Action == TEXT("functional_start") && ProjectTools->HasActiveJob()))
+                Reply(Complete, FJevEditorBridge::Error(TEXT("job_busy"), TEXT("Another project job is active.")));
+            else if (FJevFunctionalTools::HandlesAction(Action)) Reply(Complete, FunctionalTools->Execute(Action, *Params, Current.ToSharedRef()));
+            else Reply(Complete, ProjectTools->Execute(Action, *Params, Current.ToSharedRef()));
+        }
+        else Reply(Complete, Bridge->Execute(Object));
         return true;
     }
 
     FString Token;
+    uint32 BridgePort = 9845;
     TUniquePtr<FJevEditorBridge> Bridge;
+    TUniquePtr<FJevProjectTools> ProjectTools;
+    TUniquePtr<FJevFunctionalTools> FunctionalTools;
+    TUniquePtr<FJevEditorReviewPanel> ReviewPanel;
+    FTSTicker::FDelegateHandle TickHandle;
     TSharedPtr<IHttpRouter> Router;
     FHttpRouteHandle Route;
     double RateWindow = 0;

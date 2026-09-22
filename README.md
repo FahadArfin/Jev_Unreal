@@ -7,7 +7,7 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.3 alpha.** Python MCP server + source-built Unreal editor plugin, with **27 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.4 alpha.** Python MCP server + source-built Unreal editor plugin, with **39 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
@@ -25,7 +25,15 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - Preview/apply primitive blockouts, existing static mesh placement, transforms, material assignments and actor labels/folders, with native Undo.
 - Measured grid, staircase and room recipes, with automatic transform readback checks after apply.
 - Measured alignment, distribution, pivot grid snapping and grounding on a specified plane, preserving rotation and scale.
-- Authenticated loopback bridge, project binding, state-bound previews, single-use plans and process-local plan records.
+- **Window → Jev Review**: inspect selected actors, preview translation/naming/folders, review MCP plans and apply once inside Unreal.
+- Native plan receipts that survive an MCP reconnect while the editor stays open.
+- Already-loaded native Blueprint graphs, variables, pins and stored compiler messages; direct asset dependencies and recorded import provenance.
+- Explicitly approved native Data Validation rules with bounded jobs, cancellation and authoritative valid/invalid/not-validated results.
+- Named project-owned functional tests in an existing standalone PIE session, with native results, timeout and owned cleanup.
+- Reviewed source installation/update/repair/removal, diagnostics, retained backups and protection for modified/untracked files.
+- Explicit editor connection profiles with separate ports, tokens and exact project bindings.
+- Reproducible keyword/Jev routing comparisons, separate answer keys and imported human-reviewed workflow evidence.
+- Authenticated loopback bridge, project binding, state-bound previews and single-use plans.
 - A sample project, adversarial tests, a real MCP/editor smoke test and a provider evaluation harness.
 
 Scene tools need **no model key**. Jev never executes an editor command, generates arbitrary code, or automatically receives project files. Only explicit decision arguments go to the configured cloud provider.
@@ -56,7 +64,22 @@ uv run jev-unreal status
 uv run jev-unreal doctor
 ```
 
-Initialization creates a random token under `%LOCALAPPDATA%\JevUnreal`, sets this shell's environment, and targets the isolated `examples/JevSandbox` project. Keep the editor open. The bridge token is separate from your provider key. Port **9845** is fixed in this alpha; do not start two bridge editors concurrently.
+Initialization creates a random token under `%LOCALAPPDATA%\JevUnreal`, sets this shell's environment, and targets the isolated `examples/JevSandbox` project. Keep the editor open. The bridge token is separate from your provider key. The default port is **9845**; each additional editor needs its own `JEV_BRIDGE_PORT` and matching connection profile. [Multiple editor setup](docs/CONNECTION_PROFILES.md).
+
+For your own project, use the [reviewed installer](docs/SETUP.md). It previews exact source changes and project enablement before applying:
+
+```powershell
+.\scripts\Install-JevEditor.ps1 -Action Plan `
+  -ProjectFile 'D:\Games\MyGame\MyGame.uproject' `
+  -PlanFile '.local\mygame-install-plan.json'
+Get-Content -LiteralPath '.local\mygame-install-plan.json'
+# Close that project's editor before applying the reviewed plan.
+.\scripts\Install-JevEditor.ps1 -Action Apply -PlanFile '.local\mygame-install-plan.json'
+```
+
+Then build and launch that project with its matching engine and bridge credentials.
+Source installation is not a runtime connectivity check. The repository sandbox
+already discovers this source plugin; do not install a duplicate copy there.
 
 Optional real Jev access:
 
@@ -98,9 +121,15 @@ For another MCP client, use STDIO and substitute your paths:
 
 Portable server command: `uv --directory /path/to/Jev_Unreal run --frozen jev-unreal serve`. Set `JEV_BRIDGE_TOKEN_FILE`, `JEV_EXPECTED_PROJECT`, and optional provider credentials in that process environment. Python portability does not certify Unreal builds on that platform.
 
+For multiple editors, define a private profile file and launch each MCP server with
+`-ProfilesFile C:/Private/editor-profiles.json -Profile mygame`. A selected profile
+binds its project, URL and token file together; inherited legacy connection fields
+are ignored. `jev-unreal profiles list FILE` lists bindings without reading tokens.
+[Profile format and isolation guarantees](docs/CONNECTION_PROFILES.md).
+
 ## Tools
 
-The server exposes 27 tools. New inspect/edit/verify features require the matching
+The server exposes 39 tools. New project workflows require the matching
 native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 
 | Tool | Purpose | Cloud |
@@ -131,7 +160,19 @@ native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 | `unreal_layout_preview` | Preview a measured grid, staircase or room | No |
 | `unreal_spatial_preview` | Measure actors and preview align/distribute/snap-grid/ground recipes | No |
 | `unreal_apply` | Apply once in an Undo transaction; check native readback | No |
-| `unreal_plan` | Read this process's retained plan and last observed outcome | No |
+| `unreal_plan` | Read native session receipt, with explicitly marked local fallback | No |
+| `unreal_pending_plans` | List pending native previews shared with Jev Review | No |
+| `unreal_blueprint_inspect` | Read loaded native Blueprint graph/pin identities and stored diagnostics | No |
+| `unreal_asset_dependencies` | Page direct Asset Registry dependencies or referencers | No |
+| `unreal_asset_import_info` | Read recorded source basenames/timestamps/hashes without opening files | No |
+| `unreal_validation_rules` | List project-approved native asset rules and availability | No |
+| `unreal_validation_start` | Queue selected approved rules for exact assets | No |
+| `unreal_validation_job` | Read validation progress, verdicts and bounded diagnostics | No |
+| `unreal_validation_cancel` | Cancel remaining work between validator callbacks | No |
+| `unreal_functional_tests` | List approved placed gameplay tests and PIE eligibility | No |
+| `unreal_functional_start` | Run one approved test in the existing standalone PIE session | No |
+| `unreal_functional_job` | Read native test outcome and cleanup evidence | No |
+| `unreal_functional_cancel` | Cancel the owned test without stopping the user's PIE session | No |
 
 Example `unreal_preview` arguments:
 
@@ -148,7 +189,18 @@ Review normalized operations, then pass the returned `plan_id` to `unreal_apply`
 
 For existing actors, use **inspect → snapshot → preview with measured state → apply once → fresh verify/diff → frame/capture**. A spatial preview obtains the actor bounds itself and binds the plan to that measurement's session/world/revision. Material or label/folder edits can pass the latest inspection's `expected_state` to `unreal_preview`. After apply, verify intended post-edit values against the original project/session/world identity; the old revision is expected to change. [Spatial recipes](docs/SPATIAL_WORKFLOWS.md) and [verification contracts](docs/VERIFICATION.md) explain the limits.
 
-After a timeout or cancellation, read `unreal_plan` and inspect fresh actors before deciding what to do. Unknown outcomes remain unknown; do not replay the plan. Records are best-effort observations, not durable recovery: at most 64 records/2 MiB for 15 minutes. Snapshots have a separate 32-record/2 MiB/15-minute budget. Both are process-local, can be evicted, and disappear on restart. Neither saves a map or restores a scene.
+After a timeout or cancellation, read `unreal_plan` and inspect fresh actors before deciding what to do. Unknown outcomes remain unknown; do not replay the plan. Native receipts retain up to 64 records for 15 minutes in editor memory and survive MCP reconnects. They disappear when the editor closes. If native lookup fails, the tool marks its fallback with `native_lookup_error`; that local observation is not native confirmation. The separate MCP journal holds up to 64 records/2 MiB for 15 minutes; selected-actor snapshots hold up to 32 records/2 MiB for 15 minutes. Those disappear on MCP restart. None saves a map or provides durable crash recovery. [Native review and receipts](docs/REVIEW_PANEL.md).
+
+People can use **Window → Jev Review** for selection inspection, before/after
+previews and one-shot application. The same pending plans appear there and in MCP;
+refreshing or viewing a plan never approves it automatically.
+
+For project-wide evidence, [Blueprint/dependency inspection and Data Validation](docs/PROJECT_INSPECTION.md)
+complement actor checks. Validation executes only explicitly approved, loaded native
+rules. [Functional tests](docs/FUNCTIONAL_TESTS.md) run named project-owned checks in
+an already-running standalone PIE world. Both job adapters execute trusted project
+code that can have side effects; cancellation cannot interrupt a blocking callback.
+Neither is enabled by default, and neither certifies a whole project by itself.
 
 ![Three rotated objects after the verified edit workflow, captured natively in Unreal](docs/images/verified-workflow-isometric.png)
 
@@ -178,7 +230,8 @@ workflow capabilities without a provider call. [CLI examples](docs/WORKFLOWS.md#
 
 External discovery is opt-in: set `JEV_CATALOG_FILE` to a local JSON configuration, or pass `-CatalogFile` to the Windows launcher. It lists metadata from explicitly named loopback Streamable HTTP servers. It never launches a server or proxies arbitrary execution. [Discovery setup, limits and Epic gateway compatibility](docs/TOOL_DISCOVERY.md).
 
-For your own project, copy `Plugins/JevEditor` into its `Plugins` directory, enable it, compile, and launch with `JEV_BRIDGE_TOKEN` in the editor environment. Set the MCP server's `JEV_EXPECTED_PROJECT` to that absolute `.uproject`. Test scripts belong only in the sandbox.
+Use [setup diagnostics and reviewed install plans](docs/SETUP.md) to install into your
+own project. Test scripts and synthetic automation fixtures belong only in the sandbox.
 
 ## Validation and development
 
@@ -191,6 +244,7 @@ uv run python scripts/smoke_editor.py
 uv run python scripts/smoke_editor.py --require-capture
 uv run python scripts/smoke_catalog.py
 uv run python scripts/evaluate.py --validate-only
+uv run python -m jev_unreal.benchmarks validate examples/benchmarks/public-synthetic-v1.dataset.json --answer-key examples/benchmarks/public-synthetic-v1.answers.json
 ```
 
 The editor smoke test needs the running sandbox and intentionally creates unsaved test actors. `--require-capture` needs a rendered editor viewport; headless NullRHI cannot supply one. The catalog smoke needs `JEV_CATALOG_FILE`. Native automation runs a separate sandbox editor; do not run it concurrently with a bridge test. [Validation details](docs/VALIDATION.md) distinguish the test layers.
@@ -199,12 +253,30 @@ For a real evaluation, set the provider key in the process environment and run `
 
 With a saved Windows key, `.\scripts\Test-Jev.ps1 -WorkflowSmoke` checks asset selection, batched diagnostics and unsupported-action deferral using at most three provider requests. The [v0.3 sanitized report](docs/evaluations/2026-09-22-workflows-v0.3.json) records fixture and code hashes, usage and individual outcomes for the 17-candidate router. These tiny public fixtures establish provider compatibility, not accuracy or savings across real development tasks.
 
+The new [benchmark harness](docs/BENCHMARKS.md) freezes datasets and candidate
+catalogs, separates answer keys from inference, compares keyword/Jev routing and
+imports human-attested direct-agent traces and workflow outcomes. The bundled
+partition is public synthetic data seen by its authors, not an untouched external
+test set. Routing accuracy and observed workflow completion remain separate;
+missing costs, failures and unverified outcomes are never filled in as successes.
+
 [`.env.example`](.env.example) lists variables; the server does **not** automatically load `.env`. `JEV_MAX_REQUESTS` defaults to 100 attempted provider calls per server process; it is not a dollar budget. OpenRouter uses `typesafe/jev-1.13` at `/api/alpha/decisions`; alpha contracts may change.
 
 ## Scope and roadmap
 
-Version 0.3 extends discovery and measured blockouts with an inspect/edit/verify loop for selected loaded actors. It does not include runtime NPC Blueprint nodes, arbitrary Blueprint graph generation, code execution, asset deletion/import, packaging automation, durable crash recovery, remote/multiuser hosting, or a Blender executor. Existing Unreal MCP tools remain useful alongside this server; discovery helps find their advertised capabilities without duplicating them.
+Version 0.4 adds human review, installation lifecycle, multiple editor profiles,
+project inspection, selected validation/gameplay jobs and evaluation infrastructure
+to the inspect/edit/verify loop. It does not include runtime NPC Blueprint nodes,
+arbitrary Blueprint generation, arbitrary code execution, asset deletion/import,
+packaging automation, durable crash recovery, remote/multiuser hosting, or a Blender
+executor. Existing Unreal MCP tools remain useful alongside this server; discovery
+helps find their advertised capabilities without duplicating them.
 
-The [prioritized roadmap](docs/ROADMAP.md) covers native review UI, installation/repair, project-owned validation and functional tests, representative workflow evaluations, broader engine/platform support and Blender handoff. These are future work, not current capabilities or adoption guarantees. No game-development speedup has been established.
+The [prioritized roadmap](docs/ROADMAP.md) distinguishes these implemented foundations
+from remaining usability/accessibility acceptance, fresh-machine installation,
+representative real workflow studies, reviewed Blueprint editing, terrain/material
+workflows, multiplayer/packaged tests, durable recovery and Blender round trips.
+More features do not establish support for millions of users. No game-development
+speedup has been established.
 
 See [architecture](docs/ARCHITECTURE.md), [research](docs/RESEARCH.md), [provenance](docs/PROVENANCE.md), [contributing](CONTRIBUTING.md), and [security](SECURITY.md). Original code is MIT. Unreal and provider services have separate licenses and terms.

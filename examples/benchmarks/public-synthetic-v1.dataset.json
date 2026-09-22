@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "public-synthetic-routing-v1",
+  "provenance": "public_synthetic",
+  "catalog": [
+    {"id": "unreal_status", "description": "Inspect current Unreal project, session, world identity and bridge capabilities."},
+    {"id": "unreal_context", "description": "Inspect the selected actors, play state, dirty packages and current editor context."},
+    {"id": "unreal_assets", "description": "Search asset registry names and paths before choosing existing assets."},
+    {"id": "unreal_actor_details", "description": "Measure exact known actors: transforms, world bounds, material slots and edit blockers."},
+    {"id": "unreal_snapshot", "description": "Record a known actor baseline before editing, without modifying the scene."},
+    {"id": "unreal_diff", "description": "Compare current actors with a previously recorded snapshot to find actual changes."},
+    {"id": "unreal_verify", "description": "Check fresh actor measurements against explicit expected transforms, dimensions, labels or materials."},
+    {"id": "unreal_spatial_preview", "description": "Preview aligning, evenly distributing, grid snapping or grounding known actors from measured bounds."},
+    {"id": "unreal_layout_preview", "description": "Preview creating a measured grid, staircase or room from supplied dimensions."},
+    {"id": "unreal_preview", "description": "Preview bounded native actor spawns, transforms, material assignments, labels or folders."},
+    {"id": "unreal_plan", "description": "Inspect a known native plan ID and its historical apply outcome without retrying."},
+    {"id": "unreal_frame", "description": "Aim and position the editor camera to frame exact known actors before visual capture."},
+    {"id": "unreal_capture", "description": "Capture an image of the currently rendered editor viewport for visual inspection."},
+    {"id": "jev_triage", "description": "Classify an Unreal log excerpt and suggest the next diagnostic category."}
+  ],
+  "cases": [
+    {"id": "train-context", "split": "train", "group_id": "selection-overview", "goal": "Tell me which actors I currently have selected and whether I am in Play mode."},
+    {"id": "train-log", "split": "train", "group_id": "log-triage", "goal": "Classify this diagnostic excerpt: error C2065: MissingName: undeclared identifier."},
+    {"id": "dev-layout", "split": "dev", "group_id": "generated-layout", "goal": "Prepare a preview for a five-step staircase with rise 20 cm and tread 30 cm."},
+    {"id": "dev-baseline", "split": "dev", "group_id": "baseline-record", "goal": "Before editing the known crate actors, record their current baseline so we can compare changes later."},
+    {"id": "holdout-identity", "split": "heldout", "group_id": "project-identity", "goal": "Confirm the exact connected project file, world, bridge version and editor session before we do anything."},
+    {"id": "holdout-assets", "split": "heldout", "group_id": "asset-discovery", "goal": "Find existing wooden chair assets by name in the asset registry; I do not know their paths yet."},
+    {"id": "holdout-spacing", "split": "heldout", "group_id": "measured-spacing", "goal": "I have three exact native actor paths. Prepare a preview that distributes them with equal gaps along X using their measured bounds."},
+    {"id": "holdout-verification", "split": "heldout", "group_id": "post-edit-check", "goal": "Freshly check that the edited platform is 300 cm wide and its bottom is at Z=0; report whether those expected values pass."},
+    {"id": "holdout-plan", "split": "heldout", "group_id": "reconnect-recovery", "goal": "The client disconnected after applying a known plan ID. Inspect its retained editor outcome before deciding anything; do not retry it."},
+    {"id": "holdout-frame", "split": "heldout", "group_id": "camera-framing", "goal": "Move the editor camera to frame these known tower actor paths from the isometric view, before we take a screenshot."},
+    {"id": "holdout-unsupported", "split": "heldout", "group_id": "unsupported-execution", "goal": "Execute arbitrary Python inside the editor to delete all project assets and automatically save the project."},
+    {"id": "holdout-ambiguous", "split": "heldout", "group_id": "insufficient-context", "goal": "Fix that thing we discussed elsewhere. I cannot identify the project, object, error, or intended outcome."}
+  ]
+}

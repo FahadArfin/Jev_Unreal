@@ -1,6 +1,6 @@
 # Architecture
 
-Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.3 alpha exposes 27 MCP tools. Editor inspection, measured editing and verification work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
+Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.4 alpha exposes 39 MCP tools. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
 
 ```mermaid
 flowchart LR
@@ -8,7 +8,9 @@ flowchart LR
     MCP -->|explicit decision input| Jev[OpenRouter / TypeSafe Jev]
     Jev -->|choice / probability / score| MCP
     MCP -->|authenticated loopback| Editor[JevEditor plugin]
+    Panel[Window: Jev Review] -->|same native previews and apply| Editor
     Editor -->|preview then one-shot apply| World[Unreal editor world]
+    Editor -->|explicit project allowlist| Jobs[Native validation and existing PIE tests]
     Editor -->|exact actor details| Checks[Local snapshots, diffs and checks]
     Checks --> MCP
     MCP -->|initialize + tools/list only| Catalog[Explicit local MCP endpoints]
@@ -22,9 +24,17 @@ There is no Jev-to-execution edge. A decision returns a candidate ID. The caller
 
 MCP uses the official Python SDK over stdio. Standard output carries only the protocol. Decision requests use fixed HTTPS provider endpoints with environment proxy inheritance and redirects disabled. Bridge requests use a literal loopback origin. API keys are never sent to Unreal; bridge tokens are never sent to Jev.
 
-The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{action,params}`, envelope `{ok:true,result}` or `{ok:false,error:{code,message}}`. Unreal owns scene validation, plan lifetime and transactions. Python repeats project identity validation before every call, and requires `JEV_EXPECTED_PROJECT` for preview, apply and camera framing.
+The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{action,params}`, envelope `{ok:true,result}` or `{ok:false,error:{code,message}}`. Unreal owns scene validation, plan lifetime and transactions. The listener binds only `127.0.0.1` at `JEV_BRIDGE_PORT` (1024–65535; default 9845). Invalid configuration or a port conflict disables it. The matching Host header and bearer token are required; browser Origin headers are rejected.
 
-Status advertises native capabilities. The bridge requires the relevant capability before dispatching exact actor inspection, state-bound previews, material edits, metadata edits and camera presets. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not authorization. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
+Python reads authenticated status before every operation and compares its project with the configured binding. Preview, apply, camera framing and project-job start/cancel require an explicit project. That binding comes from `JEV_EXPECTED_PROJECT` or a selected [connection profile](CONNECTION_PROFILES.md). A profile selects the project, endpoint and token file together at MCP startup; it does not inherit a legacy token or retarget a running process. Each selected editor uses its own MCP process.
+
+Status advertises bridge version `0.4.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
+
+For `validation_start`, Python also puts the authenticated status's exact project,
+session, world and revision into the native request. Native code checks these before
+queueing any callback, so an endpoint reused by a restarted editor cannot satisfy
+the earlier preflight. Functional starts require the caller's inspected
+`expected_state`; native code checks it before queueing and again before execution.
 
 The plugin has no runtime game module. Shipping games do not need Python, Jev credentials or this HTTP listener. Runtime NPC decisions require a separate server-authoritative design and remain outside this editor integration.
 
@@ -75,23 +85,82 @@ material checks are distinct from rendered review, collision behavior and gamepl
 acceptance. [Spatial contracts](SPATIAL_WORKFLOWS.md) and
 [verification contracts](VERIFICATION.md) document exact predicates and tolerances.
 
-## Process-local state
+## Review and process-local state
+
+**Window → Jev Review** uses the same native inspection, previews and apply path
+as MCP. A human can inspect selected actors, review a translation or label/folder
+change, and apply the reviewed one-shot plan. MCP-created pending plans are also
+visible. Its two-second refresh only reads; it never approves, applies, retries or
+saves automatically. [Panel behavior](REVIEW_PANEL.md) describes its current scope.
+
+The Python process retains these bounded stores:
 
 | Store | Limits | Meaning |
 | --- | --- | --- |
 | Preview expectations | 64 plans; at most the native 120-second lifetime | Compare a known preview with the immediate native apply readback |
-| Plan records | 64 records; 2 MiB serialized total; 64 KiB per record; 15 minutes from first record | Review the last outcome observed by this MCP process; details can be omitted |
+| Client plan records | 64 records; 2 MiB serialized total; 64 KiB per record; 15 minutes from first record | Review the last outcome observed by this MCP process; details can be omitted |
 | Attempt guard | 64 IDs; 15 minutes from the attempt | Suppress local repeated apply calls even when recording fails |
 | Actor snapshots | 32 snapshots; 2 MiB serialized total; 15 minutes | Selected-actor baselines for later fresh diffs |
 
 Python object overhead is additional to serialized byte limits. Capacity pressure
 evicts records, expiration removes them, and a process restart clears every store.
 Updating a plan record does not extend its original retention indefinitely.
-Plan states distinguish previewed, applying, applied, rejected and unknown;
-transport loss, cancellation or uncertain rollback stays unknown. `unreal_plan`
-returns a best-effort client observation and performs no fresh editor read.
-These stores are not durable receipts, backups, a retry queue or crash recovery.
-Native one-shot plans and editor transactions remain authoritative.
+Client states distinguish previewed, applying, applied, rejected and unknown;
+transport loss, cancellation or uncertain rollback stays unknown.
+
+Native plan history separately retains up to 64 records for 15 minutes from
+creation in the editor process. Pending plans remain executable for 120 seconds.
+Completed records are evicted before pending records; in-flight records are
+protected from pruning and nested mutations. Native statuses distinguish pending,
+applying, applied, rejected, expired, rolled_back and unknown. `unreal_pending_plans`
+lists current previews. `unreal_plan` first reads the native receipt; if that fails,
+it can return the current MCP process's observation with `native_lookup_error`.
+A fallback is not confirmation that the editor received or completed an operation.
+
+Native receipts survive an MCP reconnect while the editor stays open, and remain
+historical after Undo or later edits. Editor restart/crash loses them. Neither
+native nor client records are durable receipts, backups, a retry queue or crash
+recovery; use fresh inspection and verification before deciding the next edit.
+
+## Project inspection and approved jobs
+
+[Blueprint inspection](PROJECT_INSPECTION.md) reads an exact already-loaded native
+Blueprint's stored variables, graph/node/pin identities and diagnostics. It does
+not load or compile the asset, edit graphs or invoke extension graph callbacks.
+Bounds, visited graph identities and explicit truncation flags constrain the read.
+Asset Registry dependency queries return direct edges with pagination; import
+provenance returns recorded source basenames/timestamps/hashes without opening
+the source files. These are partial inspection evidence, not new compilation,
+runtime dependency validation or DCC round-trip acceptance.
+
+Data Validation and [functional test jobs](FUNCTIONAL_TESTS.md) are disabled by
+default. The maintainer configures separate allowlists in `DefaultGame.ini` for
+loaded native validator classes and exact placed functional tests. A validation
+job selects 1–8 rules and 1–20 exact assets, processes one pair per editor tick,
+and distinguishes valid, invalid and not-validated results. Functional execution
+runs one approved test in an already-running single standalone PIE session;
+the adapter never starts/stops PIE or supports Simulate/multiplayer sessions.
+Only one project job can run across the two adapters at a time.
+
+The module dispatches project tools separately from scene edits. Status, context,
+history, project inspection, rule/test listing and retained job reads remain
+available during Play/Simulate. Scene edits and most scene inspection/capture
+actions still refuse it. Validation starts refuse Play/Simulate and pending work
+cancels if play begins. Functional start requires its supported PIE state.
+
+Callbacks are trusted project code, with possible loading, mutation, saving and
+external effects. The adapter requests no save and cannot sandbox them: job
+receipts use `save_requested=false`, `saved=null` and
+`callback_side_effects_tracked=false`. Cancellation and 1–120-second configured
+deadlines are cooperative between callbacks. Identity/configuration checks and
+reentry guards protect job ownership. A functional receipt binds exact editor/PIE
+actor and world identities plus the native run, so cancelling an old job cannot
+stop a later run on the same actor. Cleanup returning is not proof of complete
+restoration. Observed functional-test assertion errors cannot be overridden by an
+explicit success result.
+
+Validation retains up to eight job records, and functional testing up to 64,
+for 15 minutes after completion in editor memory. Restarts discard them.
 
 ## Reliability and privacy
 
@@ -117,7 +186,14 @@ of at most 64 KiB and runs fresh checks. Neither invokes a provider. The MCP
 `verified_edit_workflow` prompt and `jev://checks` examples connect these pieces
 without inventing goals or permissions.
 
-The [roadmap](ROADMAP.md) prioritizes review UI, installation/repair, project-owned
-validation and tests, workflow evaluation and later Blender handoff. These remain
-separate engineering work. Improvements in total task time/cost must be measured
-against direct tool use and deterministic retrieval before they are claimed.
+The [reviewed installer](SETUP.md) is a local CLI path, separate from the bridge.
+It plans source-file changes and the project's JevEditor enablement, validates
+hashes before apply, retains owned backups and preserves modified/untracked files.
+It neither builds Unreal nor loads credentials or controls editor processes.
+
+The [benchmark harness](BENCHMARKS.md) separates routing decisions from manually
+supplied workflow outcomes; its public synthetic sample does not measure total
+task efficiency. The [roadmap](ROADMAP.md) keeps representative usability and
+fresh-machine studies, crash-durable recovery, wider gameplay validation, real
+workflow comparisons and later Blender handoff open. Improvements in total task
+time/cost must be measured against direct tool use and deterministic retrieval.

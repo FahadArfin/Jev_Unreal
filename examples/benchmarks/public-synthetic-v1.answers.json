@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "dataset_sha256": "e87d5863b10ac6ca684d7f6f8829f2c403f3a1a94896f57b41d93c322fd12caa",
+  "labels": [
+    {
+      "case_id": "train-context",
+      "accepted_tools": [
+        "unreal_context"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "train-log",
+      "accepted_tools": [
+        "jev_triage"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "dev-layout",
+      "accepted_tools": [
+        "unreal_layout_preview"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "dev-baseline",
+      "accepted_tools": [
+        "unreal_snapshot"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-identity",
+      "accepted_tools": [
+        "unreal_status"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-assets",
+      "accepted_tools": [
+        "unreal_assets"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-spacing",
+      "accepted_tools": [
+        "unreal_spatial_preview"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-verification",
+      "accepted_tools": [
+        "unreal_verify"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-plan",
+      "accepted_tools": [
+        "unreal_plan"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-frame",
+      "accepted_tools": [
+        "unreal_frame"
+      ],
+      "expect_defer": false
+    },
+    {
+      "case_id": "holdout-unsupported",
+      "accepted_tools": [],
+      "expect_defer": true
+    },
+    {
+      "case_id": "holdout-ambiguous",
+      "accepted_tools": [],
+      "expect_defer": true
+    }
+  ]
+}

@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "evaluation_date_utc": "2026-09-22",
+  "scope": "one_public_synthetic_routing_smoke_run",
+  "model_metadata_note": "The Jev model field is the requested configuration. The returned model identity was not retained in these score summaries.",
+  "direct_agent_evaluated": false,
+  "workflow_completion_measured": false,
+  "reports": [
+    {
+      "schema_version": 1,
+      "dataset_id": "public-synthetic-routing-v1",
+      "dataset_sha256": "e87d5863b10ac6ca684d7f6f8829f2c403f3a1a94896f57b41d93c322fd12caa",
+      "answer_key_sha256": "3a4fbb9e30847c43992a71fc93550484267b9d8b0a7de45e5f91af9e10ca99c8",
+      "routing_run_sha256": "690db405fa81ea5915f66e0c7b0fc16310f1b609f03b3120bed22e13dd836b6e",
+      "provenance": "public_synthetic",
+      "split": "heldout",
+      "method": "keyword",
+      "implementation": "jev-benchmark-v1",
+      "model": null,
+      "routing": {
+        "cases": 8,
+        "correct": 7,
+        "accuracy_over_all_cases": 0.875,
+        "recommendations": 5,
+        "coverage": 0.625,
+        "recommendation_accuracy": 1.0,
+        "abstentions": 3,
+        "correct_abstentions": 2,
+        "expected_defer_cases": 2,
+        "recommendations_when_defer_expected": 0,
+        "errors": 0,
+        "latency_ms": {
+          "reported_count": 8,
+          "missing_count": 0,
+          "reported_sum": 0.8089000002655666,
+          "mean_of_reported": 0.10111250003319583
+        },
+        "cost_usd": {
+          "reported_count": 8,
+          "missing_count": 0,
+          "reported_sum": 0.0,
+          "mean_of_reported": 0.0
+        },
+        "rows": [
+          {
+            "case_id": "holdout-ambiguous",
+            "correct": true,
+            "outcome": "defer",
+            "selected": null,
+            "expected_defer": true
+          },
+          {
+            "case_id": "holdout-assets",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_assets",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-frame",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_frame",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-identity",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_status",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-plan",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_plan",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-spacing",
+            "correct": false,
+            "outcome": "defer",
+            "selected": null,
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-unsupported",
+            "correct": true,
+            "outcome": "defer",
+            "selected": null,
+            "expected_defer": true
+          },
+          {
+            "case_id": "holdout-verification",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_verify",
+            "expected_defer": false
+          }
+        ]
+      },
+      "workflow": {
+        "scope": "not_measured",
+        "expected_cases": 8,
+        "observed_cases": 0,
+        "passed": 0,
+        "failed": 0,
+        "unverifiable": 0,
+        "missing": 8,
+        "completion_rate_over_all_cases": null,
+        "note": "Routing correctness is not task completion or efficiency evidence."
+      },
+      "limitations": [
+        "Partition labels and hashes do not prove an external, untouched holdout.",
+        "No editor workflow runs in this benchmark. Completion requires separate evidence.",
+        "Missing costs are unknown; failed calls may still incur unreported charges.",
+        "Confidence is neither permission nor a security boundary."
+      ]
+    },
+    {
+      "schema_version": 1,
+      "dataset_id": "public-synthetic-routing-v1",
+      "dataset_sha256": "e87d5863b10ac6ca684d7f6f8829f2c403f3a1a94896f57b41d93c322fd12caa",
+      "answer_key_sha256": "3a4fbb9e30847c43992a71fc93550484267b9d8b0a7de45e5f91af9e10ca99c8",
+      "routing_run_sha256": "0e51e02cab6efa5c3884af8021cbc4c91a4bc0ec3402e7951ed1245509970464",
+      "provenance": "public_synthetic",
+      "split": "heldout",
+      "method": "jev",
+      "implementation": "jev-benchmark-v1",
+      "model": "typesafe/jev-1.13",
+      "routing": {
+        "cases": 8,
+        "correct": 8,
+        "accuracy_over_all_cases": 1.0,
+        "recommendations": 6,
+        "coverage": 0.75,
+        "recommendation_accuracy": 1.0,
+        "abstentions": 2,
+        "correct_abstentions": 2,
+        "expected_defer_cases": 2,
+        "recommendations_when_defer_expected": 0,
+        "errors": 0,
+        "latency_ms": {
+          "reported_count": 8,
+          "missing_count": 0,
+          "reported_sum": 1879.6352000026673,
+          "mean_of_reported": 234.9544000003334
+        },
+        "cost_usd": {
+          "reported_count": 8,
+          "missing_count": 0,
+          "reported_sum": 0.00026061,
+          "mean_of_reported": 3.257625e-05
+        },
+        "rows": [
+          {
+            "case_id": "holdout-ambiguous",
+            "correct": true,
+            "outcome": "defer",
+            "selected": null,
+            "expected_defer": true
+          },
+          {
+            "case_id": "holdout-assets",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_assets",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-frame",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_frame",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-identity",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_status",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-plan",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_plan",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-spacing",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_spatial_preview",
+            "expected_defer": false
+          },
+          {
+            "case_id": "holdout-unsupported",
+            "correct": true,
+            "outcome": "defer",
+            "selected": null,
+            "expected_defer": true
+          },
+          {
+            "case_id": "holdout-verification",
+            "correct": true,
+            "outcome": "recommend",
+            "selected": "unreal_verify",
+            "expected_defer": false
+          }
+        ]
+      },
+      "workflow": {
+        "scope": "not_measured",
+        "expected_cases": 8,
+        "observed_cases": 0,
+        "passed": 0,
+        "failed": 0,
+        "unverifiable": 0,
+        "missing": 8,
+        "completion_rate_over_all_cases": null,
+        "note": "Routing correctness is not task completion or efficiency evidence."
+      },
+      "limitations": [
+        "Partition labels and hashes do not prove an external, untouched holdout.",
+        "No editor workflow runs in this benchmark. Completion requires separate evidence.",
+        "Missing costs are unknown; failed calls may still incur unreported charges.",
+        "Confidence is neither permission nor a security boundary."
+      ]
+    }
+  ]
+}

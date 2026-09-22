@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "WorkflowObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "title": "Case Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "unverifiable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "completion_seconds": {
+          "maximum": 604800,
+          "minimum": 0,
+          "title": "Completion Seconds",
+          "type": "number"
+        },
+        "correction_seconds": {
+          "maximum": 604800,
+          "minimum": 0,
+          "title": "Correction Seconds",
+          "type": "number"
+        },
+        "failure_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Failure Count",
+          "type": "integer"
+        },
+        "tool_call_count": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Call Count"
+        },
+        "total_cost_usd": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Cost Usd"
+        },
+        "evidence_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Evidence Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_id",
+        "status",
+        "completion_seconds",
+        "correction_seconds",
+        "failure_count",
+        "evidence_sha256"
+      ],
+      "title": "WorkflowObservation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "dataset_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Dataset Sha256",
+      "type": "string"
+    },
+    "routing_run_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Routing Run Sha256",
+      "type": "string"
+    },
+    "human_reviewed": {
+      "const": true,
+      "title": "Human Reviewed",
+      "type": "boolean"
+    },
+    "reviewer_id": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]+$",
+      "title": "Reviewer Id",
+      "type": "string"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/WorkflowObservation"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Observations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "dataset_sha256",
+    "routing_run_sha256",
+    "human_reviewed",
+    "reviewer_id",
+    "observations"
+  ],
+  "title": "WorkflowOutcomes",
+  "type": "object"
+}

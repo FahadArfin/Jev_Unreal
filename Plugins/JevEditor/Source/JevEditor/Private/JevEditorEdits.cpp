@@ -12,6 +12,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/Paths.h"
 #include "ScopedTransaction.h"
+#include "Serialization/JsonSerializer.h"
 #include "UObject/StrongObjectPtr.h"
 
 namespace JevEdits
@@ -88,6 +89,7 @@ TSharedRef<FJsonObject> Success(const TSharedRef<FJsonObject>& Result)
 
 TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPtr<FJsonObject>& Params)
 {
+    if (bApplyingPlan) return Error(TEXT("editor_busy"), TEXT("A Jev plan is applying. Inspect its outcome before another preview."));
     if (!World->GetCurrentLevel() || FLevelUtils::IsLevelLocked(World->GetCurrentLevel()))
         return Error(TEXT("level_locked"), TEXT("The current editor level must be editable."));
     const TArray<TSharedPtr<FJsonValue>>* Operations = nullptr;
@@ -107,6 +109,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
             return Error(TEXT("stale_plan"), TEXT("Editor state changed since inspection. Inspect again before requesting a preview."));
     }
     const double Now = Clock();
+    PrunePlanRecords();
     for (auto It = Plans.CreateIterator(); It; ++It) if (It.Value().ExpiresAt <= Now) It.RemoveCurrent();
     if (Plans.Num() >= 64) return Error(TEXT("too_many_plans"), TEXT("At most 64 unexpired plans can be held."));
     FPlan Plan;
@@ -117,6 +120,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
     Plan.Revision = InitialRevision;
     Plan.ExpiresAt = Now + JevEdits::PlanLifetime;
     TArray<TSharedPtr<FJsonValue>> Normalized;
+    TArray<TSharedPtr<FJsonValue>> Before;
     TSet<FString> ExistingTargets;
     for (const auto& Value : *Operations)
     {
@@ -200,11 +204,56 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
         Summary->SetArrayField(TEXT("location"), JevEdits::Vector(Location));
         Summary->SetArrayField(TEXT("rotation"), JevEdits::Vector(Rotation));
         Summary->SetArrayField(TEXT("scale"), JevEdits::Vector(Scale));
+        if (Operation.Target.IsValid())
+        {
+            const auto Snapshot = ActorSnapshot(Operation.Target.Get());
+            auto Baseline = MakeShared<FJsonObject>();
+            for (const TCHAR* Key : {TEXT("path"), TEXT("instance_id"), TEXT("label"), TEXT("folder"), TEXT("location"), TEXT("rotation"), TEXT("scale")})
+                Baseline->SetField(Key, Snapshot->TryGetField(Key));
+            if (Operation.Op == TEXT("set_material"))
+            {
+                const auto* Component = CastChecked<AStaticMeshActor>(Operation.Target.Get())->GetStaticMeshComponent();
+                UMaterialInterface* Assigned = Component->GetEditorMaterial(Operation.Slot);
+                Baseline->SetNumberField(TEXT("slot"), Operation.Slot);
+                if (IsValid(Assigned)) Baseline->SetStringField(TEXT("material_path"), Assigned->GetPathName());
+                else Baseline->SetField(TEXT("material_path"), MakeShared<FJsonValueNull>());
+            }
+            Before.Add(MakeShared<FJsonValueObject>(Baseline));
+        }
+        else Before.Add(MakeShared<FJsonValueNull>());
         Normalized.Add(MakeShared<FJsonValueObject>(Summary));
         Plan.Operations.Add(MoveTemp(Operation));
     }
     if (Plan.Revision != Revision(World)) return Error(TEXT("stale_plan"), TEXT("Editor state changed while resolving the preview assets. Inspect again."));
+    auto Review = MakeShared<FJsonObject>();
+    Review->SetStringField(TEXT("project_file"), Plan.Project);
+    Review->SetStringField(TEXT("world_path"), Plan.World);
+    Review->SetStringField(TEXT("revision"), Plan.Revision);
+    Review->SetArrayField(TEXT("operations"), Normalized);
+    Review->SetArrayField(TEXT("before"), Before);
+    FString EncodedReview;
+    auto ReviewWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&EncodedReview);
+    if (!FJsonSerializer::Serialize(Review, ReviewWriter) || FTCHARToUTF8(*EncodedReview).Length() > 131072)
+        return Error(TEXT("response_too_large"), TEXT("The human-readable plan record exceeds 128 KiB. Reduce the number of operations."));
+    while (PlanRecords.Num() >= 64)
+    {
+        const int32 OldestCompleted = PlanRecordOrder.IndexOfByPredicate([this](const FString& Id)
+        {
+            const FPlanRecord* Existing = PlanRecords.Find(Id);
+            return !Plans.Contains(Id) && Existing && Existing->Status != TEXT("applying");
+        });
+        if (OldestCompleted == INDEX_NONE) return Error(TEXT("too_many_plans"), TEXT("At most 64 retained pending plans can be held."));
+        PlanRecords.Remove(PlanRecordOrder[OldestCompleted]);
+        PlanRecordOrder.RemoveAt(OldestCompleted);
+    }
     const FString PlanId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+    FPlanRecord Record;
+    Record.Review = Review;
+    Record.CreatedAt = Now;
+    Record.UpdatedAt = Now;
+    Record.ExpiresAt = Plan.ExpiresAt;
+    PlanRecords.Add(PlanId, MoveTemp(Record));
+    PlanRecordOrder.Add(PlanId);
     Plans.Add(PlanId, MoveTemp(Plan));
     auto Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("plan_id"), PlanId);
@@ -220,6 +269,14 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
     if (!JevEdits::OnlyFields(Params, {TEXT("plan_id")}) || !JevEdits::String(Params, TEXT("plan_id"), PlanId) || PlanId.Len() > 64) return Error(TEXT("bad_request"), TEXT("apply requires only plan_id."));
     FPlan Plan;
     if (!Plans.RemoveAndCopyValue(PlanId, Plan)) return Error(TEXT("unknown_plan"), TEXT("Plan does not exist or has already been consumed."));
+#if WITH_DEV_AUTOMATION_TESTS
+    if (ApplyConsumedCallbackForTesting)
+    {
+        TFunction<void()> Callback = MoveTemp(ApplyConsumedCallbackForTesting);
+        ApplyConsumedCallbackForTesting = {};
+        Callback();
+    }
+#endif
     if (Plan.ExpiresAt <= Clock()) return Error(TEXT("expired_plan"), TEXT("Plan expired. Preview again."));
     if (Plan.Project != FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath()) || Plan.WorldInstance.Get() != World || Plan.World != World->GetPathName() || Plan.Revision != Revision(World)) return Error(TEXT("stale_plan"), TEXT("Editor state changed after preview."));
     for (auto Actor : Plan.SceneActors) if (!Actor.IsValid() || Actor->GetWorld() != World) return Error(TEXT("stale_plan"), TEXT("An actor instance was replaced after preview."));

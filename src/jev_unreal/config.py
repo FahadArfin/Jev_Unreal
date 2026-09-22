@@ -2,10 +2,10 @@
 
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 from urllib.parse import urlparse
 
 from .errors import JevError
+from .profiles import read_token_file, selected_profile
 
 
 def loopback_url(value: str) -> str:
@@ -24,7 +24,7 @@ def loopback_url(value: str) -> str:
     ):
         raise JevError("configuration", "Bridge URL must be a literal loopback HTTP origin.")
     try:
-        if parsed.port is None:
+        if parsed.port is None or not 1024 <= parsed.port <= 65535:
             raise ValueError
     except ValueError:
         raise JevError("configuration", "Bridge URL must include a valid port.") from None
@@ -39,6 +39,7 @@ class Settings:
     bridge_url: str = "http://127.0.0.1:9845"
     bridge_token: str = field(default="", repr=False)
     expected_project: str = ""
+    profile_id: str = ""
     catalog_file: str = ""
     max_requests: int = 100
     cache_seconds: float = 60
@@ -63,12 +64,33 @@ class Settings:
     @classmethod
     def from_env(cls):
         provider = os.getenv("JEV_PROVIDER", "openrouter")
-        token = os.getenv("JEV_BRIDGE_TOKEN", "")
-        if not token and (token_file := os.getenv("JEV_BRIDGE_TOKEN_FILE")):
-            try:
-                token = Path(token_file).read_text(encoding="utf-8-sig").strip()
-            except (OSError, UnicodeError):
-                raise JevError("configuration", "Cannot read JEV_BRIDGE_TOKEN_FILE.") from None
+        profile_file = os.getenv("JEV_PROFILES_FILE", "")
+        profile_id = os.getenv("JEV_PROFILE", "")
+        if bool(profile_file) != bool(profile_id):
+            raise JevError("configuration", "Set both JEV_PROFILES_FILE and JEV_PROFILE together.")
+        if profile_file:
+            profile = selected_profile(profile_file, profile_id)
+            token = read_token_file(profile.bridge_token_file)
+            bridge_url = profile.bridge_url
+            expected_project = profile.project_file
+        else:
+            token = os.getenv("JEV_BRIDGE_TOKEN", "")
+            if not token and (token_file := os.getenv("JEV_BRIDGE_TOKEN_FILE")):
+                token = read_token_file(token_file)
+            bridge_url = os.getenv("JEV_BRIDGE_URL", "")
+            if not bridge_url:
+                port = os.getenv("JEV_BRIDGE_PORT", "9845")
+                if (
+                    not 4 <= len(port) <= 5
+                    or not port.isascii()
+                    or not port.isdecimal()
+                    or not 1024 <= int(port) <= 65535
+                ):
+                    raise JevError(
+                        "configuration", "JEV_BRIDGE_PORT must be between 1024 and 65535."
+                    )
+                bridge_url = f"http://127.0.0.1:{int(port)}"
+            expected_project = os.getenv("JEV_EXPECTED_PROJECT", "")
         try:
             return cls(
                 provider=provider,
@@ -78,9 +100,10 @@ class Settings:
                 model=os.getenv(
                     "JEV_MODEL", "typesafe/jev-1.13" if provider == "openrouter" else "jev-1.13.0"
                 ),
-                bridge_url=os.getenv("JEV_BRIDGE_URL", "http://127.0.0.1:9845"),
+                bridge_url=bridge_url,
                 bridge_token=token,
-                expected_project=os.getenv("JEV_EXPECTED_PROJECT", ""),
+                expected_project=expected_project,
+                profile_id=profile_id,
                 catalog_file=os.getenv("JEV_CATALOG_FILE", ""),
                 max_requests=int(os.getenv("JEV_MAX_REQUESTS", "100")),
             )

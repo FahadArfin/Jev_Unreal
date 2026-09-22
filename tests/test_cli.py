@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from jev_unreal.cli import WORKFLOW_CAPABILITIES, read_checks, run_command
+from jev_unreal.cli import (
+    PROJECT_WORKFLOW_CAPABILITIES,
+    PROJECT_WORKFLOW_FEATURES,
+    WORKFLOW_CAPABILITIES,
+    read_checks,
+    run_command,
+)
 from jev_unreal.config import Settings
 from jev_unreal.errors import JevError
 
@@ -24,7 +30,7 @@ async def test_doctor_readiness_and_no_provider_calls(monkeypatch, connected, bo
     if connected:
         bridge.call.return_value = {
             "project_file": "test.uproject",
-            "capabilities": list(WORKFLOW_CAPABILITIES),
+            "capabilities": list(WORKFLOW_CAPABILITIES | PROJECT_WORKFLOW_CAPABILITIES),
         }
     else:
         bridge.call.side_effect = JevError("editor_unavailable", "Editor unavailable")
@@ -68,6 +74,78 @@ async def test_doctor_reports_connected_but_outdated_native_plugin(monkeypatch):
     assert result["ready"] is False
     assert set(result["workflow_compatibility"]["missing_capabilities"]) == WORKFLOW_CAPABILITIES
     assert "Rebuild" in result["next_steps"][0]
+
+
+async def test_doctor_old_03_bridge_retains_core_compatibility_but_requires_04_upgrade(monkeypatch):
+    bridge = AsyncMock()
+    bridge.call.return_value = {
+        "project_file": "test.uproject",
+        "bridge_version": "0.3.0",
+        "capabilities": list(WORKFLOW_CAPABILITIES),
+    }
+    monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
+    result = await run_command(
+        Namespace(command="doctor"), Settings(expected_project="test.uproject")
+    )
+    assert result["ready"] is False
+    assert result["editor"]["ready"] is True
+    assert result["workflow_compatibility"] == {"ready": True, "missing_capabilities": []}
+    project = result["project_workflow_compatibility"]
+    assert project["ready"] is False
+    assert set(project["missing_capabilities"]) == PROJECT_WORKFLOW_CAPABILITIES
+    assert set(project["features"]) == set(PROJECT_WORKFLOW_FEATURES)
+    assert all(not feature["ready"] for feature in project["features"].values())
+    assert any("0.4" in step and "Native plan review" in step for step in result["next_steps"])
+    bridge.call.assert_awaited_once_with("status")
+
+
+@pytest.mark.parametrize("missing", sorted(PROJECT_WORKFLOW_CAPABILITIES))
+async def test_doctor_identifies_each_missing_project_capability(monkeypatch, missing):
+    bridge = AsyncMock()
+    bridge.call.return_value = {
+        "project_file": "test.uproject",
+        "bridge_version": "0.4.0",
+        "capabilities": sorted((WORKFLOW_CAPABILITIES | PROJECT_WORKFLOW_CAPABILITIES) - {missing}),
+    }
+    monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
+    result = await run_command(
+        Namespace(command="doctor"), Settings(expected_project="test.uproject")
+    )
+    assert result["ready"] is False
+    assert result["workflow_compatibility"]["ready"] is True
+    project = result["project_workflow_compatibility"]
+    assert project["missing_capabilities"] == [missing]
+    failed_features = [feature for feature in project["features"].values() if not feature["ready"]]
+    assert len(failed_features) == 1
+    assert failed_features[0]["missing_capabilities"] == [missing]
+    assert failed_features[0]["label"] in result["next_steps"][0]
+
+
+async def test_doctor_current_04_bridge_is_ready_without_running_or_enabling_project_code(
+    monkeypatch,
+):
+    bridge = AsyncMock()
+    bridge.call.return_value = {
+        "project_file": "test.uproject",
+        "bridge_version": "0.4.0",
+        "capabilities": sorted(WORKFLOW_CAPABILITIES | PROJECT_WORKFLOW_CAPABILITIES),
+    }
+    monkeypatch.setattr("jev_unreal.cli.UnrealBridge", lambda settings: bridge)
+
+    def no_provider(*args, **kwargs):
+        pytest.fail("Doctor compatibility checks must remain local")
+
+    monkeypatch.setattr("jev_unreal.cli.DecisionClient", no_provider)
+    result = await run_command(
+        Namespace(command="doctor"), Settings(expected_project="test.uproject")
+    )
+    assert result["ready"] is True
+    assert result["project_workflow_compatibility"]["ready"] is True
+    assert result["project_workflow_compatibility"]["missing_capabilities"] == []
+    assert result["project_workflow_compatibility"]["policy_verified"] is False
+    assert result["next_steps"] == []
+    bridge.call.assert_awaited_once_with("status")
+    bridge.close.assert_awaited_once()
 
 
 def test_cli_verification_file_is_bounded_and_has_no_arbitrary_options(tmp_path):
