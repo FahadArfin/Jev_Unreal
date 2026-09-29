@@ -25,7 +25,7 @@ bEnabled=true
 The policy defaults to disabled. It accepts at most 64 unique aliases and exact
 `/Game` object paths. Duplicate aliases/paths, malformed entries and oversized
 policies disable execution. No client may supply a different path, compiler flags,
-code, a function name, a script, or a load request.
+code, an arbitrary function name, a script, or a load request.
 
 1. Open the approved asset in Unreal. Read `unreal_blueprint_compile_targets` and
    `unreal_blueprint_inspect`, then inspect the editor context.
@@ -75,3 +75,43 @@ project-owned functional tests and human review for those acceptance decisions.
 with `unreal_blueprint_compile`; its receipt distinguishes the pin edit from the
 fresh compiler verdict. Native Undo records the edit; compiler failure retains
 it for explicit correction or Undo. See the [supported nodes and pin constraints](DOMAIN_WORKFLOWS.md#1-reviewed-blueprint-literal-edits).
+
+## Reviewed math nodes and connections
+
+`unreal_blueprint_graph_preview(target_id, graph_edit, expected_state)` adds a
+separate opt-in graph plan. Enable `bEnableGraphEdits=true` in the same compilation
+policy. Use graph/node/pin IDs returned by `unreal_blueprint_inspect`. The bridge
+accepts exact native `UBlueprint` assets with editable K2 graphs; Widget and
+Animation Blueprints retain inspection and compile support, but graph edits are
+not enabled for their specialized graphs.
+
+The closed edit vocabulary is:
+
+| Operation | Fields in `graph_edit` | Acceptance rules |
+| --- | --- | --- |
+| `add_math_node` | `graph_id`, `function`, `x`, `y` | One native math node; integral coordinates in -100000..100000. |
+| `remove_math_node` | `graph_id`, `node_id` | One allowed native node with no linked pins. |
+| `connect` | `graph_id`, `output_node_id`, `output_pin_id`, `input_node_id`, `input_pin_id` | Same graph, distinct allowed nodes, exact matching primitive types, unoccupied input, schema-approved direct connection and no cycle. |
+| `disconnect` | Same endpoint fields as `connect` | Exactly the existing reviewed connection. |
+
+Every row also supplies `operation`. The function enum is `Add_IntInt`,
+`Multiply_IntInt`, `Add_DoubleDouble`, `Multiply_DoubleDouble`, or `Not_PreBool`.
+There is no arbitrary function discovery, execution node creation, coercion node
+insertion, automatic link replacement, variable declaration or graph creation.
+Addition returns the planned `added_node_id` for readback.
+
+Preview captures a bounded stored graph snapshot, including node instance IDs,
+positions, native function identities, primitive pin types/defaults and links.
+The snapshot and edit eligibility are checked again at commit. Notified editor
+changes and unnotified changes to captured graph fields invalidate the plan.
+The bounds are 128 graphs, 2048 nodes in the selected graph, 8192 pins and 16384
+stored link endpoints. This is not comprehensive observation of arbitrary
+plugin-owned native memory.
+
+Commit with `unreal_blueprint_compile(plan_id)`. The existing 120-second,
+one-attempt rules apply, and compilation produces fresh bounded diagnostics.
+The receipt records `graph_edit_applied` independently of the compiler verdict.
+A native Undo transaction records the graph edit. Compiler failure retains the
+edit for explicit Undo or a reviewed correction; it never silently retries or
+claims compiler callback rollback. A successful compile does not prove the
+new arithmetic is correct for the game's rules.

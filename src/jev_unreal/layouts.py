@@ -204,6 +204,36 @@ def _finite_vector(value: object) -> bool:
         return False
 
 
+def _transform_component_matches(actual, target, field: str) -> bool:
+    if field == "rotation":
+        left, right = _quat(actual), _quat(target)
+        return (
+            min(
+                sum((a - b) ** 2 for a, b in zip(left, right, strict=True)),
+                sum((a + b) ** 2 for a, b in zip(left, right, strict=True)),
+            )
+            < 1e-10
+        )
+    return all(
+        math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-3)
+        for a, b in zip(actual, target, strict=True)
+    )
+
+
+def transforms_match(expected: object, actual: object) -> bool:
+    """Compare complete finite transforms with the same tolerances as native readback."""
+    return (
+        isinstance(expected, dict)
+        and isinstance(actual, dict)
+        and all(
+            _finite_vector(expected.get(field))
+            and _finite_vector(actual.get(field))
+            and _transform_component_matches(actual[field], expected[field], field)
+            for field in ("location", "rotation", "scale")
+        )
+    )
+
+
 def verify_readback(expected: object, actors: object) -> dict:
     """Check returned actor identity and transforms, including equivalent Euler rotations."""
     issues = []
@@ -240,6 +270,14 @@ def verify_readback(expected: object, actors: object) -> dict:
         op.get("source_instance_id")
         for op in expected
         if isinstance(op, dict) and isinstance(op.get("source_instance_id"), str)
+    }
+    copied_by_source = {
+        operation.get("actor_path"): actor
+        for operation, actor in zip(expected, actors, strict=False)
+        if isinstance(operation, dict)
+        and operation.get("op") == "duplicate_mesh"
+        and isinstance(operation.get("actor_path"), str)
+        and isinstance(actor, dict)
     }
     for index, (operation, actor) in enumerate(zip(expected, actors, strict=False)):
         if (
@@ -294,6 +332,48 @@ def verify_readback(expected: object, actors: object) -> dict:
                     or instance_id in source_instances
                 ):
                     issues.append({"index": index, "code": "duplicate_identity_mismatch"})
+                if operation.get("preserve_attachments") is True:
+                    source_parent = operation.get("attachment_parent_source_path")
+                    parent = copied_by_source.get(source_parent) if source_parent else None
+                    if (
+                        "attachment_parent_source_path" not in operation
+                        or "attachment_parent_path" not in actor
+                        or "attachment_parent_instance_id" not in actor
+                        or (source_parent is not None and parent is None)
+                        or actor.get("attachment_parent_path")
+                        != (parent.get("path") if parent else None)
+                        or actor.get("attachment_parent_instance_id")
+                        != (parent.get("instance_id") if parent else None)
+                        or actor.get("attachment_socket") != "None"
+                    ):
+                        issues.append({"index": index, "code": "attachment_parent_mismatch"})
+                    desired_relative = operation.get("attachment_relative_transform")
+                    actual_relative = actor.get("attachment_relative_transform")
+                    if not isinstance(desired_relative, dict) or not isinstance(
+                        actual_relative, dict
+                    ):
+                        issues.append({"index": index, "code": "attachment_transform_unavailable"})
+                    else:
+                        for component in ("location", "rotation", "scale"):
+                            actual_values = actual_relative.get(component)
+                            desired_values = desired_relative.get(component)
+                            if not _finite_vector(actual_values) or not _finite_vector(
+                                desired_values
+                            ):
+                                issues.append(
+                                    {"index": index, "code": "attachment_transform_invalid"}
+                                )
+                                continue
+                            if not _transform_component_matches(
+                                actual_values, desired_values, component
+                            ):
+                                issues.append(
+                                    {
+                                        "index": index,
+                                        "code": "attachment_transform_mismatch",
+                                        "field": component,
+                                    }
+                                )
             elif instance_id != source_id:
                 issues.append({"index": index, "code": "actor_instance_mismatch"})
             seen_instances.add(instance_id if isinstance(instance_id, str) else None)
@@ -379,21 +459,7 @@ def verify_readback(expected: object, actors: object) -> dict:
                         {"index": index, "code": "invalid_mesh_transform", "field": field}
                     )
                     continue
-            if field == "rotation":
-                a, b = _quat(actual), _quat(target)
-                matches = (
-                    min(
-                        sum((x - y) ** 2 for x, y in zip(a, b, strict=True)),
-                        sum((x + y) ** 2 for x, y in zip(a, b, strict=True)),
-                    )
-                    < 1e-10
-                )
-            else:
-                matches = all(
-                    math.isclose(x, y, rel_tol=1e-6, abs_tol=1e-3)
-                    for x, y in zip(actual, target, strict=True)
-                )
-            if not matches:
+            if not _transform_component_matches(actual, target, field):
                 issues.append({"index": index, "code": "transform_mismatch", "field": field})
     return {
         "status": "passed" if not issues else "mismatch",
@@ -537,9 +603,26 @@ class PreviewTracker:
             result["verification"] = verify_readback(expectation[1], result.get("actors", []))
             if result["verification"]["status"] == "passed":
                 checks = []
+                copied_actors = {
+                    op["actor_path"]: actor
+                    for op, actor in zip(expectation[1], result["actors"], strict=True)
+                    if op["op"] == "duplicate_mesh"
+                }
                 for operation, actor in zip(expectation[1], result["actors"], strict=True):
                     if operation["op"] in {"replace_mesh", "duplicate_mesh"}:
                         checks.extend(mesh_checks(operation, actor["path"], actor["instance_id"]))
+                    if operation.get("preserve_attachments") is True:
+                        parent = copied_actors.get(operation["attachment_parent_source_path"])
+                        checks.append(
+                            {
+                                "kind": "attachment",
+                                "actor_path": actor["path"],
+                                "expected_instance_id": actor["instance_id"],
+                                "parent_path": parent["path"] if parent else None,
+                                "parent_instance_id": parent["instance_id"] if parent else None,
+                                "relative_transform": operation["attachment_relative_transform"],
+                            }
+                        )
                 if checks:
                     result["verification_checks"] = checks
                     result["verification_checks_note"] = (

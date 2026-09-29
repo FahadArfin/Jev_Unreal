@@ -58,6 +58,8 @@ bool FJevPlanLifecycleTest::RunTest(const FString& Parameters)
     if (!TestNotNull(TEXT("Isolated editor world exists"), World)) return false;
     FJevEditorBridge Bridge;
     const int32 OriginalCount = CountActors(World);
+    const auto Capabilities = Call(Bridge, TEXT("status"))->GetObjectField(TEXT("result"))->GetArrayField(TEXT("capabilities"));
+    TestTrue(TEXT("graph preview is discoverable by authenticated clients"), Capabilities.ContainsByPredicate([](const TSharedPtr<FJsonValue>& Value) { return Value->AsString() == TEXT("blueprint_graph_preview"); }));
     const auto Preview = Call(Bridge, TEXT("preview"), SpawnParameters);
     if (!TestTrue(TEXT("Allowed primitive previews"), Preview->GetBoolField(TEXT("ok")))) return false;
     TestEqual(TEXT("Preview does not modify the scene"), CountActors(World), OriginalCount);
@@ -450,6 +452,19 @@ bool FJevStaticMeshPlacementTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Replacement asset invalidates the preview"), Stale->GetBoolField(TEXT("ok")));
     TestEqual(TEXT("Replacement reports stale_plan"), Stale->GetObjectField(TEXT("error"))->GetStringField(TEXT("code")), FString(TEXT("stale_plan")));
     TestEqual(TEXT("Rejected mesh placement never changes the actor count"), CountActors(World), OriginalCount);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevExternalJobApplyGuard, "Jev.Editor.ExternalJobApplyGuard", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevExternalJobApplyGuard::RunTest(const FString&)
+{
+    UWorld* World = FAutomationEditorCommonUtils::CreateNewMap(); FJevEditorBridge Bridge; bool ExternalJobActive = false;
+    Bridge.SetExternalMutationBlocker([&ExternalJobActive] { return ExternalJobActive; });
+    const int32 Before = CountActors(World); const auto Plan = Call(Bridge, TEXT("preview"), SpawnParameters);
+    if (!TestTrue(TEXT("actual scene mutation previews before job begins"), Plan->GetBoolField(TEXT("ok")))) return false;
+    ExternalJobActive = true; const auto Rejected = ApplyPlan(Bridge, Plan);
+    TestFalse(TEXT("scene apply blocked while native service job active"), Rejected->GetBoolField(TEXT("ok"))); TestEqual(TEXT("scene apply reports job busy"), Rejected->GetObjectField(TEXT("error"))->GetStringField(TEXT("code")), FString(TEXT("job_busy"))); TestEqual(TEXT("blocked apply never spawns"), CountActors(World), Before); TestTrue(TEXT("status remains available during job"), Call(Bridge, TEXT("status"))->GetBoolField(TEXT("ok")));
+    ExternalJobActive = false; const auto Applied = ApplyPlan(Bridge, Plan); TestTrue(TEXT("same unchanged native plan becomes usable after job ends"), Applied->GetBoolField(TEXT("ok"))); TestEqual(TEXT("one explicit subsequent apply creates one actor"), CountActors(World), Before + 1); GEditor->UndoTransaction(); TestEqual(TEXT("independent edit Undo preserved"), CountActors(World), Before);
     return true;
 }
 

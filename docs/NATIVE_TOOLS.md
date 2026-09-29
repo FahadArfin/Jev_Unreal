@@ -1,4 +1,4 @@
-# Native editor inspection and edits (bridge 0.8.0)
+# Native editor inspection and edits (bridge 0.9.0)
 
 These actions use the existing authenticated loopback bridge. They execute on the
 editor game thread and do not call a model provider. Requests remain JSON objects
@@ -30,6 +30,10 @@ also report `static_mesh_path`, `collision_enabled`, `collision_profile`, and
 are capped at 64 slots; an unassigned slot has `path: null`. Nonmesh actors report
 `static_mesh_path: null`, `collision_enabled: null`, and an empty material list.
 An actor without a mesh reports `static_mesh_path: null`.
+Attachment readback includes `attachment_parent_path`, live
+`attachment_parent_instance_id`, `attachment_socket`, and
+`attachment_relative_transform`. Null parent fields identify an unattached root;
+local transforms are separate from the actor's world transform.
 
 Every response is capped at 1 MiB after UTF-8 serialization. Exceptionally long
 existing actor labels or paths can still exhaust that byte budget despite the
@@ -50,6 +54,9 @@ cannot start during Play/Simulate and pending validation cancels if play begins.
 Functional tests require one already-running standalone PIE session and reject
 Simulate/multiplayer. The adapter never automatically starts or stops a session;
 approved project callbacks still execute trusted code with their own side effects.
+The workflow widget inspector can also read one already existing on-screen PIE
+widget instance. It does not create, tick or invoke bindings on that widget; see
+[runtime inspection limits](ADVANCED_INSPECTIONS.md#runtime-widgets).
 
 Status capabilities describe implementation support, not permission to run a
 validator or test. The MCP bridge checks exact capabilities for native history,
@@ -151,9 +158,11 @@ inspectable but cannot support bounds-based spatial recipes. `editable` and
 `edit_blockers` describe native bridge edit eligibility, not whether every possible
 operation would be valid: a requested material slot must also exist, for example.
 
-All existing-actor edits require an exact native `AStaticMeshActor` with a root
+Existing-actor edits require an exact native `AStaticMeshActor` with a root
 component in an editable level, without actor locks, attached parents/children, or
-child-actor ownership. Blueprints and actor subclasses are excluded. A plan can
+child-actor ownership. The explicit hierarchy-copy mode below permits a closed
+selection of parent/child attachments under additional restrictions. Blueprints
+and actor subclasses are excluded. A plan can
 target an existing actor only once across all edit types. Use separate inspected
 plans when changing both its placement and its material.
 
@@ -163,7 +172,7 @@ plans when changing both its placement and its material.
 | `set_material` | `actor_path`, exact `material_path`, integer `slot` 0–63 | None. |
 | `set_metadata` | `actor_path` | At least one of `label`, `folder`. |
 | `replace_mesh` | `actor_path`, `asset_path`, `material_policy` (`preserve_slots` or `mesh_defaults`) | None. |
-| `duplicate_mesh` | source `actor_path`, new `label` | Absolute `location`, `rotation`, `scale`; omitted values inherit the source. |
+| `duplicate_mesh` | source `actor_path`, new `label` | Absolute `location`, `rotation`, `scale`; omitted values inherit the source. `preserve_attachments: true` opts into a closed hierarchy-copy batch. |
 
 The two mesh operations require native bridge 0.5 capabilities. They expose a
 reviewed subset of native static mesh actor behavior; duplication is not a general
@@ -171,6 +180,16 @@ UObject clone. See [mesh workflow contracts](MESH_WORKFLOWS.md) for copied setti
 material-slot policy, unsupported customizations, pivot/collision limitations and
 fresh verification. Normalized previews include effective materials and overrides,
 component settings and mesh review details. The human review panel displays them.
+
+Hierarchy copying additionally requires `mesh_attachment_copy`. Every operation
+in that plan must opt in and explicitly select the complete native mesh forest,
+up to 20 actors, with unique new labels. Copies retain world rotation/scale and
+share one translation offset. Parents must have uniform world scale; sockets,
+external attachments, child actors, extra components and absolute-transform
+components are refused. Preview records each copied parent relationship and local
+transform; apply checks both local and world readback. No undeclared descendant
+or arbitrary actor class is cloned. The existing scene transaction and verified
+rollback protect the batch; originals remain the inspected source actors.
 
 Material assignment accepts only registry-confirmed native `Material` or
 `MaterialInstanceConstant` assets under `/Game` or `/Engine`; redirectors, dynamic
@@ -201,6 +220,9 @@ target editability, baseline metadata/material assignments, and selected slots.
 The bridge loads and validates all selected assets before beginning mutations.
 
 Apply refuses an already active or unavailable Undo transaction with `editor_busy`.
+Ordinary scene apply also refuses an active native validation, functional-test,
+Blueprint or domain job with `job_busy`, including apply from the human review
+panel. Reading a plan or status remains available while a job runs.
 Successful edits share one independent editor Undo transaction. If a mutation
 fails after earlier operations succeeded, the bridge closes and undoes that whole
 transaction, discards its redo entry, and verifies the restored scene revision.
@@ -283,14 +305,70 @@ functional testing 64, for 15 minutes after completion in editor memory. Restart
 discards them. Read [Unreal validation evidence](UNREAL_VALIDATION.md) for the
 native, live and rendered checks actually completed.
 
-## Domain workflows in 0.8
+## Blueprint and domain workflows in 0.9
 
-The catalog now has 54 tools. The native workflow service exposes typed domain
-inspection, state-bound preview, one-shot apply, receipt and bounded editor timing
-jobs. It shares authenticated project identity and project-job exclusion. Global
-object notifications and exact target readback invalidate pending edits; material
-and Blueprint literal edits have explicit local policies. No arbitrary command,
-filesystem access or runtime switching is introduced. See [domain workflows](DOMAIN_WORKFLOWS.md)
-for the complete supported operations, bounded inputs, native Undo behavior and
-limitations. Domain/Blueprint review is through MCP; the Slate panel continues to
-display ordinary scene plans, including surface placement.
+These services share the authenticated route, exact project identity and native
+job exclusion, but retain their own reviewed plans and receipts. Domain and
+Blueprint review is through MCP; the Slate panel displays ordinary scene plans,
+including surface placement and hierarchy copying.
+
+| Native action | Scope |
+| --- | --- |
+| `blueprint_compile_targets` | Lists locally approved exact loaded targets and separate compile, literal-edit and graph-edit eligibility. |
+| `blueprint_compile_preview` | Reviews one approved compile target against supplied project/session/world/revision. |
+| `blueprint_pin_preview` | Reviews one allowed native math node's primitive unconnected input literal when the separate pin-edit policy is enabled. |
+| `blueprint_graph_preview` | Reviews one `add_math_node`, `remove_math_node`, `connect` or `disconnect` edit when the separate graph-edit policy is enabled. |
+| `blueprint_compile`, `blueprint_compile_receipt` | Commits the corresponding one-shot preview and obtains fresh bounded compiler diagnostics, or reads its retained outcome. |
+| `workflow_inspect` | Reads one typed domain query with explicit object identities, measurements, limits and unavailable/truncated evidence. |
+| `workflow_preview`, `workflow_apply`, `workflow_receipt` | Reviews one bounded domain change, applies its one-shot plan, or reads the retained status and target readback. |
+| `performance_start`, `performance_job`, `performance_cancel` | Runs, reads or cancels an owned bounded native timing observation job. |
+
+Blueprint graph edits accept only five native math functions in ordinary K2
+Blueprint graphs. Connections require exact primitive types, native schema
+approval, an empty input and no cycle; removal requires an unlinked allowed node.
+Graph snapshots, exact function/object identities and policy are checked again
+before mutation. Compile failure retains an applied edit for explicit Undo or
+correction, with a separate compiler verdict. Compiler callbacks remain trusted
+code whose complete effects cannot be rolled back. Widget/Animation Blueprints
+retain approved compilation, without specialized graph editing. See
+[Blueprint workflows](BLUEPRINT_WORKFLOWS.md).
+
+Material edits support scalar, vector, approved loaded Texture2D and separately
+approved static-switch values, including exact existing layer/blend parameter
+indices. They do not restructure material graphs or layer stacks. Camera render
+plans support fixed/automatic exposure, bounded EV100, lit/unlit, realtime and
+motion blur on the same unlocked perspective viewport. Viewport settings require
+explicit restoration through a new plan; they do not use asset Undo or freeze
+world time. See [material and viewport contracts](EDITING_EXTENSIONS.md).
+
+Expanded inspection includes sampled terrain support, optional navigation
+capsule/ground probes, bounded skin-weight and root-motion checks, cached runtime
+widget geometry/focus, and asynchronous published game/render/RHI/GPU counters.
+Reported probes and timings are observations, not proof of playable traversal,
+animation quality, accessibility or frame-correlated performance. Exact bounds
+and distinctions are in [advanced inspections](ADVANCED_INSPECTIONS.md) and
+[domain workflows](DOMAIN_WORKFLOWS.md). Native gameplay fixtures and their
+project adaptation are documented in [gameplay recipes](GAMEPLAY_RECIPES.md).
+The Python `unreal_surface_preview` helper combines native surface inspection
+with the existing state-bound scene `preview`; its result uses ordinary `apply`.
+
+## Optional host-side workflows
+
+The Python MCP server separately offers explicit `JEV_RUNTIME_CONFIG` policy,
+cooperating-client leases, bounded SQLite historical receipts and approved named
+build/cook/package jobs. These are not native bridge actions. Local policy adds
+action/operation/root restrictions without replacing native permission checks;
+leases coordinate only participating clients. Receipts preserve intent/outcome
+evidence across process interruptions, not reusable native plans or scene backups.
+Named jobs select fixed, hash-bound Win64 engine entrypoints and reviewed command
+templates, never caller-supplied scripts, executables or extra arguments. Trusted
+build code runs on the host and is not a filesystem sandbox. See the complete
+[team policy, receipt and job contracts](TEAM_WORKFLOWS.md).
+
+[Blender handoffs](DCC_HANDOFF.md) use explicit local export/import plus fresh
+native measurements; the bridge never imports arbitrary file paths or runs
+Blender. [Acceptance reports](ACCEPTANCE_REPORTS.md) summarize explicitly named
+local evidence without creating independent user or fresh-machine validation.
+The authenticated editor bridge continues to prohibit arbitrary Python, console,
+shell, filesystem and C++ execution. Current execution evidence belongs in
+[validation](VALIDATION.md); feature availability alone is not acceptance.

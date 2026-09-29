@@ -7,7 +7,7 @@ from pydantic import Field, TypeAdapter, ValidationError, field_validator, model
 
 from .bridge import UnrealBridge
 from .errors import JevError
-from .layouts import PreviewTracker, verify_readback
+from .layouts import PreviewTracker, transforms_match, verify_readback
 from .mesh_state import mesh_checks, mesh_state
 from .spatial import SpatialBase, Vector
 from .verification import _check_project, _normalize
@@ -30,6 +30,7 @@ class DuplicateMeshRecipe(SpatialBase):
     offset_cm: Vector = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     label_prefix: str = Field(default="", max_length=40)
     label_suffix: str = Field(default="_Copy", max_length=40)
+    preserve_attachments: bool = False
 
     @field_validator("label_prefix", "label_suffix")
     @classmethod
@@ -61,14 +62,28 @@ def compile_mesh(recipe: MeshRecipe, actor_details: object) -> dict:
             "capability_unavailable",
             "Mesh workflows require the matching JevEditor 0.5 plugin. Rebuild and relaunch it.",
         )
+    if (
+        isinstance(recipe, DuplicateMeshRecipe)
+        and recipe.preserve_attachments
+        and "mesh_attachment_copy" not in capabilities
+    ):
+        raise JevError("capability_unavailable", "Rebuild JevEditor with mesh attachment copying.")
     details = _normalize(actor_details, recipe.actor_paths)
     operations, measurements = [], []
     try:
         for actor in details["actors"]:
+            hierarchy = isinstance(recipe, DuplicateMeshRecipe) and recipe.preserve_attachments
+            blockers = actor["edit_blockers"]
+            if hierarchy:
+                blockers = [
+                    b for b in blockers if b not in {"attached_parent", "attached_children"}
+                ]
+                if not actor["attachment_state_available"]:
+                    raise ValueError("Complete attachment inspection is required.")
             if (
                 actor["class"] != "/Script/Engine.StaticMeshActor"
-                or actor["editable"] is not True
-                or actor["edit_blockers"]
+                or (actor["editable"] is not True and not hierarchy)
+                or blockers
                 or not actor["mesh_state_available"]
             ):
                 raise ValueError("Only complete editable native static mesh actors are supported.")
@@ -92,6 +107,8 @@ def compile_mesh(recipe: MeshRecipe, actor_details: object) -> dict:
                     "rotation": actor["rotation"],
                     "scale": actor["scale"],
                 }
+                if hierarchy:
+                    operation["preserve_attachments"] = True
             # Validate calculated locations and complete generated labels, without truncation.
             operation = Operation.model_validate(operation).model_dump(
                 mode="json", exclude_none=True
@@ -104,6 +121,19 @@ def compile_mesh(recipe: MeshRecipe, actor_details: object) -> dict:
                     "before": {
                         **source,
                         **{key: actor[key] for key in ("location", "rotation", "scale")},
+                        **(
+                            {
+                                key: actor[key]
+                                for key in (
+                                    "attachment_parent_path",
+                                    "attachment_parent_instance_id",
+                                    "attachment_relative_transform",
+                                    "attachment_socket",
+                                )
+                            }
+                            if hierarchy
+                            else {}
+                        ),
                     },
                     "bounds_available": actor["bounds_available"],
                     "bounds_cm": actor["bounds_cm"],
@@ -208,7 +238,24 @@ async def preview_mesh(bridge: UnrealBridge, previews: PreviewTracker, recipe: M
                 # Real duplicate paths/IDs are learned from the separate apply result.
                 desired["path"] = requested["actor_path"] + "_ReviewCandidate"
                 desired["instance_id"] = "review-candidate-" + str(len(targets))
-            if verify_readback([operation], [desired])["status"] != "passed":
+            basic_operation = operation
+            if isinstance(recipe, DuplicateMeshRecipe) and recipe.preserve_attachments:
+                parent = source["attachment_parent_path"]
+                expected_relative = (
+                    source["attachment_relative_transform"]
+                    if parent
+                    else {key: requested[key] for key in ("location", "rotation", "scale")}
+                )
+                if (
+                    operation.get("preserve_attachments") is not True
+                    or operation.get("attachment_parent_source_path") != parent
+                    or not transforms_match(
+                        expected_relative, operation.get("attachment_relative_transform")
+                    )
+                ):
+                    raise ValueError("Native hierarchy preview differs from inspected attachments.")
+                basic_operation = {**operation, "preserve_attachments": False}
+            if verify_readback([basic_operation], [desired])["status"] != "passed":
                 raise ValueError("Native preview differs from the requested source state.")
             targets.append(
                 {

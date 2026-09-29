@@ -1,6 +1,6 @@
 """Reviewed, project-approved native Blueprint compilation; no generated code execution."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -19,6 +19,37 @@ class PinEdit(Strict):
     node_id: Annotated[str, Field(min_length=32, max_length=36, pattern=r"^[A-Fa-f0-9-]+$")]
     pin_id: Annotated[str, Field(min_length=32, max_length=36, pattern=r"^[A-Fa-f0-9-]+$")]
     value: Annotated[str, Field(min_length=1, max_length=32)]
+
+
+Guid = Annotated[str, Field(min_length=32, max_length=36, pattern=r"^[A-Fa-f0-9-]+$")]
+
+
+class AddMathNode(Strict):
+    operation: Literal["add_math_node"]
+    graph_id: Guid
+    function: Literal[
+        "Add_IntInt", "Multiply_IntInt", "Add_DoubleDouble", "Multiply_DoubleDouble", "Not_PreBool"
+    ]
+    x: int = Field(ge=-100_000, le=100_000)
+    y: int = Field(ge=-100_000, le=100_000)
+
+
+class RemoveMathNode(Strict):
+    operation: Literal["remove_math_node"]
+    graph_id: Guid
+    node_id: Guid
+
+
+class MathLink(Strict):
+    operation: Literal["connect", "disconnect"]
+    graph_id: Guid
+    output_node_id: Guid
+    output_pin_id: Guid
+    input_node_id: Guid
+    input_pin_id: Guid
+
+
+GraphEdit = Annotated[AddMathNode | RemoveMathNode | MathLink, Field(discriminator="operation")]
 
 
 def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
@@ -104,3 +135,23 @@ def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
         MCP reconnects. Diagnostics may contain private project text; review before sharing.
         """
         return await call("blueprint_compile_receipt", {"plan_id": plan_id})
+
+    @server.tool(annotations=preview)
+    async def unreal_blueprint_graph_preview(
+        target_id: TargetId, graph_edit: GraphEdit, expected_state: ExpectedState
+    ) -> dict[str, Any]:
+        """Preview an approved native math node or exact-type link edit; never arbitrary nodes.
+
+        Inspect GUIDs first. Requires project graph-edit policy; no coercion, implicit link
+        breaks or cycles. Remove only unlinked supported math nodes. Commit the reviewed
+        one-shot plan with unreal_blueprint_compile, then inspect fresh compiler diagnostics.
+        Compiler callbacks are trusted project code; compilation is not gameplay verification.
+        """
+        return await call(
+            "blueprint_graph_preview",
+            {
+                "target_id": target_id,
+                "graph_edit": graph_edit.model_dump(mode="json"),
+                "expected_state": expected_state.model_dump(),
+            },
+        )

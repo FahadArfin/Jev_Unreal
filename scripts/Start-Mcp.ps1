@@ -19,7 +19,8 @@ param(
     [string]$CatalogFile = $env:JEV_CATALOG_FILE,
     [string]$BridgeUrl = $env:JEV_BRIDGE_URL,
     [string]$ProfilesFile = $env:JEV_PROFILES_FILE,
-    [string]$Profile = $env:JEV_PROFILE
+    [string]$Profile = $env:JEV_PROFILE,
+    [string]$RuntimeConfig = $env:JEV_RUNTIME_CONFIG
 )
 
 Set-StrictMode -Version Latest
@@ -45,11 +46,15 @@ $jevPreviousBridgeUrl = [Environment]::GetEnvironmentVariable('JEV_BRIDGE_URL', 
 $jevPreviousBridgePort = [Environment]::GetEnvironmentVariable('JEV_BRIDGE_PORT', 'Process')
 $jevPreviousProfilesFile = [Environment]::GetEnvironmentVariable('JEV_PROFILES_FILE', 'Process')
 $jevPreviousProfile = [Environment]::GetEnvironmentVariable('JEV_PROFILE', 'Process')
+$jevPreviousRuntimeConfig = [Environment]::GetEnvironmentVariable('JEV_RUNTIME_CONFIG', 'Process')
 $jevSecureKey = $null
 $jevKeyPointer = [IntPtr]::Zero
 $jevExitCode = 1
 
 try {
+    if (-not [string]::IsNullOrWhiteSpace($RuntimeConfig)) {
+        [Environment]::SetEnvironmentVariable('JEV_RUNTIME_CONFIG', [IO.Path]::GetFullPath($RuntimeConfig), 'Process')
+    }
     $jevUsesProfile = -not [string]::IsNullOrWhiteSpace($ProfilesFile)
     if ($jevUsesProfile -ne (-not [string]::IsNullOrWhiteSpace($Profile))) {
         throw 'Set both -ProfilesFile and -Profile together.'
@@ -117,6 +122,7 @@ finally {
     [Environment]::SetEnvironmentVariable('JEV_BRIDGE_PORT', $jevPreviousBridgePort, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_PROFILES_FILE', $jevPreviousProfilesFile, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_PROFILE', $jevPreviousProfile, 'Process')
+    [Environment]::SetEnvironmentVariable('JEV_RUNTIME_CONFIG', $jevPreviousRuntimeConfig, 'Process')
     if ($jevKeyPointer -ne [IntPtr]::Zero) {
         [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($jevKeyPointer)
     }

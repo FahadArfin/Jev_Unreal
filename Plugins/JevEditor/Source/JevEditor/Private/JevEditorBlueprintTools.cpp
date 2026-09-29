@@ -1,5 +1,6 @@
 #include "JevEditorBlueprintTools.h"
 #include "JevEditorBridge.h"
+#include "JevBlueprintGraphEdits.h"
 
 #include "Animation/AnimBlueprint.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -183,6 +184,9 @@ struct FJevBlueprintTools::FPlan
     EBlueprintStatus Status = BS_Unknown;
     bool bConsumed = false;
     FString NodeId, PinId, PinBefore, PinAfter;
+    TSharedPtr<FJsonObject> GraphEdit;
+    FString GraphBaseline;
+    FGuid AddedNodeId;
 };
 
 FJevBlueprintTools::FJevBlueprintTools(TFunction<double()> InClock)
@@ -206,7 +210,7 @@ bool FJevBlueprintTools::IsSupportedClass(const UClass* Class)
 
 bool FJevBlueprintTools::HandlesAction(const FString& Action)
 {
-    return Action == TEXT("blueprint_compile_targets") || Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_pin_preview") || Action == TEXT("blueprint_compile") || Action == TEXT("blueprint_compile_receipt");
+    return Action == TEXT("blueprint_compile_targets") || Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_pin_preview") || Action == TEXT("blueprint_graph_preview") || Action == TEXT("blueprint_compile") || Action == TEXT("blueprint_compile_receipt");
 }
 
 void FJevBlueprintTools::Prune()
@@ -239,6 +243,8 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Targets(const TSharedRef<FJsonObject
     Result->SetBoolField(TEXT("compiled"), false);
     bool PinEdits = false; GConfig->GetBool(Section, TEXT("bEnablePinEdits"), PinEdits, GGameIni);
     Result->SetBoolField(TEXT("pin_editing_enabled"), PinEdits && Config.bEnabled && Config.bValid);
+    bool GraphEdits = false; GConfig->GetBool(Section, TEXT("bEnableGraphEdits"), GraphEdits, GGameIni);
+    Result->SetBoolField(TEXT("graph_editing_enabled"), GraphEdits && Config.bEnabled && Config.bValid);
     SideEffects(Result);
     return Success(Result);
 }
@@ -248,7 +254,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
     using namespace JevBlueprint;
     FString TargetId, Project;
     const TSharedPtr<FJsonObject>* State = nullptr;
-    if (!Only(Params, {TEXT("target_id"), TEXT("expected_project"), TEXT("expected_state"), TEXT("pin_edit")}) || !Text(Params, TEXT("target_id"), TargetId, 64) || !Alias(TargetId) || !Text(Params, TEXT("expected_project"), Project, 4096) || !Params->TryGetObjectField(TEXT("expected_state"), State))
+    if (!Only(Params, {TEXT("target_id"), TEXT("expected_project"), TEXT("expected_state"), TEXT("pin_edit"), TEXT("graph_edit")}) || !Text(Params, TEXT("target_id"), TargetId, 64) || !Alias(TargetId) || !Text(Params, TEXT("expected_project"), Project, 4096) || !Params->TryGetObjectField(TEXT("expected_state"), State))
         return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply one target_id, exact expected_project and expected_state."));
     if (Project != Identity->GetStringField(TEXT("project_file"))) return FJevEditorBridge::Error(TEXT("wrong_project"), TEXT("Connected project differs from the requested project."));
     if (!SameState(*State, Identity)) return FJevEditorBridge::Error(TEXT("stale_plan"), TEXT("Inspect the current editor identity before creating a compile preview."));
@@ -272,6 +278,16 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
         UEdGraphPin* Pin = EditablePin(BP, Plan->NodeId, Plan->PinId);
         if (!PinValue(Pin, Plan->PinAfter) || Pin->DefaultValue.Len() > 64) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Only bounded unlinked primitive inputs on the documented native math nodes are editable."));
         Plan->PinBefore = Pin->DefaultValue;
+    }
+    if (Params->HasField(TEXT("graph_edit")))
+    {
+        bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnableGraphEdits"), Enabled, GGameIni);
+        if (!Enabled) return FJevEditorBridge::Error(TEXT("target_not_allowed"), TEXT("Enable bEnableGraphEdits explicitly in the project BlueprintCompilation policy."));
+        const TSharedPtr<FJsonObject>* Edit = nullptr; FString Reason;
+        if (!Params->TryGetObjectField(TEXT("graph_edit"), Edit) || !JevBlueprintGraph::Validate(BP, *Edit, Reason)) return FJevEditorBridge::Error(TEXT("unsupported_graph_edit"), Reason.IsEmpty() ? TEXT("Supply one documented typed graph edit.") : Reason);
+        Plan->GraphEdit = *Edit;
+        if (!JevBlueprintGraph::Snapshot(JevBlueprintGraph::Graph(BP, (*Edit)->GetStringField(TEXT("graph_id"))), Plan->GraphBaseline)) return FJevEditorBridge::Error(TEXT("unsupported_graph_edit"), TEXT("Graph exceeds the bounded snapshot limits."));
+        Plan->AddedNodeId = FGuid::NewGuid();
     }
     Plan->TargetId = TargetId; Plan->AssetPath = *Asset; Plan->Target = BP;
     Plan->Identity = Base(Identity); Plan->Epoch = ChangeEpoch; Plan->CreatedAt = Clock();
@@ -298,6 +314,12 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
         Result->SetObjectField(TEXT("pin_edit"), Diff);
         Result->SetStringField(TEXT("edit_failure_policy"), TEXT("One native Undo transaction records the literal edit. Compiler failure retains the edit and diagnostics for explicit human Undo or correction; compiler callback side effects are not rolled back."));
     }
+    if (Plan->GraphEdit)
+    {
+        Result->SetObjectField(TEXT("graph_edit"), Plan->GraphEdit);
+        if (Plan->GraphEdit->GetStringField(TEXT("operation")) == TEXT("add_math_node")) Result->SetStringField(TEXT("added_node_id"), Plan->AddedNodeId.ToString());
+        Result->SetStringField(TEXT("edit_failure_policy"), TEXT("One native Undo transaction records the graph edit. Compilation failure retains the edit and fresh diagnostics; explicit Undo or a reviewed correction is required. Compiler callbacks are not comprehensively rolled back."));
+    }
     Plan->Receipt = Result; Plans.Add(PlanId, Plan);
     return Success(Result);
 }
@@ -317,7 +339,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Compile(const TSharedPtr<FJsonObject
     Plan->Receipt->SetNumberField(TEXT("expires_in_seconds"), 0);
     auto Reject = [&Plan](const TCHAR* Code, const TCHAR* Message)
     {
-        Plan->Receipt->SetStringField(TEXT("status"), TEXT("rejected"));
+        Plan->Receipt->SetStringField(TEXT("status"), Plan->Receipt->GetStringField(TEXT("status")) == TEXT("applying") ? TEXT("failed_after_attempt") : TEXT("rejected"));
         Plan->Receipt->SetStringField(TEXT("outcome_code"), Code);
         return FJevEditorBridge::Error(Code, Message);
     };
@@ -335,6 +357,19 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Compile(const TSharedPtr<FJsonObject
     TGuardValue<bool> Guard(bCompiling, true);
     TStrongObjectPtr<UBlueprint> KeepAlive(BP);
     TUniquePtr<FScopedTransaction> EditTransaction;
+    if (Plan->GraphEdit)
+    {
+        bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnableGraphEdits"), Enabled, GGameIni);
+        if (!Enabled) return Reject(TEXT("policy_invalid"), TEXT("Project graph editing approval changed."));
+        FString Current, Reason;
+        if (!JevBlueprintGraph::Validate(BP, Plan->GraphEdit, Reason) || !JevBlueprintGraph::Snapshot(JevBlueprintGraph::Graph(BP, Plan->GraphEdit->GetStringField(TEXT("graph_id"))), Current) || Current != Plan->GraphBaseline) return Reject(TEXT("stale_plan"), TEXT("The reviewed graph, nodes, pins or links changed."));
+        if (!GEditor || !GEditor->CanTransact() || GEditor->IsTransactionActive() || GIsTransacting) return Reject(TEXT("editor_busy"), TEXT("A separate Undo transaction is required."));
+        EditTransaction = MakeUnique<FScopedTransaction>(NSLOCTEXT("JevEditor", "GraphEdit", "Edit Jev Blueprint graph"));
+        Plan->Receipt->SetStringField(TEXT("status"), TEXT("applying"));
+        const bool Applied = JevBlueprintGraph::Apply(BP, Plan->GraphEdit, Plan->AddedNodeId);
+        Plan->Receipt->SetBoolField(TEXT("graph_edit_applied"), Applied);
+        if (!Applied) return Reject(TEXT("apply_failed"), TEXT("The schema did not retain the reviewed edit; inspect the asset and Undo transaction."));
+    }
     if (!Plan->PinId.IsEmpty())
     {
         UEdGraphPin* Pin = EditablePin(BP, Plan->NodeId, Plan->PinId);
@@ -343,6 +378,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Compile(const TSharedPtr<FJsonObject
         if (!PinValue(Pin, Plan->PinAfter) || Pin->DefaultValue != Plan->PinBefore) return Reject(TEXT("stale_plan"), TEXT("The reviewed graph pin changed."));
         if (!GEditor || !GEditor->CanTransact() || GEditor->IsTransactionActive() || GIsTransacting) return Reject(TEXT("editor_busy"), TEXT("A separate Undo transaction is required."));
         EditTransaction = MakeUnique<FScopedTransaction>(NSLOCTEXT("JevEditor", "PinEdit", "Edit Jev Blueprint literal"));
+        Plan->Receipt->SetStringField(TEXT("status"), TEXT("applying"));
         BP->Modify(); Pin->GetOwningNode()->Modify();
         Pin->GetSchema()->TrySetDefaultValue(*Pin, Plan->PinAfter);
         FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
@@ -405,9 +441,9 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Execute(const FString& Action, const
         return Success((*Found)->Receipt.ToSharedRef());
     }
     if (bCompiling) return FJevEditorBridge::Error(TEXT("job_busy"), TEXT("A Blueprint compilation callback is already running."));
-    if (Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_pin_preview"))
+    if (Action == TEXT("blueprint_compile_preview") || Action == TEXT("blueprint_pin_preview") || Action == TEXT("blueprint_graph_preview"))
     {
-        if (!Params || (Action == TEXT("blueprint_pin_preview")) != Params->HasField(TEXT("pin_edit"))) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Pin editing requires the explicit pin preview action."));
+        if (!Params || (Action == TEXT("blueprint_pin_preview")) != Params->HasField(TEXT("pin_edit")) || (Action == TEXT("blueprint_graph_preview")) != Params->HasField(TEXT("graph_edit"))) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Pin and graph editing require their explicit preview actions."));
         return Preview(Params, Identity);
     }
     if (Action == TEXT("blueprint_compile")) return Compile(Params, Identity);

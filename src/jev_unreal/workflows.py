@@ -8,6 +8,14 @@ from .decision import DecisionClient
 from .errors import JevError
 
 CATALOG = {
+    "unreal_team_status": "Inspect configured project policy, leases and durable outcomes.",
+    "unreal_durable_receipts": "List bounded persisted mutation outcomes, including uncertainty.",
+    "unreal_project_lease": "Acquire the configured project editing lease without scene edits.",
+    "unreal_named_job_preview": "Review a project-approved fixed build/cook/package workflow.",
+    "unreal_named_job_start": "Start one reviewed project-approved local workflow job.",
+    "unreal_named_job": "Inspect owned job progress and output artifact evidence.",
+    "unreal_handoff_verify": "Verify Blender handoff dimensions, pivot bounds and material slots.",
+    "unreal_blueprint_graph_preview": "Preview approved native math nodes and typed graph links.",
     "unreal_status": "Inspect the current Unreal editor project, session and world identity.",
     "unreal_actors": "Inspect actor paths, names, classes and transforms in the current level.",
     "unreal_assets": "Search the asset registry by name/path before choosing existing assets.",
@@ -174,6 +182,7 @@ class Operation(BaseModel):
     asset_path: str | None = Field(default=None, min_length=1, max_length=512)
     material_path: str | None = Field(default=None, min_length=1, max_length=512)
     material_policy: Literal["preserve_slots", "mesh_defaults"] | None = None
+    preserve_attachments: bool | None = None
     slot: int | None = Field(default=None, ge=0, le=63, strict=True)
     folder: str | None = Field(default=None, max_length=256)
     location: tuple[LocationValue, LocationValue, LocationValue] | None = None
@@ -241,6 +250,8 @@ class Operation(BaseModel):
             allowed |= transforms
         elif self.op == "set_metadata":
             allowed |= {"label", "folder"}
+        if self.op == "duplicate_mesh":
+            allowed.add("preserve_attachments")
         present = set(self.model_dump(exclude_none=True))
         if not required <= present or not present <= allowed:
             raise ValueError(f"Fields do not match {self.op}.")

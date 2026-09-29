@@ -2,25 +2,20 @@
 
 import asyncio
 import json
-import os
 import time
-from pathlib import PureWindowsPath
 
 import httpx
 
 from .config import Settings
 from .errors import JevError
-
-
-def project_identity(path: str) -> str:
-    if "\\" in path or (len(path) > 1 and path[1] == ":"):
-        return str(PureWindowsPath(path)).casefold()
-    return os.path.normcase(os.path.abspath(path))
+from .infrastructure import ProjectInfrastructure
+from .team_policy import project_identity
 
 
 class UnrealBridge:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
         self.settings = settings
+        self.infrastructure = ProjectInfrastructure(settings)
         self._lock = asyncio.Lock()
         self._clock = time.monotonic
         self._sleep = asyncio.sleep
@@ -30,7 +25,10 @@ class UnrealBridge:
         )
 
     async def close(self):
-        await self._http.aclose()
+        try:
+            await self.infrastructure.close()
+        finally:
+            await self._http.aclose()
 
     async def _call(self, action: str, params: dict) -> dict:
         if len(self.settings.bridge_token) < 32:
@@ -157,6 +155,7 @@ class UnrealBridge:
             "blueprint_compile",
             "blueprint_compile_receipt",
             "blueprint_pin_preview",
+            "blueprint_graph_preview",
             "workflow_inspect",
             "workflow_preview",
             "workflow_apply",
@@ -199,6 +198,7 @@ class UnrealBridge:
                     "blueprint_compile_preview",
                     "blueprint_compile",
                     "blueprint_pin_preview",
+                    "blueprint_graph_preview",
                     "workflow_preview",
                     "workflow_apply",
                     "performance_start",
@@ -212,10 +212,10 @@ class UnrealBridge:
             if action == "status":
                 return status
             required_capabilities = set()
-            if (
-                action.startswith(("workflow_", "performance_"))
-                or action == "blueprint_pin_preview"
-            ):
+            if action.startswith(("workflow_", "performance_")) or action in {
+                "blueprint_pin_preview",
+                "blueprint_graph_preview",
+            }:
                 required_capabilities.add(action)
             if action in {
                 "pending_plans",
@@ -291,6 +291,7 @@ class UnrealBridge:
                 "blueprint_compile_preview",
                 "blueprint_compile",
                 "blueprint_pin_preview",
+                "blueprint_graph_preview",
                 "workflow_preview",
                 "workflow_apply",
                 "performance_start",
@@ -299,4 +300,4 @@ class UnrealBridge:
                 if len(actual) > 2048 or any(ord(character) < 32 for character in actual):
                     raise JevError("bridge_error", "Editor returned an invalid project identity.")
                 params = {**(params or {}), "expected_project": actual}
-            return await self._call(action, params or {})
+            return await self.infrastructure.execute(action, params or {}, status, self._call)

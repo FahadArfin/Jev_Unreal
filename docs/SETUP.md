@@ -10,6 +10,18 @@ The wheel supplies the Python MCP server and installer, but does not bundle the
 Unreal plugin source. Pass `--source-plugin` from the matching source release.
 This is an independent MIT community project, not an official Epic or TypeSafe installer.
 
+Source plans also include the exact optional French/Spanish PO files and the
+inert `Config/Localization/JevEditor.ini.template`. When supplied by the release,
+they include only `Content/Localization/JevEditor/JevEditor.locmeta` and the
+English/French/Spanish `JevEditor.locres` resources. These paths use the same
+hash-bound ownership, byte limits, update refusal and recovery rules as source.
+Other Content, active configuration files, engine/plugin binaries and arbitrary
+languages are not adopted. The installer does not compile translations or execute
+the localization template; see [localization recipes](LOCALIZATION_RECIPES.md).
+
+Readiness diagnostics and machine-readable external acceptance bookkeeping are
+documented in [acceptance reports](ACCEPTANCE_REPORTS.md).
+
 ## Review a plan, then apply it
 
 Close the selected project's editor before applying an install, update or removal.

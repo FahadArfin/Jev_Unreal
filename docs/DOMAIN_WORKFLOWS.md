@@ -1,7 +1,7 @@
 # Domain workflows: inspect, preview, apply, verify
 
-Version 0.8 adds ten bounded workflows from the roadmap. The MCP catalog has 54
-tools. These workflows use local native engine APIs; no model key or provider
+Version 0.9 expands the ten bounded domain workflows introduced in 0.8.
+These workflows use local native engine APIs; no model key or provider
 request is needed. They are an initial supported scope, not complete automation
 of every Blueprint, material, terrain, animation or UI task.
 
@@ -14,7 +14,7 @@ of every Blueprint, material, terrain, animation or UI task.
    Blueprint/surface preview. Review the exact target, before values and requested
    change. Project policy and user authorization remain separate from Jev confidence.
 4. Apply the matching plan once. General domain edits use `unreal_workflow_apply`;
-   Blueprint literal plans use `unreal_blueprint_compile`; surface plans use
+   Blueprint literal/graph plans use `unreal_blueprint_compile`; surface plans use
    `unreal_apply`. A stale, expired or failed attempt consumes its plan.
 5. Inspect fresh data and the receipt. Domain receipts have `after` and
    `readback_verified`; a completed API response can contain `readback_failed`.
@@ -25,7 +25,9 @@ up to 64 per editor session. `unreal_workflow_receipt` reads an outcome after MC
 reconnection; it never retries. An interrupted apply can have changed content.
 The receipt identity describes the reviewed pre-edit state. Inspect again for
 current state. Asset/light edits use native Undo; viewport changes do not.
-There is no save request, crash persistence or comprehensive callback rollback.
+There is no save request or comprehensive callback rollback. Native plans remain
+session-local. Optional [durable MCP receipts](TEAM_WORKFLOWS.md) retain historical
+intent/outcomes across process interruptions, never reusable native apply plans.
 The existing Slate scene-review panel currently displays scene plans, including
 surface placement; domain and Blueprint plans are reviewed through MCP responses.
 
@@ -51,9 +53,14 @@ Supported nodes are exact native `UK2Node_CallFunction` calls to
 `Multiply_DoubleDouble` and `Not_PreBool`. Only unconnected input bool/int/real
 pins in an ordinary native Blueprint are editable. Container/reference/orphaned,
 split, read-only, ignored and connected pins are refused. Numeric values are
-bounded to ±1,000,000. No node creation/deletion, connection editing, generated
-code, object references, Widget/Animation graph mutation or custom node callbacks
-are exposed by this edit operation.
+bounded to ±1,000,000. The literal operation exposes no generated code, object
+references, specialized Widget/Animation graph mutation or custom node callbacks.
+
+The separate `unreal_blueprint_graph_preview` operation adds reviewed creation,
+removal, connection and disconnection for these same native math nodes when
+`bEnableGraphEdits=true`. Links require exact primitive types, an unoccupied input,
+native schema approval and no cycle. Removal requires an unlinked allowed node.
+See [graph identities, operations and limits](BLUEPRINT_WORKFLOWS.md#reviewed-math-nodes-and-connections).
 
 The edit and compile occur within one native Undo transaction. A failed compiler
 result retains the literal and fresh diagnostics for explicit Undo or correction;
@@ -65,8 +72,9 @@ Successful compilation does not establish gameplay semantics.
 
 Inspect: `{"kind":"material","target_path":"/Game/Materials/MI_Prop.MI_Prop"}`.
 Open the exact native MaterialInstanceConstant in Unreal first. The result includes
-parent identity, effective scalar/vector parameters, association/index, resolution
-and truncation. Up to 128 entries are returned; only global parameters are editable.
+parent identity, effective scalar/vector/texture/static-switch parameters,
+association/index, resolution and truncation. Up to 128 entries are returned;
+truncated parameter sets cannot be edited through this workflow.
 
 Explicit local edit policy:
 
@@ -91,9 +99,13 @@ Preview a `change` such as:
 ±1,000,000. The name/type must already exist in the parent parameter set. The
 allowlist permits at most 64 unique exact `/Game/` asset paths and is checked
 again at commit. Unknown names, inherited project-policy changes, stale asset
-state and replaced object identities fail closed. No static switches, material
-layers, texture replacement, graph edits or implicit loading. A material affects
-all its users; inspect dependencies and capture representative scenes.
+state and replaced object identities fail closed. Existing layer/blend parameters
+use an explicit association and index; changing the layer stack itself remains
+unsupported. Texture2D references require a separate exact texture allowlist;
+static switches require `bEnableStaticSwitchEdits=true`. Neither performs implicit
+loading or arbitrary material graph edits. See [editing extensions](EDITING_EXTENSIONS.md)
+for texture compatibility and shader-completion limits. A material affects all
+its users; inspect dependencies and capture representative scenes.
 
 ## 3. Broader native mesh copies
 
@@ -104,9 +116,12 @@ material-slot, collision, shadow, visibility, tags and folder state. Readback
 requires the complete extended state; missing fields never become matching
 defaults. The editor advertises `mesh_extended_settings`.
 
-Copies remain single native static-mesh actors. Attached hierarchies, scripts,
-custom components, simulation, vertex paint and other nondefault settings remain
-explicitly unsupported. The extension does not silently flatten a hierarchy.
+Copies default to single native static-mesh actors. Explicit
+`preserve_attachments: true` supports a complete closed hierarchy of at most 20
+native mesh actors. Every parent/child must be selected; copies attach only to
+copied parents and preserve reviewed relative transforms. Sockets, external
+attachments, nonuniform parent scale, scripts, custom components, simulation and
+vertex paint remain unsupported. See [mesh hierarchy review](MESH_WORKFLOWS.md).
 
 ## 4. Terrain-aware placement
 
@@ -122,35 +137,47 @@ explicitly unsupported. The extension does not silently flatten a hierarchy.
   "trace_down_cm": 10000,
   "max_slope_degrees": 30,
   "clearance_cm": 1,
-  "align_to_normal": true
+  "align_to_normal": true,
+  "support_samples": 5,
+  "trace_complex": false,
+  "max_support_variation_cm": 10
 }
 ```
 
-The first blocking hit of a simple downward collision trace must belong to one
-of 1..32 explicit surfaces. A nearer unapproved blocker is a refusal, never
+Every sampled first blocking hit must belong to one of 1..32 explicit surfaces.
+The default five probes cover the center and footprint corners; nine adds edge
+centers, and one retains an explicit center-only query. Optional complex traces
+use existing triangle collision. A nearer unapproved blocker is a refusal, never
 ignored. Trace channels are `visibility` or `camera`; slopes are bounded to 60°.
 Placement supports the rotated/scaled mesh bounds on the hit plane, optionally
-aligns its up axis to the normal, and rejects other WorldStatic/WorldDynamic
+aligns its up axis to the normal, lifts above the highest accepted sampled bump,
+and rejects other WorldStatic/WorldDynamic
 overlaps using a conservative oriented box. The source and selected support are
 ignored by the overlap query. Existing actor scale/position limits still apply.
 
 Review the returned measurement and ordinary native scene plan. Apply with
 `unreal_apply`, inspect the actor, trace again and capture. Bounds can overestimate
-concave geometry and a single trace does not prove support across an entire prop.
-No collision generation, streamed-world loading or physics simulation is implied.
+concave geometry; finite probes do not prove continuous support or physics stability.
+World Partition and streaming-level worlds are refused because unloaded collision
+cannot be verified. See [support sampling and bounds](ADVANCED_INSPECTIONS.md).
 
 ## 5. Import and dependency diagnosis
 
 Query `asset_diagnosis` with `target_path` and `dependency_depth` (1..3).
 It reads loaded mesh bounds, up to eight render LOD triangle/vertex counts,
-simple collision shape count/trace mode, unassigned material slots, and recorded
+simple collision shape count/trace mode, bounded material-slot names, unassigned
+material slots, and recorded
 import basenames/hashes. Package-registry traversal is bounded to 128 edges and
 128 queued packages, with truncation reported. Cycles do not cause unbounded walks.
 
 Findings are evidence, not automatic repairs. No simple shapes may be intentional
 with complex collision. An absent package-registry entry does not establish a
-broken dynamic reference. No source files are opened: source availability, source
-units, texture completeness, pivot intent and round-trip correctness remain unknown.
+broken dynamic reference. This native inspection opens no source files. The
+separate Blender handoff contract and host-side bundle verifier check explicitly
+listed source/mesh/texture hashes and compare expected dimensions, local center
+and material slots against fresh native inspection through `unreal_handoff_verify`.
+Provenance/license fields are author declarations. A matching bounded contract
+does not prove every DCC import option, texture interpretation or visual result.
 
 ## 6. Lights and repeatable views
 
@@ -165,9 +192,12 @@ Inspect `{"kind":"camera"}` to retain a viewport pose. Preview a `camera`
 change with `location`, `[pitch,yaw,roll]` rotation and `fov_degrees` (5..170).
 It requires an unlocked perspective level viewport, rejects a changed viewport
 or moved camera, and can restore a previously inspected pose through another
-reviewed plan. Use `unreal_capture` before/after. Exposure, time, temporal history,
-view mode and render settings are not frozen; matching poses alone do not make a
-controlled lighting experiment.
+reviewed plan. Use `unreal_capture` before/after. A separate `camera_render` change
+controls fixed/automatic exposure, EV100, lit/unlit view mode, realtime and motion
+blur, with restoration through another reviewed plan. Competing viewport overrides
+are refused. These controls do not freeze world time, temporal history or shader
+work; matching settings alone do not guarantee deterministic pixels. See
+[repeatable viewport settings](EDITING_EXTENSIONS.md#repeatable-viewport-settings).
 
 ## 7. Navigation and project accessibility requirements
 
@@ -178,9 +208,14 @@ Recast actor, `start`, `end`, positive three-component `projection_extent_cm`
 The query reports actual native endpoint projection, a complete/non-partial path,
 up to 256 path points and path length. Width and step comparisons use the selected
 nav-agent radius and default-resolution step height. They are configuration checks,
-not a measurement of each corridor or stair. Build activity/locks are reported;
+not a measurement of each corridor or stair. Optional `probe_geometry: true`
+adds bounded ground-height samples and Pawn-channel capsule sweeps at
+`probe_spacing_cm` intervals. Its `geometry_probe_complete` and `geometry_clear`
+verdicts remain separate from `complete_path`. Build activity/locks are reported;
 disabled editor auto-update is explicitly identified because nav data may be stale.
-No rebuilding or pawn movement is performed. Door interactions, special links,
+The inspection performs no rebuilding or pawn movement. The separate
+[owned Character traversal recipe](GAMEPLAY_RECIPES.md) exercises actual movement
+ticks and detects a deliberately blocking wall. Door interactions, special links,
 dynamic obstacles, disabilities and the project's real controller require gameplay
 acceptance. The implementation follows Epic's [native synchronous path API](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/NavigationSystem/UNavigationSystemV1/FindPathSync).
 
@@ -204,16 +239,29 @@ not verification that these conditions matched. Ticker intervals include idle,
 UI and background work; they are **not** GPU/render execution cost, packaged FPS,
 per-asset cost or proof of a bottleneck. Use Unreal Insights for attribution.
 
+Additional `engine_published_timings` report native game/render/RHI/GPU0 cycle
+counter observations. Missing/zero counters are unavailable, never zero-cost
+measurements. Their observation frame is not the producing frame:
+`frame_aligned` remains false because these APIs omit cross-thread production
+frame identities. Counters can lag or repeat. The comparison tool continues
+comparing its declared ticker metric. See [measurement semantics](ADVANCED_INSPECTIONS.md#timing-measurements).
+
 ## 9. Skeleton and animation validation
 
 Query `rig` with an exact loaded native skeletal mesh or skeleton, optional loaded
 `animation_path`, and up to 64 `required_bones`. The result reports up to 512 bone
 names/indices/parents, missing required bones, assigned skeleton identity, sequence
-duration, exact skeleton match and stored root-motion flag.
+duration, exact skeleton match and stored root-motion flag. Native root-track
+extraction adds 1..64 intervals (`root_motion_samples`, default 8) and the full
+sequence transform while compilation is idle. `inspect_skin_weights: true`
+checks up to 65,536 imported LOD0 vertices for normalization, missing influences
+and invalid section bone-map references, with explicit incomplete coverage.
 
 A mismatched skeleton may be usable through a retargeter; an enabled root-motion
-flag does not prove useful extracted motion. No retargeting, reimport, playback,
-skin-weight validation or DCC file access occurs. Those remain acceptance work.
+flag alone does not prove useful extracted motion. Extracted transforms and valid
+stored weights do not establish playback, graph behavior, notifies, root-motion
+application to a character, visible deformation or retarget quality. These remain
+separate runtime acceptance tasks. See [rig inspection limits](ADVANCED_INSPECTIONS.md#animation-and-weights).
 
 ## 10. Widget structure and UI diagnostics
 
@@ -225,10 +273,22 @@ not reported as actual sizes. Inspection reads fixed serialized fields even when
 the designer has cached Slate widgets; it creates no runtime widgets and executes
 no text bindings.
 
+Add `runtime_instance_path` to inspect an existing on-screen instance of that
+exact Widget Blueprint in active PIE. The Blueprint must directly derive from
+native UserWidget. Read cached allocated/desired sizes, game viewport dimensions,
+accumulated layout/application scale and current keyboard focus without creating
+or ticking the instance. Removed or unrelated instances are refused.
+
 Zero sizes/fixed anchors are review hints. They do not prove clipping or broken
 focus: DPI, layout, named-slot/user-widget content, runtime bindings and localization
 can change the result. Use project-owned play tests and captures at actual viewport
-sizes for overflow, input and accessibility acceptance.
+sizes for overflow, input and accessibility acceptance. Runtime geometry adds
+evidence, but desired-size overflow hints are not a pixel verdict, accumulated
+scale is not isolated DPI, and keyboard focus is not screen-reader acceptance.
+The rendered fixture exercises two widget allocation sizes, not two physical
+devices. See [runtime widget scope](ADVANCED_INSPECTIONS.md#runtime-widgets).
 
 See [validation](VALIDATION.md) for mock, native, rendered and live-bridge evidence,
 and [roadmap](ROADMAP.md) for remaining expansion and external acceptance.
+For introductory workflows and draft French/Spanish support, see
+[localization and beginner recipes](LOCALIZATION_RECIPES.md).

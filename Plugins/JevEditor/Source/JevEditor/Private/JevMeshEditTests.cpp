@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Editor/TransBuffer.h"
+#include "Engine/Engine.h"
 #include "Engine/Level.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
@@ -458,6 +459,47 @@ bool FJevMeshRollbackTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Fixture retains its own independent Undo identity"), RetainedTransaction.IsValid() && RetainedTransaction != PreviousUndo);
     TestTrue(TEXT("Fixture explicitly cleans its retained transaction after restoring context"), GEditor->UndoTransaction(false));
     TestEqual(TEXT("Explicit fixture cleanup restores original scene"), Revision(Bridge), BeforeSwitch);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevMeshHierarchyCopy, "Jev.Editor.MeshHierarchyCopy", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevMeshHierarchyCopy::RunTest(const FString&)
+{
+    using namespace JevMeshTests; UWorld* World = FAutomationEditorCommonUtils::CreateNewMap(); FJevEditorBridge Bridge;
+    auto* Root = Cube(World, TEXT("HierarchyRoot")); auto* Child = Cube(World, TEXT("HierarchyChild")); auto* Leaf = Cube(World, TEXT("HierarchyLeaf"));
+    Root->SetActorLocation(FVector(100, 200, 300)); Root->SetActorRotation(FRotator(0, 35, 0)); Root->SetActorScale3D(FVector(2)); Child->SetActorLocation(FVector(210, 180, 370)); Child->SetActorRotation(FRotator(0, 15, 0)); Leaf->SetActorLocation(FVector(275, 220, 410)); Leaf->SetActorScale3D(FVector(0.5, 0.75, 0.5));
+    if (!TestTrue(TEXT("source child attaches"), Child->AttachToComponent(Root->GetRootComponent(), FAttachmentTransformRules::KeepWorldTransform)) || !TestTrue(TEXT("source leaf attaches"), Leaf->AttachToComponent(Child->GetRootComponent(), FAttachmentTransformRules::KeepWorldTransform))) return false;
+    const FTransform LocalChild = Child->GetRootComponent()->GetRelativeTransform(), LocalLeaf = Leaf->GetRootComponent()->GetRelativeTransform(); const FVector Offset(800, -200, 100); const int32 OriginalCount = Count(World);
+    auto CopyOperation = [&](AActor* Source) { auto O = Duplicate(Source); O->SetBoolField(TEXT("preserve_attachments"), true); O->SetStringField(TEXT("label"), Source->GetActorLabel() + TEXT("_Copy")); const FVector Location = Source->GetActorLocation() + Offset; O->SetArrayField(TEXT("location"), {MakeShared<FJsonValueNumber>(Location.X), MakeShared<FJsonValueNumber>(Location.Y), MakeShared<FJsonValueNumber>(Location.Z)}); return O; };
+    TestEqual(TEXT("partial hierarchy cannot silently detach descendants"), ErrorCode(Preview(Bridge, {CopyOperation(Root), CopyOperation(Child)})), FString(TEXT("actor_unsupported")));
+    TestEqual(TEXT("external parent cannot silently be dropped"), ErrorCode(Preview(Bridge, {CopyOperation(Child), CopyOperation(Leaf)})), FString(TEXT("actor_unsupported")));
+    TestEqual(TEXT("ordinary duplicate still refuses attachments"), ErrorCode(Preview(Bridge, {Duplicate(Root)})), FString(TEXT("actor_unsupported")));
+    auto WrongOffset = CopyOperation(Leaf); WrongOffset->SetArrayField(TEXT("location"), {MakeShared<FJsonValueNumber>(0), MakeShared<FJsonValueNumber>(0), MakeShared<FJsonValueNumber>(0)}); TestEqual(TEXT("different offsets refused"), ErrorCode(Preview(Bridge, {CopyOperation(Root), CopyOperation(Child), WrongOffset})), FString(TEXT("bad_request")));
+    auto Plan = Preview(Bridge, {CopyOperation(Leaf), CopyOperation(Root), CopyOperation(Child)}); if (!TestTrue(TEXT("complete explicit hierarchy previews independent of ordering"), Plan->GetBoolField(TEXT("ok")))) return false;
+    TestEqual(TEXT("preview does not clone"), Count(World), OriginalCount); auto Done = ByPlan(Bridge, TEXT("apply"), Plan); if (!TestTrue(TEXT("closed hierarchy applies"), Done->GetBoolField(TEXT("ok")))) return false;
+    const auto& Actors = Done->GetObjectField(TEXT("result"))->GetArrayField(TEXT("actors")); TestEqual(TEXT("three explicit copies returned"), Actors.Num(), 3); if (Actors.Num() != 3) return false;
+    auto* LeafCopy = FindObject<AStaticMeshActor>(nullptr, *Actors[0]->AsObject()->GetStringField(TEXT("path"))); auto* RootCopy = FindObject<AStaticMeshActor>(nullptr, *Actors[1]->AsObject()->GetStringField(TEXT("path"))); auto* ChildCopy = FindObject<AStaticMeshActor>(nullptr, *Actors[2]->AsObject()->GetStringField(TEXT("path")));
+    if (!TestNotNull(TEXT("root copy exists"), RootCopy) || !TestNotNull(TEXT("child copy exists"), ChildCopy) || !TestNotNull(TEXT("leaf copy exists"), LeafCopy)) return false;
+    TestNull(TEXT("root copy remains root"), RootCopy->GetAttachParentActor()); TestEqual(TEXT("child attaches to copied root"), ChildCopy->GetAttachParentActor(), static_cast<AActor*>(RootCopy)); TestEqual(TEXT("leaf attaches to copied child"), LeafCopy->GetAttachParentActor(), static_cast<AActor*>(ChildCopy));
+    TestTrue(TEXT("child local transform retained"), ChildCopy->GetRootComponent()->GetRelativeTransform().Equals(LocalChild, 0.001)); TestTrue(TEXT("leaf local transform retained"), LeafCopy->GetRootComponent()->GetRelativeTransform().Equals(LocalLeaf, 0.001)); TestTrue(TEXT("leaf world offset retained"), LeafCopy->GetActorLocation().Equals(Leaf->GetActorLocation() + Offset, 0.001));
+    TestEqual(TEXT("parent identity exposed in readback"), Actors[0]->AsObject()->GetStringField(TEXT("attachment_parent_path")), ChildCopy->GetPathName()); TestEqual(TEXT("original parent unchanged"), Child->GetAttachParentActor(), static_cast<AActor*>(Root)); TestEqual(TEXT("original leaf unchanged"), Leaf->GetAttachParentActor(), static_cast<AActor*>(Child));
+    GEditor->UndoTransaction(); TestEqual(TEXT("single Undo removes complete copied hierarchy"), Count(World), OriginalCount); TestEqual(TEXT("Undo preserves original hierarchy"), Leaf->GetAttachParentActor(), static_cast<AActor*>(Child));
+    Plan = Preview(Bridge, {CopyOperation(Root), CopyOperation(Child), CopyOperation(Leaf)}); if (!TestTrue(TEXT("hierarchy stale fixture preview"), Plan->GetBoolField(TEXT("ok")))) return false;
+    Leaf->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform); TestEqual(TEXT("attachment changes invalidate plan"), ErrorCode(ByPlan(Bridge, TEXT("apply"), Plan)), FString(TEXT("stale_plan"))); Leaf->AttachToComponent(Child->GetRootComponent(), FAttachmentTransformRules::KeepWorldTransform);
+    Plan = Preview(Bridge, {CopyOperation(Root), CopyOperation(Child), CopyOperation(Leaf)}); if (!TestTrue(TEXT("hierarchy rollback fixture preview"), Plan->GetBoolField(TEXT("ok")))) return false; const FString BeforeFailure = Revision(Bridge); Bridge.FailApplyAfterOperationsForTesting(2); TestEqual(TEXT("partial copy failure rolls back"), ErrorCode(ByPlan(Bridge, TEXT("apply"), Plan)), FString(TEXT("apply_failed"))); TestEqual(TEXT("rollback removes every partial clone"), Count(World), OriginalCount); TestEqual(TEXT("rollback restores exact source scene revision"), Revision(Bridge), BeforeFailure);
+    Plan = Preview(Bridge, {CopyOperation(Root), CopyOperation(Child), CopyOperation(Leaf)}); if (!TestTrue(TEXT("attachment callback fixture preview"), Plan->GetBoolField(TEXT("ok")))) return false;
+    bool ReplacedCopyRoot = false;
+    // Modify notifications are coalesced per object per frame, so each newly
+    // spawned copy has already emitted that notification before attachment.
+    // This engine event fires synchronously inside the actual attachment call.
+    const auto Handle = GEngine->OnLevelActorAttached().AddLambda([&](AActor* Actor, const AActor* Parent)
+    {
+        auto* Copy = Cast<AStaticMeshActor>(Actor);
+        if (!ReplacedCopyRoot && IsValid(Copy) && Copy->GetWorld() == World && Copy->GetActorLabel() == TEXT("HierarchyChild_Copy") && IsValid(Parent) && Parent->GetActorLabel() == TEXT("HierarchyRoot_Copy") && Count(World) == OriginalCount + 3) { ReplacedCopyRoot = true; Copy->SetRootComponent(nullptr); }
+    });
+    const auto CallbackResult = ByPlan(Bridge, TEXT("apply"), Plan); GEngine->OnLevelActorAttached().Remove(Handle);
+    TestTrue(TEXT("native attachment callback replaced copy root"), ReplacedCopyRoot); TestEqual(TEXT("root replacement rolls back instead of dereferencing stale component"), ErrorCode(CallbackResult), FString(TEXT("apply_failed"))); TestEqual(TEXT("callback rollback removes every clone"), Count(World), OriginalCount); TestEqual(TEXT("callback rollback preserves original hierarchy"), Leaf->GetAttachParentActor(), static_cast<AActor*>(Child));
+    Root->SetActorScale3D(FVector(2, 3, 2)); TestEqual(TEXT("nonuniform parent shear risk refused"), ErrorCode(Preview(Bridge, {CopyOperation(Root), CopyOperation(Child), CopyOperation(Leaf)})), FString(TEXT("actor_unsupported")));
     return true;
 }
 

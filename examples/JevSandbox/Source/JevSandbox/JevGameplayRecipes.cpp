@@ -6,6 +6,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "NavigationPath.h"
 #include "NavigationSystem.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 
 AJevRecipeDoor::AJevRecipeDoor()
 {
@@ -215,4 +218,52 @@ void AJevNavigationRecipe::RunScenario()
         && FMath::IsFinite(ObservedPathLength) && ObservedPathLength > 0,
         TEXT("complete path connects both projected endpoints with positive finite length"))) return;
     Succeed(TEXT("Navigation recipe observed a complete route between the configured projected endpoints."));
+}
+
+AJevPawnTraversalRecipe::AJevPawnTraversalRecipe()
+{
+    TestLabel = TEXT("Project recipe: owned pawn corridor and step traversal"); PrimaryActorTick.bCanEverTick = true;
+}
+
+void AJevPawnTraversalRecipe::RunScenario()
+{
+    bTraversing = false; Elapsed = 0; ObservedTravelCm = 0; ObservedStepRiseCm = 0;
+    // Keep this source-only fixture above existing map geometry. Every physical
+    // subject is owned, transient and removed by the base recipe's cleanup.
+    Origin = GetActorLocation() + FVector(0, 0, 2000);
+    const auto Box = [this](const FVector& Position, const FVector& Extent)
+    {
+        auto* Actor = SpawnOwned(AActor::StaticClass(), Position); if (!Actor) return false;
+        auto* Shape = NewObject<UBoxComponent>(Actor); Actor->SetRootComponent(Shape); Shape->SetBoxExtent(Extent); Shape->SetCollisionProfileName(TEXT("BlockAll")); Shape->SetCanEverAffectNavigation(false); Shape->RegisterComponent(); Actor->SetActorLocation(Position); return true;
+    };
+    if (!Box(Origin + FVector(0, 0, -10), FVector(400, 150, 10))
+        || !Box(Origin + FVector(0, -115, 100), FVector(400, 10, 100))
+        || !Box(Origin + FVector(0, 115, 100), FVector(400, 10, 100))
+        || !Box(Origin + FVector(0, 0, bBlockPath ? 150 : 10), FVector(20, 105, bBlockPath ? 150 : 10))) return;
+    Subject = Cast<ACharacter>(SpawnOwned(ACharacter::StaticClass(), Origin + FVector(-200, 0, 100))); if (!Subject) return;
+    Subject->GetCapsuleComponent()->SetCapsuleSize(30, 88); Subject->GetCapsuleComponent()->SetCollisionProfileName(TEXT("Pawn")); Subject->GetCapsuleComponent()->SetCanEverAffectNavigation(false);
+    auto* Movement = Subject->GetCharacterMovement(); Movement->bRunPhysicsWithNoController = true; Movement->MaxWalkSpeed = 180; Movement->MaxStepHeight = 45; Movement->SetMovementMode(MOVE_Falling);
+    if (!Observe(Subject->GetOwner() == this && Subject->GetCapsuleComponent()->GetScaledCapsuleRadius() == 30 && Movement->MaxStepHeight == 45, TEXT("owned native Character uses the reviewed capsule and step configuration"))) return;
+    bTraversing = true;
+}
+
+void AJevPawnTraversalRecipe::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (!bTraversing || !IsRunning() || !IsValid(Subject)) return;
+    Elapsed += DeltaSeconds; const FVector Relative = Subject->GetActorLocation() - Origin;
+    ObservedTravelCm = FMath::Max(ObservedTravelCm, Relative.X + 200);
+    if (Subject->GetCharacterMovement()->IsMovingOnGround()) ObservedStepRiseCm = FMath::Max(ObservedStepRiseCm, Relative.Z - Subject->GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+    if (Relative.X >= 180)
+    {
+        bTraversing = false;
+        if (!Observe(ObservedTravelCm >= 380 && FMath::Abs(Relative.Y) < 20, TEXT("CharacterMovement physically traversed the corridor without teleportation"))) return;
+        if (!Observe(ObservedStepRiseCm >= 15 && Subject->GetCharacterMovement()->IsMovingOnGround(), TEXT("character stepped onto the twenty-centimeter obstacle and returned to walkable ground"))) return;
+        Succeed(TEXT("Owned Character capsule traversed the corridor and twenty-centimeter step through real PIE movement ticks.")); return;
+    }
+    if (Elapsed >= 6 || Relative.Z < -100)
+    {
+        bTraversing = false; Observe(false, TEXT("owned character failed to traverse the bounded corridor/step within six seconds")); return;
+    }
+    Subject->AddMovementInput(FVector::ForwardVector, 1, true);
 }

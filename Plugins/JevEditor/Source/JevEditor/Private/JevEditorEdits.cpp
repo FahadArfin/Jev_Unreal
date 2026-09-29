@@ -132,6 +132,33 @@ bool SameCollision(const FBodyInstance& First, const FBodyInstance& Second)
     return First.GetCollisionProfileName() == Second.GetCollisionProfileName() && First.GetCollisionEnabled(false) == Second.GetCollisionEnabled(false) &&
         First.GetObjectType() == Second.GetObjectType() && First.GetResponseToChannels() == Second.GetResponseToChannels();
 }
+TSharedRef<FJsonObject> Transform(const FTransform& Value)
+{
+    auto R = MakeShared<FJsonObject>(); const FRotator Rotation = Value.Rotator(); R->SetArrayField(TEXT("location"), Vector(Value.GetLocation())); R->SetArrayField(TEXT("rotation"), Vector(FVector(Rotation.Pitch, Rotation.Yaw, Rotation.Roll))); R->SetArrayField(TEXT("scale"), Vector(Value.GetScale3D())); return R;
+}
+bool ClosedHierarchy(const TArray<AActor*>& Sources)
+{
+    if (Sources.IsEmpty() || Sources.Num() > MaxOperations) return false;
+    TSet<AActor*> Selected; for (AActor* Actor : Sources) Selected.Add(Actor);
+    if (Selected.Num() != Sources.Num()) return false;
+    for (AActor* Actor : Sources)
+    {
+        if (!IsValid(Actor) || Actor->GetClass() != AStaticMeshActor::StaticClass() || !Actor->GetRootComponent()) return false;
+        const USceneComponent* Root = Actor->GetRootComponent(); AActor* Parent = Actor->GetAttachParentActor();
+        const FTransform Local = Root->GetRelativeTransform(); const FVector LocalScale = Local.GetScale3D();
+        if (Local.ContainsNaN() || Local.GetLocation().GetAbsMax() > 1000000 || LocalScale.GetMin() < 0.001 || LocalScale.GetMax() > 1000) return false;
+        if (!Root->GetAttachSocketName().IsNone() || Root->IsUsingAbsoluteLocation() || Root->IsUsingAbsoluteRotation() || Root->IsUsingAbsoluteScale()) return false;
+        if (Parent && (!Selected.Contains(Parent) || Root->GetAttachParent() != Parent->GetRootComponent())) return false;
+        if (!Parent && Root->GetAttachParent()) return false;
+        TSet<AActor*> Ancestors; for (AActor* Cursor = Actor; Cursor; Cursor = Cursor->GetAttachParentActor()) { if (!Selected.Contains(Cursor) || Ancestors.Contains(Cursor)) return false; Ancestors.Add(Cursor); }
+        TArray<AActor*> Children; Actor->GetAttachedActors(Children);
+        if (Children.Num() != Root->GetAttachChildren().Num()) return false;
+        for (AActor* Child : Children) if (!Selected.Contains(Child) || Child->GetRootComponent()->GetAttachParent() != Root) return false;
+        const FVector Scale = Actor->GetActorScale3D();
+        if (!Children.IsEmpty() && (!FMath::IsNearlyEqual(Scale.X, Scale.Y, 0.000001) || !FMath::IsNearlyEqual(Scale.X, Scale.Z, 0.000001))) return false;
+    }
+    return true;
+}
 }
 
 bool FJevEditorBridge::SupportsMeshOperation(AStaticMeshActor* Actor, bool bDuplicate, FString* UnsupportedProperty) const
@@ -296,6 +323,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
         const auto Object = *ObjectPtr;
         FOperation Operation;
         if (!JevEdits::String(Object, TEXT("op"), Operation.Op)) return Error(TEXT("bad_request"), TEXT("Each operation requires op."));
+        if (Object->HasField(TEXT("preserve_attachments")) && (Operation.Op != TEXT("duplicate_mesh") || !Object->HasTypedField<EJson::Boolean>(TEXT("preserve_attachments")) || !Object->TryGetBoolField(TEXT("preserve_attachments"), Operation.bPreserveAttachments))) return Error(TEXT("bad_request"), TEXT("preserve_attachments is a duplicate_mesh boolean only."));
         FVector Location = FVector::ZeroVector, Rotation = FVector::ZeroVector, Scale = FVector::OneVector;
         if (Operation.Op == TEXT("spawn_primitive") || Operation.Op == TEXT("spawn_static_mesh"))
         {
@@ -320,7 +348,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
             if (ExistingTargets.Contains(Operation.ActorPath)) return Error(TEXT("bad_request"), TEXT("A plan may contain only one operation per existing actor, across all edit types."));
             AActor* Actor = FindActor(World, Operation.ActorPath);
             if (!IsValid(Actor)) return Error(TEXT("actor_not_found"), TEXT("The edit target must exist in the editor world."));
-            const TArray<FString> Blockers = ActorEditBlockers(Actor);
+            const TArray<FString> Blockers = ActorEditBlockers(Actor, Operation.bPreserveAttachments);
             if (!Blockers.IsEmpty()) return Error(Blockers.Contains(TEXT("actor_locked")) || Blockers.Contains(TEXT("level_locked")) ? TEXT("actor_locked") : TEXT("actor_unsupported"), TEXT("Edits require an editable, unlocked, exact native StaticMeshActor without parent, child, or child-actor attachments."));
             if (Actor->GetActorTransform().ContainsNaN()) return Error(TEXT("actor_unsupported"), TEXT("The target has a non-finite baseline transform."));
             ExistingTargets.Add(Operation.ActorPath);
@@ -357,7 +385,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
             else
             {
                 const bool bDuplicate = Operation.Op == TEXT("duplicate_mesh");
-                const TArray<FString> Fields = bDuplicate ? TArray<FString>{TEXT("op"), TEXT("actor_path"), TEXT("label"), TEXT("location"), TEXT("rotation"), TEXT("scale")} : TArray<FString>{TEXT("op"), TEXT("actor_path"), TEXT("asset_path"), TEXT("material_policy")};
+                const TArray<FString> Fields = bDuplicate ? TArray<FString>{TEXT("op"), TEXT("actor_path"), TEXT("label"), TEXT("location"), TEXT("rotation"), TEXT("scale"), TEXT("preserve_attachments")} : TArray<FString>{TEXT("op"), TEXT("actor_path"), TEXT("asset_path"), TEXT("material_policy")};
                 if (!JevEdits::OnlyFields(Object, Fields)) return Error(TEXT("bad_request"), TEXT("Unexpected mesh operation field."));
                 auto* StaticActor = CastChecked<AStaticMeshActor>(Actor);
                 UStaticMeshComponent* Component = StaticActor->GetStaticMeshComponent();
@@ -379,6 +407,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
                 Operation.MeshSettings = CaptureMeshSettings(StaticActor);
                 Operation.SourceComponent = Component;
                 Operation.SourcePivotOffset = Actor->GetPivotOffset();
+                if (Operation.bPreserveAttachments) { Operation.AttachmentParentSourcePath = Actor->GetAttachParentActor() ? Actor->GetAttachParentActor()->GetPathName() : FString(); Operation.AttachmentRelativeTransform = Component->GetRelativeTransform(); }
                 UStaticMesh* Mesh = Component->GetStaticMesh();
                 const auto RefreshSource = [&]
                 {
@@ -430,6 +459,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
         if (!PreviewContextStable() || (!Operation.ActorPath.IsEmpty() && !Operation.Target.IsValid())) return Error(TEXT("stale_plan"), TEXT("The editor or actor identity changed while resolving the preview."));
         if (!JevEdits::Vector(Object, TEXT("location"), Location, 1000000.0) || !JevEdits::Vector(Object, TEXT("rotation"), Rotation, 36000.0) || !JevEdits::Vector(Object, TEXT("scale"), Scale, 1000.0, true)) return Error(TEXT("bad_request"), TEXT("Transform fields require three finite numbers within the documented editor bounds."));
         Operation.Transform = FTransform(FRotator(Rotation.X, Rotation.Y, Rotation.Z), Location, Scale);
+        if (Operation.bPreserveAttachments && Operation.AttachmentParentSourcePath.IsEmpty()) Operation.AttachmentRelativeTransform = Operation.Transform;
         if (Operation.Op == TEXT("replace_mesh") || Operation.Op == TEXT("duplicate_mesh"))
         {
             auto TransformFields = MakeShared<FJsonObject>();
@@ -458,6 +488,12 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
                 if (Operation.Op == TEXT("duplicate_mesh")) Summary->SetStringField(TEXT("source_actor_path"), Operation.ActorPath);
                 else Summary->SetStringField(TEXT("material_policy"), Operation.MaterialPolicy);
                 Summary->SetObjectField(TEXT("mesh_settings"), MeshSettingsSnapshot(Operation.MeshSettings));
+                if (Operation.bPreserveAttachments)
+                {
+                    Summary->SetBoolField(TEXT("preserve_attachments"), true);
+                    if (Operation.AttachmentParentSourcePath.IsEmpty()) Summary->SetField(TEXT("attachment_parent_source_path"), MakeShared<FJsonValueNull>()); else Summary->SetStringField(TEXT("attachment_parent_source_path"), Operation.AttachmentParentSourcePath);
+                    Summary->SetObjectField(TEXT("attachment_relative_transform"), JevEdits::Transform(Operation.AttachmentRelativeTransform));
+                }
                 Summary->SetNumberField(TEXT("material_slot_count"), Operation.MeshMaterials.Num());
                 Summary->SetNumberField(TEXT("material_override_count"), Operation.MeshOverrides.Num());
                 TArray<TSharedPtr<FJsonValue>> Materials;
@@ -478,7 +514,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
                 Review->SetArrayField(TEXT("actor_pivot_offset_cm"), JevEdits::Vector(Operation.Target->GetPivotOffset()));
                 Review->SetStringField(TEXT("material_assignment"), Operation.MaterialPolicy == TEXT("preserve_slots") ? TEXT("Effective source materials become explicit overrides by equal slot index; slot names do not remap assignments.") : Operation.Op == TEXT("duplicate_mesh") ? TEXT("Source effective materials and explicit override array are copied.") : TEXT("All component material overrides are cleared; new mesh defaults are used."));
                 Review->SetStringField(TEXT("collision_semantics"), TEXT("Component collision settings are retained; mesh collision geometry and local bounds follow the reviewed result mesh. Collision overlap and visual fit require inspection."));
-                Review->SetStringField(TEXT("copy_scope"), TEXT("A new native actor with only the reported settings when duplicating; no script state, attachments, custom components, per-instance paint, or baked lighting is cloned."));
+                Review->SetStringField(TEXT("copy_scope"), Operation.bPreserveAttachments ? TEXT("Explicit closed native mesh-actor forest: copied actors attach only to copied parent roots, preserving reviewed local transforms. No sockets, external attachments, nonuniformly scaled parents, script state, custom components, paint or baked lighting.") : TEXT("A new native actor with only the reported settings when duplicating; no script state, attachments, custom components, per-instance paint, or baked lighting is cloned."));
                 Summary->SetObjectField(TEXT("mesh_review"), Review);
             }
         }
@@ -506,6 +542,18 @@ TSharedRef<FJsonObject> FJevEditorBridge::Preview(UWorld* World, const TSharedPt
         else Before.Add(MakeShared<FJsonValueNull>());
         Normalized.Add(MakeShared<FJsonValueObject>(Summary));
         Plan.Operations.Add(MoveTemp(Operation));
+    }
+    if (Plan.Operations.ContainsByPredicate([](const FOperation& O) { return O.bPreserveAttachments; }))
+    {
+        TArray<AActor*> Sources; TSet<FString> Labels; FVector Offset = FVector::ZeroVector; bool First = true;
+        for (const FOperation& O : Plan.Operations)
+        {
+            if (!O.bPreserveAttachments || O.Op != TEXT("duplicate_mesh") || !O.Target.IsValid() || Labels.Contains(O.Label)) return Error(TEXT("bad_request"), TEXT("Hierarchy plans require only attachment-preserving mesh copies with unique labels."));
+            const FTransform Source = O.Target->GetActorTransform(); const FVector Delta = O.Transform.GetLocation() - Source.GetLocation();
+            if (!O.Transform.GetRotation().Equals(Source.GetRotation(), 0.000001) || !O.Transform.GetScale3D().Equals(Source.GetScale3D(), 0.000001) || (!First && !Delta.Equals(Offset, 0.001))) return Error(TEXT("bad_request"), TEXT("Hierarchy copies preserve source rotation/scale and apply one identical world offset to every member."));
+            First = false; Offset = Delta; Sources.Add(O.Target.Get()); Labels.Add(O.Label);
+        }
+        if (!JevEdits::ClosedHierarchy(Sources)) return Error(TEXT("actor_unsupported"), TEXT("Explicitly select the complete native mesh hierarchy, including every parent and child. Sockets, external components, cycles and nonuniform parent scales are unsupported."));
     }
     if (!PreviewContextStable() || Plan.Revision != Revision(World)) return Error(TEXT("stale_plan"), TEXT("Editor state changed while resolving the preview assets. Inspect again."));
     auto Review = MakeShared<FJsonObject>();
@@ -593,7 +641,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
         else
         {
             AActor* Actor = FindActor(World, Operation.ActorPath);
-            if (!IsValid(Actor) || Operation.Target.Get() != Actor || !ActorEditBlockers(Actor).IsEmpty() || Operation.TargetBaseline != ActorEditFingerprint(Actor)) return Error(TEXT("stale_plan"), TEXT("A target's editability, material assignments, metadata, or object identity changed after preview."));
+            if (!IsValid(Actor) || Operation.Target.Get() != Actor || !ActorEditBlockers(Actor, Operation.bPreserveAttachments).IsEmpty() || Operation.TargetBaseline != ActorEditFingerprint(Actor)) return Error(TEXT("stale_plan"), TEXT("A target's editability, material assignments, metadata, attachments or object identity changed after preview."));
             Targets.Add(Operation.ActorPath, Actor);
             if (Operation.Op == TEXT("set_material"))
             {
@@ -640,8 +688,11 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
         }
     }
     if (!ResolveContextStable() || Plan.Revision != Revision(World)) return Error(TEXT("stale_plan"), TEXT("Editor state changed while resolving the plan."));
+    TArray<AActor*> HierarchySources; for (const FOperation& O : Plan.Operations) if (O.bPreserveAttachments) HierarchySources.Add(O.Target.Get());
+    if (!HierarchySources.IsEmpty() && !JevEdits::ClosedHierarchy(HierarchySources)) return Error(TEXT("stale_plan"), TEXT("The reviewed closed hierarchy changed."));
     if (!GEditor->CanTransact() || GEditor->IsTransactionActive() || GIsTransacting) return Error(TEXT("editor_busy"), TEXT("The editor became busy while resolving the plan."));
     TArray<TWeakObjectPtr<AActor>> ChangedActors;
+    TMap<FString, TWeakObjectPtr<AActor>> HierarchyCopies;
     TWeakObjectPtr<UWorld> ApplyWorld = World;
     TWeakObjectPtr<ULevel> ApplyLevel = World->GetCurrentLevel();
     const uint64 ApplyAssetEpoch = AssetChangeEpoch;
@@ -806,6 +857,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
             if (!SceneStable(Actor)) { bFailed = true; break; }
             Actor->MarkPackageDirty();
             ChangedActors.Add(Actor);
+            if (Operation.bPreserveAttachments) HierarchyCopies.Add(Operation.ActorPath, Actor);
             SceneBaselines.Add(Actor, ActorEditFingerprint(Actor));
 #if WITH_DEV_AUTOMATION_TESTS
             if (FailureAfterOperationsForTesting > 0 && ChangedActors.Num() == FailureAfterOperationsForTesting)
@@ -815,6 +867,57 @@ TSharedRef<FJsonObject> FJevEditorBridge::Apply(UWorld* World, const TSharedPtr<
                 break;
             }
 #endif
+        }
+        if (!bFailed && !HierarchyCopies.IsEmpty())
+        {
+            // Parents are attached before children so no accepted child is moved by
+            // a later ancestor attachment, and every intermediate scene is checked.
+            TSet<FString> AttachedSources;
+            while (!bFailed && AttachedSources.Num() < HierarchyCopies.Num())
+            {
+                bool Progress = false;
+                for (const FOperation& O : Plan.Operations)
+                {
+                    if (!O.bPreserveAttachments || AttachedSources.Contains(O.ActorPath) || (!O.AttachmentParentSourcePath.IsEmpty() && !AttachedSources.Contains(O.AttachmentParentSourcePath))) continue;
+                    if (!SceneStable(nullptr)) { FailureStage = TEXT("hierarchy_scene_changed"); bFailed = true; break; }
+                    AActor* Copy = HierarchyCopies.FindChecked(O.ActorPath).Get();
+                    if (!IsValid(Copy) || !Copy->GetRootComponent()) { bFailed = true; break; }
+                    if (!O.AttachmentParentSourcePath.IsEmpty())
+                    {
+                        AActor* Parent = HierarchyCopies.FindChecked(O.AttachmentParentSourcePath).Get();
+                        if (!IsValid(Parent) || !Parent->GetRootComponent()) { bFailed = true; break; }
+                        const TWeakObjectPtr<AActor> WeakCopy = Copy, WeakParent = Parent; const TWeakObjectPtr<USceneComponent> CopyRoot = Copy->GetRootComponent(), ParentRoot = Parent->GetRootComponent();
+                        const auto PairStable = [&] { return ContextStable() && WeakCopy.IsValid() && WeakParent.IsValid() && CopyRoot.IsValid() && ParentRoot.IsValid() && Copy->GetRootComponent() == CopyRoot.Get() && Parent->GetRootComponent() == ParentRoot.Get(); };
+                        Copy->Modify(); if (!PairStable()) { bFailed = true; break; }
+                        CopyRoot->Modify(); if (!PairStable()) { bFailed = true; break; }
+                        Parent->Modify(); if (!PairStable()) { bFailed = true; break; }
+                        ParentRoot->Modify(); if (!PairStable()) { bFailed = true; break; }
+                        if (!Copy->AttachToComponent(ParentRoot.Get(), FAttachmentTransformRules::KeepWorldTransform)) { FailureStage = TEXT("hierarchy_attach"); bFailed = true; break; }
+                        if (!PairStable() || Copy->GetAttachParentActor() != Parent) { bFailed = true; break; }
+                        CopyRoot->SetRelativeTransform(O.AttachmentRelativeTransform, false, nullptr, ETeleportType::TeleportPhysics);
+                        if (!PairStable() || Copy->GetAttachParentActor() != Parent || !CopyRoot->GetRelativeTransform().Equals(O.AttachmentRelativeTransform, 0.001) || !Copy->GetActorTransform().Equals(O.Transform, 0.001)) { FailureStage = TEXT("hierarchy_transform"); bFailed = true; break; }
+                        SceneBaselines.Add(Parent, ActorEditFingerprint(Parent)); SceneBaselines.Add(Copy, ActorEditFingerprint(Copy));
+                    }
+                    AttachedSources.Add(O.ActorPath); Progress = true;
+                    if (!SceneStable(nullptr)) { FailureStage = TEXT("hierarchy_callback_changed_scene"); bFailed = true; break; }
+                }
+                if (!Progress && !bFailed) { FailureStage = TEXT("hierarchy_cycle"); bFailed = true; }
+            }
+            if (!bFailed)
+            {
+                TArray<AActor*> Copies;
+                for (const FOperation& O : Plan.Operations)
+                {
+                    AActor* Copy = HierarchyCopies.FindChecked(O.ActorPath).Get(); AActor* Parent = O.AttachmentParentSourcePath.IsEmpty() ? nullptr : HierarchyCopies.FindChecked(O.AttachmentParentSourcePath).Get(); Copies.Add(Copy);
+                    if (!IsValid(Copy) || !IsValid(Copy->GetRootComponent()) || Copy->GetAttachParentActor() != Parent || !Copy->GetActorTransform().Equals(O.Transform, 0.001) || !Copy->GetRootComponent()->GetRelativeTransform().Equals(O.AttachmentRelativeTransform, 0.001) || !SupportsMeshOperation(CastChecked<AStaticMeshActor>(Copy), true) || !ActorEditBlockers(Copy, true).IsEmpty()) { FailureStage = TEXT("hierarchy_readback"); bFailed = true; break; }
+                    auto* MeshCopy = CastChecked<AStaticMeshActor>(Copy); auto* Component = MeshCopy->GetStaticMeshComponent();
+                    if (Copy->GetActorLabel() != O.Label || (Copy->GetFolderPath().IsNone() ? FString() : Copy->GetFolderPath().ToString()) != O.Folder || !JevEdits::EqualJson(MeshSettingsSnapshot(CaptureMeshSettings(MeshCopy)), MeshSettingsSnapshot(O.MeshSettings)) || Component->GetStaticMesh() != O.MeshAsset.Get() || Component->GetNumMaterials() != O.MeshMaterials.Num() || Component->GetNumOverrideMaterials() != O.MeshOverrides.Num()) { FailureStage = TEXT("hierarchy_settings_readback"); bFailed = true; break; }
+                    for (int32 Slot = 0; Slot < O.MeshMaterials.Num(); ++Slot) if (Component->GetEditorMaterial(Slot) != O.MeshMaterials[Slot].Get() || (Component->OverrideMaterials.IsValidIndex(Slot) && Component->OverrideMaterials[Slot].Get() != O.MeshOverrides[Slot].Get())) { FailureStage = TEXT("hierarchy_material_readback"); bFailed = true; break; }
+                    if (bFailed) break;
+                    if (!O.Target.IsValid() || O.TargetBaseline != ActorEditFingerprint(O.Target.Get())) { FailureStage = TEXT("hierarchy_source_changed"); bFailed = true; break; }
+                }
+                if (!bFailed && (!JevEdits::ClosedHierarchy(Copies) || !SceneStable(nullptr))) { FailureStage = TEXT("hierarchy_closure_readback"); bFailed = true; }
+            }
         }
     }
     if (bFailed)

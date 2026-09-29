@@ -4,6 +4,11 @@
 #include "JevEditorProjectTools.h"
 #include "JevBlueprintTestTypes.h"
 #include "Animation/AnimBlueprint.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/Skeleton.h"
+#include "Blueprint/UserWidget.h"
+#include "Factories/AnimBlueprintFactory.h"
+#include "WidgetBlueprintFactory.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EdGraph/EdGraph.h"
 #include "Engine/Blueprint.h"
@@ -246,6 +251,67 @@ bool FJevBlueprintCompileGuards::RunTest(const FString& Parameters)
     TestEqual(TEXT("old receipts pruned"), ErrorCode(Tools.Execute(TEXT("blueprint_compile_receipt"), Receipt, Identity())), FString(TEXT("unknown_plan")));
     auto* Custom = Fixture.InspectionAsset(UJevBlueprintSubclassFixture::StaticClass(), TEXT("UnsupportedCompile")); Fixture.Approve(Custom);
     TestEqual(TEXT("custom subclasses cannot compile"), ErrorCode(Tools.Execute(TEXT("blueprint_compile_preview"), PreviewParams(), Identity())), FString(TEXT("asset_not_loaded")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevBlueprintGraphWorkflow, "Jev.Editor.BlueprintGraphWorkflow", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevBlueprintGraphWorkflow::RunTest(const FString&)
+{
+    using namespace JevBlueprintTests; FFixture Fixture; UBlueprint* BP = Fixture.CompileAsset(); UEdGraph* Graph = BP->UbergraphPages[0];
+    bool Old = false; const bool Had = GConfig->GetBool(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnableGraphEdits"), Old, GGameIni);
+    ON_SCOPE_EXIT { if (Had) GConfig->SetBool(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnableGraphEdits"), Old, GGameIni); else GConfig->RemoveKey(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnableGraphEdits"), GGameIni); };
+    GConfig->SetBool(TEXT("JevEditor.BlueprintCompilation"), TEXT("bEnableGraphEdits"), true, GGameIni); FJevBlueprintTools Tools;
+    auto PreviewGraph = [&](const TSharedRef<FJsonObject>& Edit) { auto P = PreviewParams(); P->SetObjectField(TEXT("graph_edit"), Edit); return Tools.Execute(TEXT("blueprint_graph_preview"), P, Identity()); };
+    auto Edit = MakeShared<FJsonObject>(); Edit->SetStringField(TEXT("operation"), TEXT("add_math_node")); Edit->SetStringField(TEXT("graph_id"), Graph->GraphGuid.ToString()); Edit->SetStringField(TEXT("function"), TEXT("Add_IntInt")); Edit->SetNumberField(TEXT("x"), 320); Edit->SetNumberField(TEXT("y"), 80);
+    const int32 OriginalCount = Graph->Nodes.Num(); auto Plan = PreviewGraph(Edit); if (!TestTrue(TEXT("add math node previews"), Plan->GetBoolField(TEXT("ok")))) return false;
+    TestEqual(TEXT("preview preserves graph"), Graph->Nodes.Num(), OriginalCount); const FString AddedId = Plan->GetObjectField(TEXT("result"))->GetStringField(TEXT("added_node_id"));
+    auto Applied = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); if (!TestTrue(TEXT("add and compile responds"), Applied->GetBoolField(TEXT("ok")))) return false;
+    TestEqual(TEXT("add graph compile passes"), Applied->GetObjectField(TEXT("result"))->GetStringField(TEXT("status")), FString(TEXT("passed"))); TestEqual(TEXT("one node added"), Graph->Nodes.Num(), OriginalCount + 1);
+    UK2Node_CallFunction* First = nullptr; for (UEdGraphNode* N : Graph->Nodes) if (N->NodeGuid.ToString() == AddedId) First = Cast<UK2Node_CallFunction>(N); if (!TestNotNull(TEXT("planned node identity retained"), First)) return false;
+    GEditor->UndoTransaction(); TestEqual(TEXT("Undo removes added node"), Graph->Nodes.Num(), OriginalCount);
+    auto MakeNode = [&](const TCHAR* FunctionName) { auto* N = NewObject<UK2Node_CallFunction>(Graph, NAME_None, RF_Transactional); N->SetFromFunction(UKismetMathLibrary::StaticClass()->FindFunctionByName(FunctionName)); N->CreateNewGuid(); N->AllocateDefaultPins(); Graph->AddNode(N, false, false); return N; };
+    First = MakeNode(TEXT("Add_IntInt")); auto* Second = MakeNode(TEXT("Multiply_IntInt")); auto* Boolean = MakeNode(TEXT("Not_PreBool")); BP->Status = BS_Dirty;
+    auto Link = MakeShared<FJsonObject>(); Link->SetStringField(TEXT("operation"), TEXT("connect")); Link->SetStringField(TEXT("graph_id"), Graph->GraphGuid.ToString()); Link->SetStringField(TEXT("output_node_id"), First->NodeGuid.ToString()); Link->SetStringField(TEXT("output_pin_id"), First->FindPin(TEXT("ReturnValue"))->PinId.ToString()); Link->SetStringField(TEXT("input_node_id"), Second->NodeGuid.ToString()); Link->SetStringField(TEXT("input_pin_id"), Second->FindPin(TEXT("A"))->PinId.ToString());
+    Plan = PreviewGraph(Link); if (!TestTrue(TEXT("exact typed connection previews"), Plan->GetBoolField(TEXT("ok")))) return false;
+    Applied = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); TestTrue(TEXT("typed connection applies"), Applied->GetBoolField(TEXT("ok"))); TestTrue(TEXT("actual pins linked"), First->FindPin(TEXT("ReturnValue"))->LinkedTo.Contains(Second->FindPin(TEXT("A"))));
+    TestEqual(TEXT("connection cannot replay"), ErrorCode(Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity())), FString(TEXT("plan_consumed")));
+    auto Remove = MakeShared<FJsonObject>(); Remove->SetStringField(TEXT("operation"), TEXT("remove_math_node")); Remove->SetStringField(TEXT("graph_id"), Graph->GraphGuid.ToString()); Remove->SetStringField(TEXT("node_id"), Second->NodeGuid.ToString());
+    TestEqual(TEXT("linked removal refused"), ErrorCode(PreviewGraph(Remove)), FString(TEXT("unsupported_graph_edit")));
+    auto Cycle = MakeShared<FJsonObject>(); Cycle->Values = Link->Values; Cycle->SetStringField(TEXT("output_node_id"), Second->NodeGuid.ToString()); Cycle->SetStringField(TEXT("output_pin_id"), Second->FindPin(TEXT("ReturnValue"))->PinId.ToString()); Cycle->SetStringField(TEXT("input_node_id"), First->NodeGuid.ToString()); Cycle->SetStringField(TEXT("input_pin_id"), First->FindPin(TEXT("A"))->PinId.ToString());
+    TestEqual(TEXT("cycle refused"), ErrorCode(PreviewGraph(Cycle)), FString(TEXT("unsupported_graph_edit")));
+    auto Mismatch = MakeShared<FJsonObject>(); Mismatch->Values = Link->Values; Mismatch->SetStringField(TEXT("input_node_id"), Boolean->NodeGuid.ToString()); Mismatch->SetStringField(TEXT("input_pin_id"), Boolean->FindPin(TEXT("A"))->PinId.ToString()); TestEqual(TEXT("implicit numeric boolean coercion refused"), ErrorCode(PreviewGraph(Mismatch)), FString(TEXT("unsupported_graph_edit")));
+    Link->SetStringField(TEXT("operation"), TEXT("disconnect")); Plan = PreviewGraph(Link); if (!TestTrue(TEXT("disconnect previews"), Plan->GetBoolField(TEXT("ok")))) return false;
+    Applied = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); TestTrue(TEXT("disconnect applies"), Applied->GetBoolField(TEXT("ok"))); TestTrue(TEXT("actual input disconnected"), Second->FindPin(TEXT("A"))->LinkedTo.IsEmpty());
+    Plan = PreviewGraph(Remove); if (!TestTrue(TEXT("unlinked removal previews"), Plan->GetBoolField(TEXT("ok")))) return false;
+    Second->NodePosX += 1; TestEqual(TEXT("silent graph change invalidates"), ErrorCode(Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity())), FString(TEXT("stale_plan")));
+    Plan = PreviewGraph(Remove); Applied = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); TestTrue(TEXT("reviewed removal applies"), Applied->GetBoolField(TEXT("ok"))); TestFalse(TEXT("removed node absent"), Graph->Nodes.Contains(Second)); GEditor->UndoTransaction(); TestTrue(TEXT("Undo restores removed node"), Graph->Nodes.Contains(Second));
+    const FGuid SecondId = Second->NodeGuid; Second->NodeGuid = First->NodeGuid; TestEqual(TEXT("ambiguous node IDs refused"), ErrorCode(PreviewGraph(Edit)), FString(TEXT("unsupported_graph_edit"))); Second->NodeGuid = SecondId;
+    const FGuid OriginalPinId = First->FindPin(TEXT("B"))->PinId; First->FindPin(TEXT("B"))->PinId = First->FindPin(TEXT("A"))->PinId; TestEqual(TEXT("ambiguous pins within one node refused"), ErrorCode(PreviewGraph(Edit)), FString(TEXT("unsupported_graph_edit"))); First->FindPin(TEXT("B"))->PinId = OriginalPinId;
+    Edit->SetStringField(TEXT("function"), TEXT("ExecuteConsoleCommand")); TestEqual(TEXT("arbitrary functions refused"), ErrorCode(PreviewGraph(Edit)), FString(TEXT("unsupported_graph_edit")));
+    auto Smuggled = PreviewParams(); Smuggled->SetObjectField(TEXT("graph_edit"), Remove); TestEqual(TEXT("explicit action required"), ErrorCode(Tools.Execute(TEXT("blueprint_compile_preview"), Smuggled, Identity())), FString(TEXT("bad_request")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevBlueprintSpecializedCompilation, "Jev.Editor.BlueprintSpecializedCompilation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevBlueprintSpecializedCompilation::RunTest(const FString&)
+{
+    using namespace JevBlueprintTests; FFixture Fixture; FJevBlueprintTools Tools;
+    auto* WidgetFactory = NewObject<UWidgetBlueprintFactory>(); WidgetFactory->ParentClass = UUserWidget::StaticClass();
+    auto* Widget = Cast<UWidgetBlueprint>(WidgetFactory->FactoryCreateNew(UWidgetBlueprint::StaticClass(), Fixture.Package, TEXT("WBP_CompileFixture"), RF_Public | RF_Standalone | RF_Transactional, nullptr, GWarn));
+    if (!TestNotNull(TEXT("native Widget Blueprint factory"), Widget)) return false; Fixture.Assets.Add(Widget); FAssetRegistryModule::AssetCreated(Widget);
+    auto* Skeleton = NewObject<USkeleton>(Fixture.Package, TEXT("FixtureSkeleton"), RF_Public | RF_Standalone); Fixture.Assets.Add(Skeleton); FAssetRegistryModule::AssetCreated(Skeleton);
+    { FReferenceSkeletonModifier Modifier(Skeleton); Modifier.Add(FMeshBoneInfo(TEXT("root"), TEXT("root"), INDEX_NONE), FTransform::Identity); }
+    auto* AnimFactory = NewObject<UAnimBlueprintFactory>(); AnimFactory->ParentClass = UAnimInstance::StaticClass(); AnimFactory->TargetSkeleton = Skeleton;
+    auto* Animation = Cast<UAnimBlueprint>(AnimFactory->FactoryCreateNew(UAnimBlueprint::StaticClass(), Fixture.Package, TEXT("ABP_CompileFixture"), RF_Public | RF_Standalone | RF_Transactional, nullptr, GWarn));
+    if (!TestNotNull(TEXT("native Animation Blueprint factory"), Animation)) return false; Fixture.Assets.Add(Animation); FAssetRegistryModule::AssetCreated(Animation);
+    for (UBlueprint* BP : {static_cast<UBlueprint*>(Widget), static_cast<UBlueprint*>(Animation)})
+    {
+        Fixture.Approve(BP); auto Plan = Tools.Execute(TEXT("blueprint_compile_preview"), PreviewParams(), Identity()); if (!TestTrue(TEXT("specialized native Blueprint preview"), Plan->GetBoolField(TEXT("ok")))) return false;
+        auto Result = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); if (!TestTrue(TEXT("specialized native compile responds"), Result->GetBoolField(TEXT("ok")))) return false;
+        TestEqual(TEXT("specialized asset fresh compiler acceptance"), Result->GetObjectField(TEXT("result"))->GetStringField(TEXT("status")), FString(TEXT("passed"))); TestEqual(TEXT("specialized asset no compiler errors"), Result->GetObjectField(TEXT("result"))->GetNumberField(TEXT("error_count")), 0.0);
+        TestFalse(TEXT("specialized compile does not request save"), Result->GetObjectField(TEXT("result"))->GetBoolField(TEXT("save_requested")));
+    }
+    TestEqual(TEXT("animation skeleton preserved"), Animation->TargetSkeleton.Get(), Skeleton);
     return true;
 }
 

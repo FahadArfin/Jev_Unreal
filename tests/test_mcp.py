@@ -27,6 +27,18 @@ async def test_stdio_protocol_and_offline_failure():
             tools = await session.list_tools()
             by_name = {tool.name: tool for tool in tools.tools}
             assert set(by_name) == {
+                "unreal_handoff_verify",
+                "unreal_blueprint_graph_preview",
+                "unreal_team_status",
+                "unreal_durable_receipts",
+                "unreal_durable_receipt",
+                "unreal_durable_receipt_forget",
+                "unreal_project_lease",
+                "unreal_project_lease_release",
+                "unreal_named_job_preview",
+                "unreal_named_job_start",
+                "unreal_named_job",
+                "unreal_named_job_cancel",
                 "jev_status",
                 "jev_decide",
                 "jev_route",
@@ -83,7 +95,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_functional_cancel",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
-            assert len(by_name) == 54
+            assert len(by_name) == 66
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
             assert set(by_name["unreal_frame"].inputSchema["properties"]["view"]["enum"]) == {
                 "current",
@@ -117,6 +129,7 @@ async def test_stdio_protocol_and_offline_failure():
                 "blockout_workflow",
                 "diagnostic_workflow",
                 "verified_edit_workflow",
+                "beginner_workflow",
             }
             recipe = await session.call_tool(
                 "unreal_layout_preview",

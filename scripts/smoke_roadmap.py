@@ -44,9 +44,10 @@ async def main():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {tool.name for tool in (await session.list_tools()).tools}
-            assert len(tools) == 54, tools
+            assert len(tools) == 66, tools
             status = await call(session, "unreal_status")
-            assert status["bridge_version"] == "0.8.0"
+            assert status["bridge_version"] == "0.9.0"
+            assert "blueprint_graph_preview" in status["capabilities"]
             assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
             dependencies = await call(
                 session,
@@ -93,6 +94,24 @@ async def main():
                 "unreal_blueprint_compile_receipt",
                 {"plan_id": "00000000-0000-0000-0000-000000000000"},
                 "unknown_plan",
+            )
+            await call(
+                session,
+                "unreal_blueprint_graph_preview",
+                {
+                    "target_id": "unapproved",
+                    "expected_state": {
+                        k: status[k] for k in ("session_id", "world_path", "revision")
+                    },
+                    "graph_edit": {
+                        "operation": "add_math_node",
+                        "graph_id": "00000000-0000-0000-0000-000000000000",
+                        "function": "Add_IntInt",
+                        "x": 0,
+                        "y": 0,
+                    },
+                },
+                "blueprint_compile_disabled",
             )
             await call(
                 session,
@@ -180,7 +199,7 @@ async def main():
         "blueprint_fixture_coverage": "Native automation, separate from this smoke",
         "functional_execution_coverage": "Native PIE automation, separate from this smoke",
     }
-    destination = ROOT / "artifacts/roadmap-smoke-v0.8.json"
+    destination = ROOT / "artifacts/roadmap-smoke-v0.9.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"ok": True, "tools": len(tools), "reconnect_verified": True}))

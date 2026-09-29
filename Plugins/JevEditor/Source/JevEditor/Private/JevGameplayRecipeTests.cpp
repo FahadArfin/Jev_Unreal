@@ -43,7 +43,7 @@ struct FState
     FJevEditorBridge Bridge;
     FJevFunctionalTools Tools;
     TArray<FString> Ids = {TEXT("door-pass"), TEXT("door-fail"), TEXT("interaction-pass"), TEXT("interaction-fail"),
-        TEXT("combat-pass"), TEXT("combat-fail"), TEXT("navigation-pass"), TEXT("navigation-fail"), TEXT("door-pass")};
+        TEXT("combat-pass"), TEXT("combat-fail"), TEXT("navigation-pass"), TEXT("navigation-fail"), TEXT("traversal-pass"), TEXT("traversal-fail"), TEXT("door-pass")};
     TArray<FString> OldTests;
     TSharedPtr<FJsonObject> Job;
     bool bHadEnabled = false, bEnabled = false, bHadTimeout = false;
@@ -114,6 +114,13 @@ public:
                         const auto R = Route->GetObjectField(TEXT("result"));
                         State->Test->TestTrue(TEXT("domain route is complete"), R->GetBoolField(TEXT("complete_path")));
                         if (R->HasField(TEXT("path_length_cm"))) State->Test->TestTrue(TEXT("domain measures native route length"), R->GetNumberField(TEXT("path_length_cm")) >= 399);
+                        Q->SetBoolField(TEXT("probe_geometry"), true); Q->SetNumberField(TEXT("probe_spacing_cm"), 40);
+                        auto Geometry = JevWorkflow::Navigation(Q)->GetObjectField(TEXT("result"));
+                        State->Test->TestTrue(TEXT("bounded ground and capsule corridor probes complete"), Geometry->GetBoolField(TEXT("geometry_probe_complete")));
+                        State->Test->TestTrue(TEXT("real flat corridor supports requested capsule"), Geometry->GetBoolField(TEXT("geometry_clear")));
+                        auto* Obstacle = World->SpawnActor<AStaticMeshActor>(FVector(200, 0, 100), FRotator::ZeroRotator); auto* ObstacleComponent = Obstacle->GetStaticMeshComponent(); ObstacleComponent->SetMobility(EComponentMobility::Movable); ObstacleComponent->SetCanEverAffectNavigation(false); ObstacleComponent->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"))); ObstacleComponent->SetCollisionProfileName(TEXT("BlockAll")); Obstacle->SetActorScale3D(FVector(1, 2, 2));
+                        Geometry = JevWorkflow::Navigation(Q)->GetObjectField(TEXT("result")); State->Test->TestFalse(TEXT("collision obstruction cannot pass merely because nav path exists"), Geometry->GetBoolField(TEXT("geometry_clear"))); World->EditorDestroyActor(Obstacle, true);
+                        Q->SetBoolField(TEXT("probe_geometry"), false);
                         Q->SetNumberField(TEXT("required_width_cm"), 10000); Q->SetNumberField(TEXT("maximum_step_cm"), 0);
                         const auto Strict = JevWorkflow::Navigation(Q)->GetObjectField(TEXT("result"));
                         State->Test->TestFalse(TEXT("overbroad width never passes"), Strict->GetBoolField(TEXT("width_requirement_covered_by_agent"))); State->Test->TestFalse(TEXT("zero-step requirement never inferred"), Strict->GetBoolField(TEXT("step_requirement_covered_by_agent")));
@@ -183,7 +190,13 @@ public:
             S.Test->TestTrue(TEXT("recipe evaluated actual gameplay observations"), Observations
                 && Observations->GetPropertyValue_InContainer(Recipe) >= (bNegative ? 1 : 3));
             S.Test->TestTrue(TEXT("recipe cleanup called exactly once per run"), Cleanups
-                && Cleanups->GetPropertyValue_InContainer(Recipe) == (S.Index == 8 ? 2 : 1));
+                && Cleanups->GetPropertyValue_InContainer(Recipe) == (S.Index == 10 ? 2 : 1));
+            if (S.Ids[S.Index] == TEXT("traversal-pass"))
+            {
+                auto* Travel = FindFProperty<FDoubleProperty>(Recipe->GetClass(), TEXT("ObservedTravelCm")); auto* Rise = FindFProperty<FDoubleProperty>(Recipe->GetClass(), TEXT("ObservedStepRiseCm"));
+                S.Test->TestTrue(TEXT("pawn physically moved through the owned corridor"), Travel && Travel->GetPropertyValue_InContainer(Recipe) >= 380);
+                S.Test->TestTrue(TEXT("pawn movement climbed the real step"), Rise && Rise->GetPropertyValue_InContainer(Recipe) >= 15);
+            }
             int32 OwnedAlive = 0;
             for (TActorIterator<AActor> It(GEditor->PlayWorld); It; ++It)
                 if (IsValid(*It) && It->GetOwner() == Recipe) ++OwnedAlive;
@@ -207,7 +220,7 @@ public:
         if (ShutdownStarted < 0) ShutdownStarted = FPlatformTime::Seconds();
         if (GEditor->PlayWorld && FPlatformTime::Seconds() - ShutdownStarted < 15) return false;
         State->Test->TestNull(TEXT("recipe automation ended only its own PIE session"), GEditor->PlayWorld.Get());
-        State->Test->TestEqual(TEXT("all four positive, four negative, and repeated cleanup cases executed"), State->Index, State->Ids.Num());
+        State->Test->TestEqual(TEXT("all five positive, five negative, and repeated cleanup cases executed"), State->Index, State->Ids.Num());
         State->Tools.Shutdown(); return true;
     }
 private:
@@ -222,7 +235,7 @@ bool FJevGameplayRecipes::RunTest(const FString& Parameters)
 {
     using namespace JevGameplayRecipeTests;
     TArray<UClass*> Classes;
-    for (const TCHAR* Name : {TEXT("JevDoorRecipe"), TEXT("JevInteractionRecipe"), TEXT("JevCombatRecipe"), TEXT("JevNavigationRecipe")})
+    for (const TCHAR* Name : {TEXT("JevDoorRecipe"), TEXT("JevInteractionRecipe"), TEXT("JevCombatRecipe"), TEXT("JevNavigationRecipe"), TEXT("JevPawnTraversalRecipe")})
     {
         UClass* Class = FindObject<UClass>(nullptr, *(FString(TEXT("/Script/JevSandbox.")) + Name));
         if (!Class)
@@ -258,7 +271,7 @@ bool FJevGameplayRecipes::RunTest(const FString& Parameters)
     if (!TestNotNull(TEXT("fixture has native navigation system"), Navigation)) return false;
     Navigation->OnNavigationBoundsUpdated(Bounds);
     TArray<FString> Entries;
-    for (int32 I = 0; I < 8; ++I)
+    for (int32 I = 0; I < 10; ++I)
     {
         const FVector Location = I >= 6 ? FVector(0, 0, 25) : FVector(3000 + I * 500, 0, 100);
         FActorSpawnParameters Spawn;
@@ -283,12 +296,18 @@ bool FJevGameplayRecipes::RunTest(const FString& Parameters)
             if (!TestNotNull(TEXT("sample destination property exists"), Property)) return false;
             *Property->ContainerPtrToValuePtr<FVector>(Actor) = FVector(5000, 0, 0);
         }
+        if (I == 9)
+        {
+            auto* Property = FindFProperty<FBoolProperty>(Actor->GetClass(), TEXT("bBlockPath"));
+            if (!TestNotNull(TEXT("owned traversal fault injection property exists"), Property)) return false;
+            Property->SetPropertyValue_InContainer(Actor, true);
+        }
         Entries.Add(State->Ids[I] + TEXT("|") + Actor->GetPathName());
     }
     GConfig->SetArray(Section, TEXT("Tests"), Entries, GGameIni);
     GConfig->SetBool(Section, TEXT("bEnabled"), true, GGameIni);
     GConfig->SetDouble(Section, TEXT("MaxJobSeconds"), 10, GGameIni);
-    AddExpectedErrorPlain(TEXT("Jev recipe failed:"), EAutomationExpectedErrorFlags::Contains, 4);
+    AddExpectedErrorPlain(TEXT("Jev recipe failed:"), EAutomationExpectedErrorFlags::Contains, 5);
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FWaitForNavigation>(State));
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FExerciseRecipes>(State));

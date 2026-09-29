@@ -140,6 +140,157 @@ def connection(*results):
     )
 
 
+def hierarchy_fixture():
+    root, child = actor(), actor(A + "Child", "child-source")
+    root["label"], child["label"] = "Root", "Child"
+    operations, copies = [], []
+    for source, parent in ((root, None), (child, root)):
+        source.update(
+            editable=False,
+            edit_blockers=["attached_parent"] if parent else ["attached_children"],
+            attachment_parent_path=parent["path"] if parent else None,
+            attachment_parent_instance_id=parent["instance_id"] if parent else None,
+            attachment_socket="None",
+            attachment_relative_transform={
+                "location": [1, 2, 3],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+            },
+        )
+        operation = normalized("duplicate", source=source)
+        operation.update(
+            preserve_attachments=True,
+            attachment_parent_source_path=parent["path"] if parent else None,
+            attachment_relative_transform=source["attachment_relative_transform"]
+            if parent
+            else {key: operation[key] for key in ("location", "rotation", "scale")},
+        )
+        copy = after(operation)
+        copy.update(
+            path=B + ("Child" if parent else ""),
+            instance_id="child-copy" if parent else "root-copy",
+            attachment_parent_path=B if parent else None,
+            attachment_parent_instance_id="root-copy" if parent else None,
+            attachment_socket="None",
+            attachment_relative_transform=deepcopy(operation["attachment_relative_transform"]),
+        )
+        operations.append(operation)
+        copies.append(copy)
+    return [root, child], operations, copies
+
+
+def test_hierarchy_copy_requires_new_capability_and_explicit_opt_in():
+    sources, _, _ = hierarchy_fixture()
+    request = recipe(
+        "duplicate", actor_paths=[s["path"] for s in sources], preserve_attachments=True
+    )
+    with pytest.raises(JevError, match="attachment"):
+        compile_mesh(request, details(sources))
+    inspection = details(sources)
+    inspection["capabilities"].append("mesh_attachment_copy")
+    compiled = compile_mesh(request, inspection)
+    assert all(op["preserve_attachments"] for op in compiled["operations"])
+    request["preserve_attachments"] = False
+    with pytest.raises(JevError):
+        compile_mesh(request, inspection)
+
+
+@pytest.mark.parametrize("index", [0, 1], ids=["root", "child"])
+@pytest.mark.parametrize("difference", ["roundoff", "wrapped_angles", "euler_alias"])
+async def test_hierarchy_preview_accepts_equivalent_relative_transforms(index, difference):
+    sources, operations, _ = hierarchy_fixture()
+    operations = deepcopy(operations)  # Inspection and native preview are independent evidence.
+    relative = operations[index]["attachment_relative_transform"]
+    pitch, yaw, roll = relative["rotation"]
+    if difference == "roundoff":
+        relative["location"][0] += 0.0005
+        relative["scale"][2] += 0.0000002
+        relative["rotation"][1] += 0.0001
+    elif difference == "wrapped_angles":
+        relative["rotation"] = [pitch + 360, yaw - 360, roll + 720]
+    else:
+        relative["rotation"] = [180 - pitch, yaw + 180, roll + 180]
+    inspection = details(sources)
+    inspection["capabilities"].append("mesh_attachment_copy")
+    bridge = connection(inspection, {"plan_id": "p", "operations": operations})
+    proposal = await preview_mesh(
+        bridge,
+        PreviewTracker(bridge),
+        recipe("duplicate", actor_paths=[s["path"] for s in sources], preserve_attachments=True),
+    )
+    assert proposal["preview"]["plan_id"] == "p"
+    assert proposal["applied"] is False
+    assert bridge.call.await_count == 2
+
+
+@pytest.mark.parametrize("index", [0, 1], ids=["root", "child"])
+@pytest.mark.parametrize(
+    "difference",
+    ["parent", "rotation", "location", "scale", "nan_location", "nan_rotation", "nan_scale"],
+)
+async def test_hierarchy_preview_refuses_changed_parent_pose_and_nonfinite(index, difference):
+    sources, operations, _ = hierarchy_fixture()
+    operations = deepcopy(operations)
+    operation = operations[index]
+    if difference == "parent":
+        operation["attachment_parent_source_path"] = B
+    else:
+        field = difference.removeprefix("nan_")
+        values = operation["attachment_relative_transform"][field]
+        values[0] = float("nan") if difference.startswith("nan_") else values[0] + 0.1
+    inspection = details(sources)
+    inspection["capabilities"].append("mesh_attachment_copy")
+    bridge = connection(inspection, {"plan_id": "p", "operations": operations})
+    with pytest.raises(JevError) as error:
+        await preview_mesh(
+            bridge,
+            PreviewTracker(bridge),
+            recipe(
+                "duplicate", actor_paths=[s["path"] for s in sources], preserve_attachments=True
+            ),
+        )
+    assert error.value.code == "invalid_mesh_preview"
+    assert bridge.call.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("attachment_parent_path", A),
+        ("attachment_parent_instance_id", "source-instance"),
+        ("attachment_socket", "Socket"),
+        (
+            "attachment_relative_transform",
+            {"location": [999, 0, 0], "rotation": [0, 0, 0], "scale": [1, 1, 1]},
+        ),
+    ],
+)
+def test_hierarchy_readback_refuses_wrong_parent_source_link_or_relative_pose(field, value):
+    _, operations, copies = hierarchy_fixture()
+    assert verify_readback(operations, copies)["status"] == "passed"
+    copies[1][field] = value
+    assert verify_readback(operations, copies)["status"] == "mismatch"
+
+
+def test_fresh_attachment_check_detects_later_detach():
+    _, operations, copies = hierarchy_fixture()
+    child = copies[1]
+    checks = [
+        {
+            "kind": "attachment",
+            "actor_path": child["path"],
+            "expected_instance_id": child["instance_id"],
+            "parent_path": B,
+            "parent_instance_id": "root-copy",
+            "relative_transform": operations[1]["attachment_relative_transform"],
+        }
+    ]
+    assert verify(checks, details([child]))["status"] == "passed"
+    child["attachment_parent_path"] = None
+    child["attachment_parent_instance_id"] = None
+    assert verify(checks, details([child]))["status"] == "failed"
+
+
 @pytest.mark.parametrize("kind", ["replace", "duplicate"])
 def test_operation_schema_requires_declared_fields_and_no_unrelated_edits(kind):
     value = {"op": kind + "_mesh", "actor_path": A}

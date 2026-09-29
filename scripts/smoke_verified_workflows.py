@@ -55,7 +55,7 @@ async def main():
                 "set_metadata",
             } <= set(status["capabilities"]), status
             tools = (await session.list_tools()).tools
-            assert len(tools) == 54
+            assert len(tools) == 66
             operations = [
                 {
                     "op": "spawn_primitive",
@@ -275,7 +275,7 @@ async def main():
                 "saved_to_disk": False,
                 "cloud_used": False,
             }
-            (ROOT / "artifacts/verified-workflows-v0.8.json").write_text(
+            (ROOT / "artifacts/verified-workflows-v0.9.json").write_text(
                 json.dumps(report, indent=2) + "\n", encoding="utf-8"
             )
             print(json.dumps(report, indent=2))

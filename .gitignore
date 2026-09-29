@@ -53,9 +53,13 @@ Desktop.ini
 
 # Local evidence and machine-specific client configuration
 /artifacts/
+/Plugins/JevEditor/Content/Localization/JevEditor/*.locmeta
+/Plugins/JevEditor/Content/Localization/JevEditor/**/*.locres
 /.codex/
 # Automatically generated editor input defaults in the test harness
 /examples/JevSandbox/Config/DefaultInput.ini
+# Explicitly prepared public calibration assets for live MCP verification only.
+/examples/JevSandbox/Content/JevHandoff/
 **/.JevEditorBackups/
 **/.JevEditor.install.lock
 **/.JevEditor.setup.lease

@@ -2,6 +2,10 @@
 #include "JevEditorBridge.h"
 #include "HAL/PlatformMemory.h"
 #include "HAL/PlatformTime.h"
+#include "CoreGlobals.h"
+#include "DynamicRHI.h"
+#include "RenderTimer.h"
+#include "RHI.h"
 
 struct FJevWorkflowTools::FSample
 {
@@ -10,6 +14,9 @@ struct FJevWorkflowTools::FSample
     int32 Requested = 0;
     bool Active = true;
     TArray<double> Intervals;
+    uint64 LastEngineFrame = MAX_uint64;
+    TArray<double> GameTimes, RenderTimes, RHITimes, GPUTimes;
+    TArray<TSharedPtr<FJsonValue>> EngineObservations;
 };
 
 namespace
@@ -45,9 +52,27 @@ void FJevWorkflowTools::Tick(const TSharedRef<FJsonObject>& I, double)
             // game-thread ticker visits, not the API-provided DeltaTime or an FPS guess.
             if (S->LastTickAt > 0 && Now > S->LastTickAt) S->Intervals.Add((Now - S->LastTickAt) * 1000);
             S->LastTickAt = Now;
+            // Engine-published timing counters are deliberately kept separate from
+            // our ticker clock. Their production frames are not exposed by these
+            // APIs, so observation-frame IDs must never be presented as aligned
+            // game/render/GPU frame IDs.
+            if (S->LastEngineFrame != GFrameCounter)
+            {
+                S->LastEngineFrame = GFrameCounter; auto Observation = MakeShared<FJsonObject>(); Observation->SetStringField(TEXT("observation_game_frame"), LexToString(GFrameCounter));
+                const auto Add = [&Observation](const TCHAR* Name, uint32 Cycles, TArray<double>& Values)
+                {
+                    if (Cycles > 0) { const double Ms = FPlatformTime::ToMilliseconds(Cycles); Values.Add(Ms); Observation->SetNumberField(Name, Ms); }
+                    else Observation->SetField(Name, MakeShared<FJsonValueNull>());
+                };
+                Add(TEXT("game_thread_ms"), GGameThreadTime, S->GameTimes); Add(TEXT("render_thread_ms"), GRenderThreadTime, S->RenderTimes); Add(TEXT("rhi_thread_ms"), GRHIThreadTime, S->RHITimes);
+                Add(TEXT("gpu_ms"), GDynamicRHI && !GUsingNullRHI ? RHIGetGPUFrameCycles(0) : 0, S->GPUTimes); S->EngineObservations.Add(MakeShared<FJsonValueObject>(Observation));
+            }
             if (S->Intervals.Num() >= S->Requested) { S->Active = false; S->Receipt->SetStringField(TEXT("status"), TEXT("completed")); }
         }
         S->Receipt->SetObjectField(TEXT("editor_tick_interval"), Distribution(S->Intervals));
+        auto Engine = MakeShared<FJsonObject>(); Engine->SetObjectField(TEXT("game_thread"), Distribution(S->GameTimes)); Engine->SetObjectField(TEXT("render_thread"), Distribution(S->RenderTimes)); Engine->SetObjectField(TEXT("rhi_thread"), Distribution(S->RHITimes)); Engine->SetObjectField(TEXT("gpu"), Distribution(S->GPUTimes));
+        Engine->SetBoolField(TEXT("frame_aligned"), false); Engine->SetBoolField(TEXT("gpu_available"), !S->GPUTimes.IsEmpty()); Engine->SetArrayField(TEXT("observations"), S->EngineObservations); Engine->SetStringField(TEXT("source"), TEXT("RenderTimer published game/render/RHI cycle counters and RHIGetGPUFrameCycles GPU0, observed at most once per game frame. Zero counters are unavailable, not zero cost. Counters may lag, repeat and refer to different production frames; no synchronized attribution or per-viewport isolation."));
+        S->Receipt->SetObjectField(TEXT("engine_published_timings"), Engine);
         S->Receipt->SetNumberField(TEXT("elapsed_seconds"), FMath::Max(0.0, Now - S->CreatedAt));
         if (!S->Active) S->Receipt->SetNumberField(TEXT("process_physical_bytes_after"), static_cast<double>(FPlatformMemory::GetStats().UsedPhysical));
     }
@@ -70,7 +95,7 @@ TSharedRef<FJsonObject> FJevWorkflowTools::Performance(const FString& A, const T
         const FString Id = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens); S->Receipt->SetStringField(TEXT("job_id"), Id); S->Receipt->SetStringField(TEXT("protocol_id"), Protocol); S->Receipt->SetStringField(TEXT("status"), TEXT("running")); S->Receipt->SetNumberField(TEXT("requested_samples"), Count);
         S->Receipt->SetNumberField(TEXT("process_physical_bytes_before"), static_cast<double>(FPlatformMemory::GetStats().UsedPhysical));
         S->Receipt->SetObjectField(TEXT("editor_tick_interval"), Distribution({})); S->Receipt->SetStringField(TEXT("metric"), TEXT("editor_game_thread_ticker_wall_interval_ms"));
-        S->Receipt->SetStringField(TEXT("scope"), TEXT("Includes editor idle/throttle/vsync, UI, bridge polling and background work. Process memory includes the entire editor. This does not measure game-thread execution cost, render-thread/GPU time, packaged FPS, per-asset costs or prove a bottleneck. Hold viewport/workload/settings constant in the named protocol; this sampler does not freeze them."));
+        S->Receipt->SetStringField(TEXT("scope"), TEXT("Ticker intervals include editor idle/throttle/vsync, UI, bridge polling and background work. Additional engine-published game/render/RHI/GPU timing distributions are asynchronous observations, not frame-aligned measurements; absent/zero counters are unavailable. Process memory includes the entire editor. No packaged FPS, per-asset attribution or bottleneck proof. Hold workload/settings constant; the protocol name does not freeze or verify them."));
         Samples.Add(Id, S); return Success(S->Receipt.ToSharedRef());
     }
     FString Id;

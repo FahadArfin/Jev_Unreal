@@ -1,8 +1,47 @@
 # Unreal validation
 
-Jev Editor **0.8.0** has native automation evidence on Unreal Engine **5.8.2**, Windows 11, from 2026-09-22 UTC. This is an original independent bridge; no upstream JevUnreal implementation was copied into this plugin. Native automation, live MCP checks and rendered acceptance are reported separately below.
+This is an original independent bridge; no upstream JevUnreal implementation was
+copied into this plugin. Native automation, live MCP checks, provider evaluations
+and rendered acceptance are separate evidence categories. Historical executed
+reports below must not be presented as results for changed 0.9 code.
 
-## Current 0.8 domain workflows
+## Current 0.9 feature coverage
+
+The 0.9 suite adds the following native coverage. This table describes implemented
+test cases; final executed counts, timestamps and live results belong in
+[VALIDATION.md](VALIDATION.md).
+
+| Suite or workflow | Coverage and evidence boundary |
+| --- | --- |
+| `Jev.Editor.BlueprintGraphWorkflow` | Native math-node addition/removal, exact typed links, cycle/type refusal, stale snapshots, compile receipts and Undo. Compilation is separate from game semantics. |
+| `Jev.Editor.MaterialTextureSwitch` | Loaded native texture references, static-switch readback, Undo and policy revocation. Stored values do not establish shader completion or appearance. |
+| `Jev.Editor.MeshHierarchyCopy` | Explicit closed native mesh assemblies, copied-parent relationships, relative/world transform readback, source preservation, unsupported hierarchy refusal and Undo. |
+| `Jev.Editor.AdvancedSurfaceSupport` | Five/nine ground samples, real complex collision, missing-corner refusal, lifting above an accepted bump and streaming-world refusal. Finite probes are not continuous support or physics settling. |
+| `Jev.Editor.AdvancedRigSampling` | Authored root-track extraction and deliberately unweighted, unnormalized and invalid-bone vertices. Native extraction does not prove visible animation playback or retargeting. |
+| `Jev.Editor.RuntimeWidgetGuards` | Missing/unrelated runtime widget refusal without creating an instance. |
+| `Jev.Editor.GameplayRecipes` | Five positive/five negative project recipes plus repeat cleanup. New native Character movement crosses an owned corridor and 20 cm step; a wall regression fails. Separate native path queries probe actual ground/capsule collision. |
+| `Jev.Rendered.CameraRenderSettings` | Native viewport exposure/view/realtime/motion-blur changes and restoration, including competing override refusal. It does not freeze world time or guarantee deterministic images. |
+| `Jev.Rendered.RuntimeWidgetInspection` | An actual owned Widget Blueprint in PIE, native workflow dispatch with bridge-provided project/session/world identity, cached geometry, keyboard focus, overflow hints and wide/compact allocation captures. No physical device or assistive-technology acceptance is inferred. |
+| `Jev.Localization.CultureSwitch` | Separate opt-in test after source-catalog compilation: real French/Spanish FText switching and restoration. Draft translations and English fallbacks remain subject to human review. |
+
+Performance receipts additionally expose engine-published game/render/RHI/GPU0
+timings. These counters are asynchronous and explicitly `frame_aligned: false`;
+their observation-frame IDs cannot establish producing-frame correlation. Missing
+GPU data is unavailable, not zero cost. Native statistics do not prove per-asset
+attribution, packaged performance or a Jev productivity gain.
+
+Widget geometry does not establish isolated DPI, visible clipping, screen-reader
+output or accessibility. Root motion and skin-weight inspection do not establish
+animation graph playback, applied character motion, skin deformation or retarget
+quality. A pawn fixture validates the supplied native movement subject, not every
+project's controller. Fresh-host, real-project and independent human studies
+remain distinct acceptance gates.
+
+See [supported domains](DOMAIN_WORKFLOWS.md), [advanced inspections](ADVANCED_INSPECTIONS.md),
+[editing extensions](EDITING_EXTENSIONS.md), and
+[localization/recipes](LOCALIZATION_RECIPES.md) for public behavior and limitations.
+
+## Historical 0.8 domain workflows
 
 The final licensed native build passed in **6.24 seconds**. Editor report
 **`2026.09.22-06.42.47`** records **40/40 passed** (37 clean, three existing
@@ -25,7 +64,7 @@ Native material scalar/vector and Blueprint literal edits have actual Undo and
 compile/readback evidence. One rendered unlit prop visibly changed red to green.
 Stored widget/rig inspection does not prove runtime UI or animation behavior, and
 navigation paths do not prove pawn movement or accessibility. See the detailed
-[0.8 validation](VALIDATION.md#current-08-domain-workflows) and
+[0.8 validation](VALIDATION.md) and
 [supported domain operations](DOMAIN_WORKFLOWS.md).
 
 ## Historical 0.7 project workflows

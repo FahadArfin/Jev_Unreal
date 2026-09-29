@@ -10,12 +10,14 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import stat
 import sys
 import uuid
 from contextlib import contextmanager
+from itertools import islice
 from pathlib import Path, PurePosixPath
 
 from .errors import JevError
@@ -27,6 +29,18 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 32 * 1024 * 1024
 MAX_JSON_BYTES = 1024 * 1024
 _EXTENSIONS = {".h", ".hpp", ".cpp", ".cs", ".inl", ".c", ".mm"}
+_RESOURCES = frozenset(
+    {
+        "Resources/Icon128.png",
+        "Config/Localization/JevEditor.ini.template",
+        "Localization/JevEditor/fr/JevEditor.po",
+        "Localization/JevEditor/es/JevEditor.po",
+        "Content/Localization/JevEditor/JevEditor.locmeta",
+        "Content/Localization/JevEditor/en/JevEditor.locres",
+        "Content/Localization/JevEditor/fr/JevEditor.locres",
+        "Content/Localization/JevEditor/es/JevEditor.locres",
+    }
+)
 
 
 def _error(message: str, code: str = "setup_conflict"):
@@ -135,7 +149,7 @@ def _relative(value: str) -> str:
         or not (
             value == "JevEditor.uplugin"
             or (parts[0] == "Source" and len(parts) > 1 and Path(value).suffix in _EXTENSIONS)
-            or value == "Resources/Icon128.png"
+            or value in _RESOURCES
         )
     ):
         _error("The installer manifest contains an unsupported plugin path.")
@@ -213,10 +227,12 @@ def _source(value: str | Path) -> tuple[Path, dict, dict]:
                 elif entry.is_file(follow_symlinks=False) and path.suffix in _EXTENSIONS:
                     relative = _relative(path.relative_to(root).as_posix())
                     files[relative] = _record(path)
-    icon = root / "Resources" / "Icon128.png"
-    _safe_path(icon)
-    if icon.exists():
-        files["Resources/Icon128.png"] = _record(icon)
+    # Exact optional source/localization resources only; never enumerate arbitrary Content/Config.
+    for relative in sorted(_RESOURCES):
+        resource = root / relative
+        _safe_path(resource)
+        if resource.exists():
+            files[relative] = _record(resource)
     if len(files) < 2 or len(files) > MAX_FILES:
         _error("Source plugin file count is outside the supported range.")
     if len({key.casefold() for key in files}) != len(files):
@@ -986,7 +1002,7 @@ def _toolchain() -> dict:
             "compiler": shutil.which("clang++"),
             "verified_by_build": False,
         }
-    compilers, sdks = [], []
+    compilers, sdks, sdk_components = [], [], []
     for base in {
         os.environ.get("ProgramFiles", "C:/Program Files"),
         os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"),
@@ -1003,7 +1019,23 @@ def _toolchain() -> dict:
                             break
                         compiler = version / "bin/Hostx64/x64/cl.exe"
                         if _presence(compiler).get("regular_file"):
-                            compilers.append({"version": version.name, "path": str(compiler)})
+                            components = {
+                                name: _presence(version / relative).get("regular_file") is True
+                                for name, relative in {
+                                    "compiler": "bin/Hostx64/x64/cl.exe",
+                                    "linker": "bin/Hostx64/x64/link.exe",
+                                    "standard_headers": "include/vector",
+                                    "runtime_library": "lib/x64/libcmt.lib",
+                                }.items()
+                            }
+                            compilers.append(
+                                {
+                                    "version": version.name,
+                                    "path": str(compiler),
+                                    "components": components,
+                                    "complete_presence": all(components.values()),
+                                }
+                            )
                 except (OSError, JevError):
                     continue
         root = Path(base) / "Windows Kits/10/Include"
@@ -1015,14 +1047,189 @@ def _toolchain() -> dict:
                         break
                     if _presence(version / "um/Windows.h").get("regular_file"):
                         sdks.append(version.name)
+                        kit = root.parent
+                        components = {
+                            name: _presence(path).get("regular_file") is True
+                            for name, path in {
+                                "windows_headers": version / "um/Windows.h",
+                                "ucrt_headers": version / "ucrt/corecrt.h",
+                                "kernel_library": kit
+                                / "Lib"
+                                / version.name
+                                / "um/x64/kernel32.lib",
+                                "ucrt_library": kit / "Lib" / version.name / "ucrt/x64/ucrt.lib",
+                                "resource_compiler": kit / "bin" / version.name / "x64/rc.exe",
+                            }.items()
+                        }
+                        sdk_components.append(
+                            {
+                                "version": version.name,
+                                "components": components,
+                                "complete_presence": all(components.values()),
+                            }
+                        )
         except (OSError, JevError):
             continue
     return {
         "platform": "Windows",
         "msvc": compilers,
         "windows_sdk": sorted(set(sdks)),
+        "windows_sdk_components": sdk_components,
         "search_scope": "Standard Visual Studio and Windows Kits locations only.",
         "verified_by_build": False,
+    }
+
+
+def _engine_prerequisites(root: Path, association) -> dict:
+    """Inspect named prerequisites only; never invoke build tools, dotnet or an installer."""
+    windows = os.name == "nt"
+    entries = {
+        "editor": "Engine/Binaries/Win64/UnrealEditor.exe",
+        "editor_commandlet": "Engine/Binaries/Win64/UnrealEditor-Cmd.exe",
+        "ubt_entrypoint": "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe",
+        "ubt_assembly": "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.dll",
+        "ubt_runtimeconfig": (
+            "Engine/Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.runtimeconfig.json"
+        ),
+        "automation_entrypoint": "Engine/Binaries/DotNET/AutomationTool/AutomationTool.exe",
+    }
+    result = {
+        "native_target": "Win64",
+        "host_platform_supported": windows,
+        "entrypoints": {name: _presence(root / value) for name, value in entries.items()},
+        "association_match": None,
+        "association_scope": "Association not version-comparable.",
+        "bundled_dotnet_hosts": [],
+        "runtime_requirement": None,
+    }
+    try:
+        version = _json(root / "Engine/Build/Build.version")
+        if isinstance(association, str) and re.fullmatch(r"\d+\.\d+(?:\.\d+)?", association):
+            expected = [int(part) for part in association.split(".")]
+            actual = [version.get(key) for key in ("MajorVersion", "MinorVersion", "PatchVersion")]
+            result["association_match"] = expected == actual[: len(expected)]
+            result["association_scope"] = "Numeric project association compared with Build.version."
+    except (OSError, JevError):
+        pass
+    try:
+        runtime = _json(root / entries["ubt_runtimeconfig"], 65536)
+        framework = runtime.get("runtimeOptions", {}).get("framework", {})
+        if isinstance(framework, dict):
+            name, version = framework.get("name"), framework.get("version")
+            if isinstance(name, str) and isinstance(version, str) and len(name + version) <= 128:
+                result["runtime_requirement"] = {"name": name, "version": version}
+    except (OSError, JevError, AttributeError):
+        pass
+    bundled = root / "Engine/Binaries/ThirdParty/DotNet"
+    try:
+        _safe_path(bundled)
+        if bundled.is_dir():
+            for version in islice(bundled.iterdir(), 32):
+                for platform_name in ("win-x64", "windows", ""):
+                    host = version / platform_name / "dotnet.exe"
+                    if _presence(host).get("regular_file"):
+                        result["bundled_dotnet_hosts"].append(str(host))
+    except (OSError, JevError):
+        pass
+    result["runtime_load_verified"] = False
+    result["toolchain_version_compatibility_verified"] = False
+    return result
+
+
+def _readiness(engine: dict, toolchain: dict, python_environment: dict) -> dict:
+    checks = []
+
+    def add(name, state, remedy):
+        checks.append({"id": name, "status": state, "guidance": remedy})
+
+    add(
+        "python_version",
+        "present" if python_environment["python_supported"] else "missing",
+        "Use Python 3.12 or newer, then run uv sync --locked --all-extras.",
+    )
+    for name, package in python_environment["packages"].items():
+        compatible = package["compatible_release"]
+        add(
+            "python_" + name,
+            "present"
+            if compatible is True
+            else ("unverified" if compatible is None else "missing_or_incompatible"),
+            "Run uv sync --locked --all-extras in the selected Python environment.",
+        )
+    if not engine["checked"]:
+        add("engine_selection", "unverified", "Pass the exact licensed --engine-root.")
+    else:
+        prerequisites = engine["prerequisites"]
+        association = prerequisites["association_match"]
+        add(
+            "engine_association",
+            "present"
+            if association is True
+            else ("mismatch" if association is False else "unverified"),
+            "Select the intended engine. Custom/GUID associations need manual verification.",
+        )
+        for name in (
+            "editor",
+            "editor_commandlet",
+            "ubt_entrypoint",
+            "ubt_assembly",
+            "ubt_runtimeconfig",
+        ):
+            present = prerequisites["entrypoints"][name].get("regular_file")
+            add(
+                name,
+                "present" if present is True else "missing_or_unavailable",
+                "Repair the licensed engine installation; no download or execution was attempted.",
+            )
+        add(
+            "bundled_dotnet",
+            "present" if prerequisites["bundled_dotnet_hosts"] else "unverified",
+            "Check the engine's bundled .NET host/runtime or configured compatible runtime. "
+            "Host-file presence does not prove runtime loading.",
+        )
+    if toolchain["platform"] == "Windows":
+        add(
+            "msvc_components",
+            "present"
+            if any(row.get("complete_presence") for row in toolchain.get("msvc", []))
+            else "missing_or_unverified",
+            "Install/repair supported Visual Studio C++ compiler, linker, headers and libraries. "
+            "Only standard install locations were inspected.",
+        )
+        add(
+            "windows_sdk_components",
+            "present"
+            if any(
+                row.get("complete_presence") for row in toolchain.get("windows_sdk_components", [])
+            )
+            else "missing_or_unverified",
+            "Install/repair supported Windows SDK headers, x64 libraries and resource compiler.",
+        )
+    else:
+        add(
+            "native_platform",
+            "unverified",
+            "This release's native acceptance target is Windows/Win64.",
+        )
+    blockers = [
+        check["id"]
+        for check in checks
+        if check["status"]
+        in {
+            "missing",
+            "missing_or_incompatible",
+            "missing_or_unavailable",
+            "mismatch",
+        }
+    ]
+    return {
+        "checks": checks,
+        "known_blockers": blockers,
+        "metadata_prerequisites_satisfied": all(check["status"] == "present" for check in checks),
+        "build_verified": False,
+        "runtime_verified": False,
+        "fresh_host_verified": False,
+        "scope": "Prerequisite metadata only; no installation, build or clean-host acceptance.",
     }
 
 
@@ -1070,6 +1277,7 @@ def inspect_setup(
         root = _absolute(engine_root)
         engine["checked"] = True
         engine["root"] = str(root)
+        engine["prerequisites"] = _engine_prerequisites(root, project.get("EngineAssociation"))
         try:
             version = _json(root / "Engine/Build/Build.version")
             engine["version"] = {
@@ -1126,14 +1334,22 @@ def inspect_setup(
         next_steps.append(
             "An install plan will explicitly enable JevEditor in this project's Plugins entry."
         )
+    toolchain, python_environment = _toolchain(), _python_dependencies()
+    readiness = _readiness(engine, toolchain, python_environment)
+    for check in readiness["checks"]:
+        if check["status"] != "present":
+            next_steps.append(check["guidance"])
+        if check["id"] in readiness["known_blockers"]:
+            issues.append("Prerequisite " + check["id"] + ": " + check["status"] + ".")
     return {
         "project_file": str(project_path),
         "project_enabled": bool(_entry(project) and _entry(project).get("Enabled") is True),
         "installed": installed,
         "source": source,
         "engine": engine,
-        "toolchain": _toolchain(),
-        "python_environment": _python_dependencies(),
+        "toolchain": toolchain,
+        "python_environment": python_environment,
+        "readiness": readiness,
         "installer_recovery": list_recovery(project_path),
         "credentials": credentials,
         "recovery_metadata": recovery,
@@ -1145,7 +1361,7 @@ def inspect_setup(
             "bridge_authenticated": False,
         },
         "issues": issues,
-        "next_steps": next_steps,
+        "next_steps": list(dict.fromkeys(next_steps)),
         "scope": "Local metadata and port bind probe; no secrets read, provider calls, or builds.",
         "runtime_verified": False,
     }

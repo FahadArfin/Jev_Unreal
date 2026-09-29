@@ -19,6 +19,8 @@ public:
     FJevEditorBridge(const FJevEditorBridge&) = delete;
     FJevEditorBridge& operator=(const FJevEditorBridge&) = delete;
     TSharedRef<FJsonObject> Execute(const TSharedPtr<FJsonObject>& Request);
+    /** Native service wiring only; no authenticated request can replace this guard. */
+    void SetExternalMutationBlocker(TFunction<bool()> InBlocker) { ExternalMutationBlocker = MoveTemp(InBlocker); }
     static TSharedRef<FJsonObject> Error(const FString& Code, const FString& Message);
     static FString BoundedResponseBody(const TSharedRef<FJsonObject>& Response);
 #if WITH_DEV_AUTOMATION_TESTS
@@ -68,6 +70,9 @@ private:
         int32 Slot = INDEX_NONE;
         bool bSetLabel = false;
         bool bSetFolder = false;
+        bool bPreserveAttachments = false;
+        FString AttachmentParentSourcePath;
+        FTransform AttachmentRelativeTransform = FTransform::Identity;
         TWeakObjectPtr<AActor> Target;
         TWeakObjectPtr<UStaticMeshComponent> SourceComponent;
         TWeakObjectPtr<UStaticMesh> MeshAsset;
@@ -103,6 +108,7 @@ private:
     TMap<FString, FPlanRecord> PlanRecords;
     TArray<FString> PlanRecordOrder;
     bool bApplyingPlan = false;
+    TFunction<bool()> ExternalMutationBlocker;
     uint64 AssetChangeEpoch = 0;
     FDelegateHandle AssetChangeHandle;
 #if WITH_DEV_AUTOMATION_TESTS
@@ -120,7 +126,7 @@ private:
     TSharedRef<FJsonObject> MeshAssetSnapshot(UStaticMesh* Mesh) const;
     bool SetMeshSettings(AStaticMeshActor* Actor, const FMeshSettings& Settings) const;
     bool SupportsMeshOperation(AStaticMeshActor* Actor, bool bDuplicate, FString* UnsupportedProperty = nullptr) const;
-    TArray<FString> ActorEditBlockers(AActor* Actor) const;
+    TArray<FString> ActorEditBlockers(AActor* Actor, bool bAllowMeshAttachments = false) const;
     TSharedRef<FJsonObject> StatusSnapshot(UWorld* World) const;
     TSharedRef<FJsonObject> Context(UWorld* World, const TSharedPtr<FJsonObject>& Params) const;
     TSharedRef<FJsonObject> AssetDetails(const TSharedPtr<FJsonObject>& Params) const;

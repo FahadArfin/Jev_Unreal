@@ -41,6 +41,7 @@ class Settings:
     expected_project: str = ""
     profile_id: str = ""
     catalog_file: str = ""
+    runtime_config_file: str = ""
     max_requests: int = 100
     cache_seconds: float = 60
     timeout_seconds: float = 15
@@ -105,6 +106,7 @@ class Settings:
                 expected_project=expected_project,
                 profile_id=profile_id,
                 catalog_file=os.getenv("JEV_CATALOG_FILE", ""),
+                runtime_config_file=os.getenv("JEV_RUNTIME_CONFIG", ""),
                 max_requests=int(os.getenv("JEV_MAX_REQUESTS", "100")),
             )
         except ValueError:

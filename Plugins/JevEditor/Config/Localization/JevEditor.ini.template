@@ -1,0 +1,37 @@
+; Source-only localization pipeline. Build-Localization.ps1 replaces the two
+; bounded workspace placeholders; no asset gathering or asset saving is enabled.
+[CommonSettings]
+SourcePath=@OUTPUT@
+DestinationPath=@OUTPUT@
+ManifestName=JevEditor.manifest
+ArchiveName=JevEditor.archive
+PortableObjectName=JevEditor.po
+ResourceName=JevEditor.locres
+NativeCulture=en
+CulturesToGenerate=en
+CulturesToGenerate=fr
+CulturesToGenerate=es
+
+[GatherTextStep0]
+CommandletClass=GatherTextFromSource
+SearchDirectoryPaths=@SOURCE@
+FileNameFilters=*.cpp
+FileNameFilters=*.h
+ShouldGatherFromEditorOnlyData=true
+
+[GatherTextStep1]
+CommandletClass=GenerateGatherManifest
+
+[GatherTextStep2]
+CommandletClass=GenerateGatherArchive
+bPurgeOldEmptyEntries=true
+
+[GatherTextStep3]
+CommandletClass=InternationalizationExport
+bImportLoc=true
+CulturesToGenerate=fr
+CulturesToGenerate=es
+
+[GatherTextStep4]
+CommandletClass=GenerateTextLocalizationResource
+bSkipSourceCheck=false

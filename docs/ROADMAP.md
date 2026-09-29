@@ -95,11 +95,47 @@ policy, inputs, failure handling and evidence limits.
 | 9 | Animation/rig validation | Stored hierarchy, required bones, exact skeleton compatibility, sequence duration and root-motion flag. | Real rigs, playback, extracted motion, skin weights, retargeting and export/import acceptance. |
 | 10 | UI workflow support | Bounded stored widget tree, native focus/text/overflow/canvas diagnostics without binding execution or runtime construction. | Running viewport geometry, DPI/resolution variants, input, localization and assistive-user acceptance. |
 
-The catalog is now **54 tools**. No additional provider request or measured
+The 0.8 catalog had **54 tools**. No additional provider request or measured
 game-development speedup is claimed. Native, rendered, Python and live bridge
 evidence is tracked separately in [validation](VALIDATION.md).
 
-## Next acceptance priorities and later features
+## Version 0.9: implementation pass
+
+Version 0.9 implements another bounded engineering pass across every remaining
+roadmap area that can be developed on the current licensed Windows host. The
+catalog has **66 tools**. Features, automation and independent acceptance remain
+separate: an API or local test does not close a human study or a platform matrix.
+
+| Area | Implemented in 0.9 | Work still required |
+| --- | --- | --- |
+| Review and onboarding | Draft French/Spanish panel catalogs, native culture-switch fixture, eight beginner recipes in three languages, compiler/linker/SDK diagnostics and localization-aware reviewed installation. | Representative artists, physical keyboards, screen readers, human translation review and truly clean Windows hosts. |
+| Acceptance evidence | Hash-bound reports for all six immediate priorities, missing/failure accounting, required clean-host/project cells and linked paired-study scoring. | Actual independent participants, real-project evidence and external study collection; attestations are not independent verification. |
+| Blueprint editing | Separately approved add/remove pure math nodes and exact-type connect/disconnect operations, complete graph identity, cycle/implicit-break refusal, compile/Undo and specialized Widget/Animation compile fixtures. | Broader node families, compiler extensions and semantic production-project tests. |
+| Materials | Approved Texture2D and static-switch overrides plus existing exposed global/layer/blend parameter associations, parent identity checks and Undo. | Structural layer-stack editing, representative parents and larger visual regression sets. |
+| Mesh hierarchies | Explicit complete native mesh forests, preserved copied-parent relations, fresh local-pose verification, stale attachment checks and partial-failure rollback. | Skeletal/Blueprint actors, sockets, partial hierarchy cloning and representative prop/gameplay acceptance. |
+| Terrain | 1/5/9 support samples, complex traces, uneven-support limits, highest-support placement and streaming-state refusal. | Representative landscapes, concave surfaces, world partition and physics configurations. |
+| DCC and Blender | Editable `.blend` retention, bounded static-mesh exporter, hashed manifests, texture availability, dimension/pivot/slot contracts and fresh native comparison. | Broader authored asset round trips, rendered material equivalence, rigged assets and import-policy UI. |
+| Lighting/camera | Reviewed exposure, fixed EV, lit/unlit, realtime and motion-blur controls with restore checks. | Time-of-day control, bake orchestration and deterministic rendered comparisons under project settings. |
+| Navigation/gameplay | Capsule corridor/support geometry probes plus an actual CharacterMovement traversal recipe with blocked-path negative case and owned cleanup. | Game-specific controllers, interactions, accessibility rules, multiplayer and packaged sessions. |
+| Performance | Engine-published game/render/RHI/GPU timing distributions, distinct from editor ticker intervals, explicit missing data and `frame_aligned: false`. | Frame-correlated attribution, representative workloads, GPU tooling and repeatable statistical comparisons. |
+| Rig/animation | Bounded extracted root-motion sampling and optional available CPU skin-weight diagnosis. | Representative rigs, playback, retargeting, export/import and deforming-mesh visual acceptance. |
+| Runtime UI | Inspection of an exact already-running approved Widget instance, cached geometry/DPI/focus/overflow hints and two rendered allocation fixtures. | Physical input, display-DPI/resolution matrices, localized text and assistive-user acceptance. |
+| Connections | Explicit-profile live health/version checks, independent project identity and no endpoint scanning or implicit switching. | Licensed engine/version/platform acceptance for each advertised configuration. |
+| Team coordination/policies | Opt-in exact-project action/root/alias policies, atomic cross-process cooperative leases, renewal, conflicts and one-shot policy-bound preview authorization. | Larger team trials; humans and unconfigured clients remain outside cooperative leases. |
+| Crash investigation | Private bounded SQLite metadata receipts, pre-dispatch durable writes, retention/forget, explicit uncertain outcomes and process-crash fixtures. | Scene restoration, machine power-loss testing and broader recovery usability. Lost responses are never automatically replayed. |
+| Build/cook/package | Named fixed Win64 jobs, pinned engine entrypoints and bundled .NET, reviewed one-shot launch, process-tree containment, cancellation and output/artifact budgets. | Project-specific build/cook/package acceptance, other target platforms and packaged gameplay tests. |
+| Wider distribution | Updated cross-platform Python CI and explicit installed-engine/toolchain diagnostics; source distribution contains no proprietary engine code/binaries. | Licensed Linux/macOS/other-engine builders, native runtime matrices, signing and supported binary packages. |
+
+Guides: [editing](EDITING_EXTENSIONS.md), [advanced inspection](ADVANCED_INSPECTIONS.md),
+[team workflows](TEAM_WORKFLOWS.md), [DCC handoff](DCC_HANDOFF.md),
+[localization/recipes](LOCALIZATION_RECIPES.md), [acceptance reports](ACCEPTANCE_REPORTS.md).
+The [validation record](VALIDATION.md) records the actual completed checks.
+
+## Remaining acceptance and broader scope
+
+The following earlier backlog is retained to show its original acceptance goals.
+Use the 0.9 table above for current implementation status; these rows are not a
+claim that the listed engineering features remain entirely unimplemented.
 
 | Priority | Feature/workflow | Why it matters | Evidence required before calling it ready |
 | --- | --- | --- | --- |

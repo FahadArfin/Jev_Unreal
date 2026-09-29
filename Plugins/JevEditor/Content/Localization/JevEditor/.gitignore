@@ -1,0 +1,3 @@
+# Generated from the source PO catalogs using licensed Unreal commandlets.
+*.locmeta
+**/*.locres
