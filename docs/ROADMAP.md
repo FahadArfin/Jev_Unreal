@@ -5,6 +5,38 @@ audience needs clear installation, compatible versions, understandable failures,
 recovery and evidence of useful results. More commands alone do not establish any
 of those outcomes. This is a prioritized product roadmap, not a support promise.
 
+## Version 0.10: current implementation
+
+Python 0.10.0a1 and native bridge 0.10.0 implement the ten requested improvements
+within the scopes below. The complete catalog has 91 tools; core has eight.
+Implementation status and acceptance evidence are separate: use the dated
+[validation record](VALIDATION.md) for actual completed checks and
+[compatibility matrix](COMPATIBILITY.md) for supported targets.
+
+| # | Improvement | Implemented scope | Boundary and next evidence |
+| --- | --- | --- | --- |
+| 1 | [Real agent benchmark adapter](BENCHMARK_AGENT.md) | Fresh ephemeral Codex threads, three actual native read tools, off/on routing hooks, independent measured-answer verification, state/configuration hashes and bounded reports. | One off-only read smoke passed. Latest OpenRouter authentication returned 401; no paired benefit established. Editing, ambiguity and recovery workloads still need expansion and independent measurement. |
+| 2 | [Native compact reads](COMPACT_WORKFLOWS.md) | Selected fields are projected inside Unreal; unrequested material/LOD arrays and mesh settings are skipped. Frozen bounded transport pages preserve identity, blockers and truncation; older bridges retain fallback. | Full bounded capture is gathered for honest deltas. Identity/revision work still runs; smaller bytes do not prove lower latency or billed tokens. |
+| 3 | [Durable task recipes](WORKFLOW_RUNS.md) | Spatial/layout inspect-preview-review-apply-verify runs, durable one-shot claims, undispatched cancellation and observational reconciliation after reconnect. | Uncertain dispatch is never resubmitted. This is checkpoint history, not automatic rollback, map saving or universal task execution. |
+| 4 | [Setup and connection assistant](DOCTOR.md) | One doctor report distinguishes exact editor identity, native capabilities, provider credential sources and actionable repair steps. | Authentication needs a separate explicit probe. Independent clean Windows installation/upgrade evidence remains open. |
+| 5 | [Gameplay acceptance](RUNTIME_GAMEPLAY.md) | Reviewed project-approved standalone PIE start/stop, native ownership/receipts, actual game viewport capture and integration with named functional tests. | One local in-process client and approved maps only. Representative project tests, packaged sessions, Gauntlet and multiplayer remain outside scope. |
+| 6 | [Useful Blueprint edits](RUNTIME_GAMEPLAY.md#trigger-opens-a-door) | Approved Actor events, primitive local variables/get/set, branches and three self-only actor calls, with existing preview/compile/Undo and a door overlap fixture. | Fixed vocabulary only; no arbitrary calls, casts, object links or full game generation. Real project semantics and visual acceptance remain necessary. |
+| 7 | [Groups without reconnecting](COMPACT_WORKFLOWS.md#advertise-a-smaller-tool-catalog) | Explicit session-local activation sends actual MCP list-change notifications. Other sessions retain their catalog; failed notification restores previous groups. | Requires a compatible client to opt in; server cannot prove UI refresh. Startup configuration and reconnect remain the fallback. Groups grant no permissions. |
+| 8 | [Version-control-aware checkpoints](CHECKPOINTS.md) | Approved-file disk hash manifests and comparisons; fixed pinned Git/Perforce status, scoped paths and bounded output. | Unsaved buffers are excluded. Manifests are not backups, and tools never automatically stage, restore or check out. Real Perforce acceptance remains untested. |
+| 9 | [Blender round trip](HANDOFF_IMPORT.md) | Retained editable source and measured export contract, reviewed alias-based native FBX import/reimport, and fresh dimension/pivot/material-slot verification. | Static meshes only; no texture/material import, automatic save or general Blender executor. Representative asset appearance/collision and source updates still need acceptance. |
+| 10 | [Release and adoption validation](COMPATIBILITY.md) | Explicit platform/client/workflow matrix and a reproducible [community acceptance procedure](COMMUNITY_ACCEPTANCE.md), covering setup, reconnect, reviewed workflows and upgrade/removal. | A published procedure is not independent user evidence. Clean hosts, accessibility, translation review and broad project adoption remain open. |
+
+The next work is deeper acceptance of these implemented paths: resolve provider
+access before a paired experiment, add measured edit/recovery tasks, validate
+clean-host onboarding and representative project assets, and test supported
+clients/services independently. More advertised tools alone are not the goal.
+
+## Historical implementation stages
+
+The following version tables describe what existed and remained open **at those
+versions**. Some of their limits were addressed later. The 0.10 table above is
+the current implementation map; do not interpret historical rows as today's backlog.
+
 ## Implemented foundation
 
 0.1 provided typed Jev decisions and bounded native preview/apply. 0.2 added
@@ -131,11 +163,11 @@ Guides: [editing](EDITING_EXTENSIONS.md), [advanced inspection](ADVANCED_INSPECT
 [localization/recipes](LOCALIZATION_RECIPES.md), [acceptance reports](ACCEPTANCE_REPORTS.md).
 The [validation record](VALIDATION.md) records the actual completed checks.
 
-## Implemented next: efficiency and acceptance workflows
+## Historical MCP efficiency and acceptance pass
 
-This MCP-only development pass implements all six immediate improvements below.
-The default source catalog now contains **75 tools**; selecting `core` exposes
-seven. These changes use the existing 0.9 native bridge and preserve its execution
+That MCP-only development pass implemented all six immediate improvements below.
+Its catalog contained **75 tools**; selecting `core` exposed
+seven. Those changes used the existing 0.9 native bridge and preserved its execution
 and project-policy boundaries.
 
 | Improvement | Implemented behavior | Remaining evidence or limits |
@@ -159,36 +191,23 @@ large user population.
 
 ## Remaining acceptance and broader scope
 
-The following earlier backlog is retained to show its original acceptance goals.
-Use the 0.9 table above for current implementation status; these rows are not a
-claim that the listed engineering features remain entirely unimplemented.
+These are evidence gaps or extensions beyond the implemented 0.10 scopes.
+They are not requests to rebuild the features above.
 
-| Priority | Feature/workflow | Why it matters | Evidence required before calling it ready |
-| --- | --- | --- | --- |
-| Next | Representative review-panel usability and accessibility | Validate the 0.6 review and keyboard foundations with artists/designers and assistive workflows. | Observed task completion, physical keyboard and screen-reader behavior, accessible errors and translated-language review. |
-| Next | Fresh-machine install and upgrade acceptance | Turn the source installer into a demonstrated onboarding path across supported toolchains. | Clean Windows hosts, missing dependencies, Blueprint-only/C++ projects, previous releases, locked files and recovery after interruption. |
-| Next | Real-project validator compatibility | Establish which common native rules work with the selected-rule adapter and how their side effects behave. | Representative project fixtures, documented unsupported shared/global state, cleanup and cancellation evidence. |
-| Next | Broader Blueprint compile acceptance | Exercise the implemented Widget/Animation inspection and reviewed compiler workflow on representative project assets. | Subclass-specific runtime contracts, compiler extensions and known failing/working projects. |
-| Next | Project adoption of gameplay recipes | Adapt the implemented door, navigation, interaction and combat examples to real project requirements. | Project-owned acceptance criteria, setup/teardown and reproducible negative cases. |
-| Next | Independent real workflow study | Determine when Jev improves routing, completion quality, correction time and total cost using the implemented benchmark harness. | Separately held answer keys; direct-agent, keyword and Jev baselines; representative tasks; full-workflow evidence and all failures. |
-| Extend 0.8 | Reviewed Blueprint edits | Add bounded graph operations with compile checks and before/after diffs. | Transaction recovery, pin/type validation and semantic tests; project-specific construction side effects considered. |
-| Extend 0.8 | Material parameter workflows | Inspect instances, change exposed parameters, compare rendered results. | Known parameter types, parent/asset identity, dependency checks and visual regression tests. |
-| Extend 0.8 | Broader mesh copy compatibility | Extend the implemented replacement/copy workflow to additional intentional actor settings and approved hierarchies. | Representative props, explicit attachment semantics, collision/play acceptance and further undo/rollback fixtures. |
-| Extend 0.8 | Terrain-aware placement | Trace to approved surfaces, align to normals and verify overlap rules. | Explicit collision channel/filter semantics, slopes, missing geometry, streamed worlds and physics tests. |
-| Extend 0.8 | DCC import and dependency diagnosis | Build on direct registry/provenance inspection to identify broken references, import scale, missing textures, LOD and collision problems. | Source availability, measured unit/pivot contracts, bounded traversal and representative DCC imports. |
-| Extend 0.8 | Lighting and camera workflows | Inspect lights, propose bounded adjustments, capture repeatable viewpoints and compare results. | Stable exposure/time/view settings; render comparisons and performance measurements. |
-| Extend 0.8 | Navigation and accessibility checks | Evaluate project-defined widths, step heights, reachability and interaction rules. | Actual navmesh/pawn configuration and project-owned gameplay requirements. |
-| Extend 0.8 | Performance investigations | Summarize measured frame, memory and rendering costs and track regressions. | Reproducible capture protocol; distinguish asset counts from measured bottlenecks. |
-| Extend 0.8 | Animation/rig validation | Catch missing bones, incompatible skeletons, root-motion and retargeting problems. | Representative rigs, animation playback and export/import tests. |
-| Extend 0.8 | UI workflow support | Inspect widget structure, input focus, text overflow and resolution variants. | Running viewport captures, input tests and localization/accessibility checks. |
-| Later | Editor compatibility and reconnect UX | Extend explicit profiles with clearer connection management across supported engine versions. | Real multiple-editor sessions, restart/version mismatch cases and licensed runtime acceptance for every advertised version. |
-| Later | Multi-agent coordination | Prevent agents from unknowingly editing the same scene while preserving human edits. | Scene leases, conflicts, cancellation and concurrency tests; no confidence-based permission. |
-| Later | Durable crash recovery | Investigate an apply after the editor or machine crashes. | Persistent receipts with privacy controls, exact identity, partial-write recovery and crash-injection tests. Current native receipts survive MCP reconnects only. |
-| Later | Broader team policy profiles | Extend the existing validator/test allowlists to project-approved asset roots, conventions and execution limits. | Auditable configuration, scoped permissions and understandable refusal messages; policy remains independent of model confidence. |
-| Later | Build/cook/package jobs | Run named project workflows and report real artifacts and failures. | Bounded job lifecycle, output validation, cancellation, disk budgeting and platform testing. |
-| Later | Blender handoff | Carry dimensions, IDs, provenance, materials and acceptance checks across Blender and Unreal. | Editable source retention, unit/pivot checks, round-trip fixtures and actual in-engine acceptance. |
-| Later | Wider platform/engine packages | Reduce installation friction and reach users outside the current Windows UE target. | Licensed native build matrix, signed/versioned artifacts and runtime acceptance on each supported platform. |
-| Later | Localization and task recipes | Make common workflows discoverable to beginners and non-English-speaking teams. | Reviewed translations, executable examples and user testing; terminology must match Unreal. |
+| Priority | Next acceptance work | Evidence required |
+| --- | --- | --- |
+| First | Complete the paired agent experiment once provider authentication succeeds | Same measured starting state, model/configuration, exact tools, verified outcomes and all failures. Expand beyond the two public asset reads before drawing workflow conclusions. |
+| First | Independent clean-host installation and upgrade | New Windows hosts/toolchains, Blueprint-only and C++ projects, missing dependencies, older releases, locked files, interrupted installation and preserved user changes. |
+| First | Representative recipe and gameplay adoption | Project-owned positive/negative tests, reconnects during uncertain outcomes, collision/interaction semantics and explicit cleanup. Separate compilation, runtime and visual acceptance. |
+| First | Client and source-control compatibility | Independent MCP list-refresh/reconnect checks, real Perforce authentication/server behavior and exact-file Git results in representative repository layouts. |
+| Next | Broader artist and accessibility acceptance | Observed tasks, physical keyboard and screen-reader behavior, usable error recovery and reviewed translations. |
+| Next | Representative Blender assets and Blueprint/compiler extensions | Retained source updates, measured reimports, appearance/material/collision review, specialized project classes and callback side effects. |
+| Later | Packaged and multiplayer acceptance | Explicit Gauntlet/project test contracts, server/client lifecycle, remote-device ownership and reproducible failure cleanup. Existing named packaging jobs do not supply this evidence. |
+| Later | Wider native platforms and engine versions | Licensed builds and runtime/visual tests on each claimed platform/version; Python portability alone is insufficient. |
+
+Shared multiuser hosting and a general Blender executor require a separately
+reviewed design. No automated crash rollback or automatic replay of uncertain
+operations is planned through the authenticated bridge.
 
 ## Build on Unreal's existing systems
 

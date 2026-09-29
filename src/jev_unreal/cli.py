@@ -8,6 +8,7 @@ from . import __version__
 from .bridge import UnrealBridge
 from .catalog import ToolCatalog
 from .config import Settings
+from .connections import connection_issues, credential_diagnostics
 from .decision import DecisionClient
 from .errors import JevError
 from .layouts import LAYOUT_CATALOG
@@ -163,6 +164,7 @@ async def run_command(args, settings: Settings) -> dict:
             for feature, (label, capabilities) in PROJECT_WORKFLOW_FEATURES.items()
         }
         catalog = ToolCatalog(Path(settings.catalog_file) if settings.catalog_file else None)
+        credentials = credential_diagnostics(settings)
         return {
             "version": __version__,
             "ready": editor["ready"]
@@ -190,7 +192,9 @@ async def run_command(args, settings: Settings) -> dict:
                 "model": settings.model,
                 "tested": False,
                 "required_for_local_tools": False,
+                "diagnostics": credentials,
             },
+            "issues": connection_issues(settings, editor) + credentials["issues"],
             "catalog": catalog.status(),
             "next_steps": (
                 []

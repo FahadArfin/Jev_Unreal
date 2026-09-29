@@ -65,7 +65,7 @@ async def main():
                 assert time.monotonic() < deadline, "Sandbox readiness timed out."
                 await asyncio.sleep(1)
             assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
-            assert status["bridge_version"] == "0.9.0"
+            assert status["bridge_version"] == "0.10.0"
             report["identity"] = {
                 key: status[key]
                 for key in (

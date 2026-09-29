@@ -46,7 +46,7 @@ async def main():
             tools = {tool.name for tool in (await session.list_tools()).tools}
             assert {"unreal_context", "unreal_capture", "unreal_plan"} <= tools
             status = await call(session, "unreal_status")
-            assert status["bridge_version"] == "0.9.0"
+            assert status["bridge_version"] == "0.10.0"
             assert "blueprint_graph_preview" in status["capabilities"]
             assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
             dependencies = await call(

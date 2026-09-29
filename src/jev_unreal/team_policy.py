@@ -31,6 +31,10 @@ MUTATING_ACTIONS = frozenset(
         "workflow_apply",
         "performance_start",
         "performance_cancel",
+        "runtime_preview",
+        "runtime_apply",
+        "handoff_preview",
+        "handoff_apply",
     }
 )
 PREVIEW_APPLY = {
@@ -39,6 +43,8 @@ PREVIEW_APPLY = {
     "blueprint_pin_preview": "blueprint_compile",
     "blueprint_graph_preview": "blueprint_compile",
     "workflow_preview": "workflow_apply",
+    "runtime_preview": "runtime_apply",
+    "handoff_preview": "handoff_apply",
 }
 APPLY_ACTIONS = frozenset(PREVIEW_APPLY.values())
 

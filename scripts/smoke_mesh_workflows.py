@@ -310,13 +310,13 @@ async def run(report):
             )
             require("unreal_mesh_preview" in tools, "Mesh workflow MCP tool is unavailable.")
             status = await context(session)
-            require(status.get("bridge_version") == "0.9.0", "Expected native bridge 0.9.0.")
+            require(status.get("bridge_version") == "0.10.0", "Expected native bridge 0.10.0.")
             require(
                 {"replace_mesh", "duplicate_mesh", "preview_expected_state"}
                 <= set(status.get("capabilities", [])),
                 "The native mesh capabilities are missing.",
             )
-            report.update(engine_version=status["engine_version"], bridge_version="0.9.0")
+            report.update(engine_version=status["engine_version"], bridge_version="0.10.0")
             report["mcp_tools"] = len(tools)
             cube = await call(session, "unreal_asset_details", {"path": CUBE})
             sphere = await call(session, "unreal_asset_details", {"path": SPHERE})

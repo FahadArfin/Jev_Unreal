@@ -187,6 +187,50 @@ class CompactReads:
         async with self._lock:
             return await self._read(request)
 
+    async def _native_capture(self, request: ReadRequest, identity: dict) -> tuple[list, dict]:
+        params = request.model_dump(exclude={"cursor", "since", "page_size"}, exclude_none=True)
+        params.update(fields=request.selected_fields(), page_size=100)
+        rows, cursor, seen = [], None, set()
+        metadata, captured_count, read_id = None, None, None
+        # A full bounded projection is retained for honest deltas. Native transport
+        # pages never contain unselected mesh settings/material/LOD arrays.
+        for _ in range(2):
+            if cursor:
+                params["cursor"] = cursor
+            page = await self.bridge.call("compact_read", params)
+            items = page.get("items")
+            if (
+                page.get("identity") != identity
+                or not isinstance(items, list)
+                or len(items) > 100
+                or page.get("returned_count") != len(items)
+                or type(page.get("captured_count")) is not int
+                or not 0 <= page["captured_count"] <= 200
+                or not isinstance(page.get("metadata"), dict)
+                or not isinstance(page.get("native_read_id"), str)
+                or not page["native_read_id"]
+            ):
+                raise JevError("bridge_error", "Invalid native compact page or identity.")
+            if metadata is None:
+                metadata = page["metadata"]
+                captured_count = page["captured_count"]
+                read_id = page["native_read_id"]
+            elif (metadata != page["metadata"] or captured_count != page["captured_count"]
+                  or read_id != page["native_read_id"]):
+                raise JevError("bridge_error", "Native compact pages have inconsistent snapshots.")
+            rows.extend(items)
+            cursor = page.get("next_cursor")
+            if cursor is None:
+                if len(rows) != captured_count:
+                    raise JevError("bridge_error", "Native compact capture ended prematurely.")
+                return rows, {**metadata, "projection_location": "native",
+                              "native_transport_pages": len(seen) + 1}
+            if (not isinstance(cursor, str) or not 1 <= len(cursor) <= 80
+                    or cursor in seen or not items):
+                raise JevError("bridge_error", "Invalid native compact continuation.")
+            seen.add(cursor)
+        raise JevError("bridge_error", "Native compact pagination exceeded its bounded capture.")
+
     async def _read(self, request: ReadRequest) -> dict:
         if request.cursor:
             key, separator, offset = request.cursor.partition(":")
@@ -210,7 +254,8 @@ class CompactReads:
             raise JevError(
                 "read_scope_changed", "Delta requires the same source, fields and scope."
             )
-        before = self._identity(await self.bridge.call("status"))
+        status = await self.bridge.call("status")
+        before = self._identity(status)
         if previous and any(previous.identity[k] != before[k] for k in IDENTITY[:-1]):
             raise JevError(
                 "read_identity_changed", "Delta belongs to another project/session/world."
@@ -222,14 +267,20 @@ class CompactReads:
             params = {"path": request.path}
         elif request.source == "actor_details":
             params = {"actor_paths": request.actor_paths}
-        raw = await self.bridge.call(request.source, params)
+        native = "compact_read" in status.get("capabilities", [])
+        if native:
+            rows, metadata = await self._native_capture(request, before)
+            raw = {}
+        else:
+            raw = await self.bridge.call(request.source, params)
         after = self._identity(await self.bridge.call("status"))
         if before != after or any(k in raw and raw[k] != after[k] for k in IDENTITY):
             raise JevError(
                 "read_state_changed", "Scene changed during inspection; no baseline stored."
             )
         collection = "assets" if request.source == "assets" else "actors"
-        rows = [raw] if request.source == "asset_details" else raw.get(collection)
+        if not native:
+            rows = [raw] if request.source == "asset_details" else raw.get(collection)
         if (
             not isinstance(rows, list)
             or len(rows) > 200
@@ -242,12 +293,14 @@ class CompactReads:
             raise JevError(
                 "bridge_error", "Inspection returned invalid or duplicate row identities."
             )
-        metadata = (
-            {}
-            if request.source == "asset_details"
-            else {k: v for k, v in raw.items() if k != collection and k not in IDENTITY}
-        )
-        metadata.update(_safety(raw) if request.source == "asset_details" else {})
+        if not native:
+            metadata = (
+                {}
+                if request.source == "asset_details"
+                else {k: v for k, v in raw.items() if k != collection and k not in IDENTITY}
+            )
+            metadata.update(_safety(raw) if request.source == "asset_details" else {})
+            metadata["projection_location"] = "mcp_legacy_fallback"
         projected = [_project(row, request.selected_fields()) for row in rows]
         output, delta = projected, None
         if previous:
@@ -325,7 +378,8 @@ def register_compact_tools(server: FastMCP, bridge: UnrealBridge) -> None:
         explicit fields use top-level names or static_mesh.bounds_cm/lod_count/etc for assets.
         Identity, blockers and truncation survive projection. Retains 32 reads/8 MiB for 120s.
         Repeat the same request with next_cursor to page; with since=read_id for a fresh delta.
-        Native scan stays bounded at 200; pages do not reveal beyond a truncated scan.
+        Uses native compact_read when supported, otherwise legacy projection in the MCP process.
+        Native result stays bounded at 200; pages do not reveal beyond a truncated scan.
         """
         try:
             return {"ok": True, "result": await reads.read(request)}

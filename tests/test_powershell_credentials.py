@@ -211,3 +211,108 @@ try {
     ciphertext = credential.read_text(encoding="utf-8-sig")
     assert SYNTHETIC_KEY not in ciphertext
     assert bytes.fromhex(ciphertext).startswith(bytes.fromhex("01000000d08c9ddf"))
+
+
+@pytest.mark.parametrize("launcher", ["Start-Mcp.ps1", "Benchmark-Agent.ps1"])
+@pytest.mark.parametrize("child_failure", [False, True], ids=["child_exit", "child_exception"])
+def test_launcher_restores_environment_without_exposing_key(
+    windows_powershell, tmp_path, launcher, child_failure
+):
+    """Only fake uv runs; credential lookup is redirected before launcher invocation."""
+    environment = _subprocess_environment(windows_powershell, "clean")
+    environment["JEV_TEST_LOCAL_DATA"] = str(tmp_path / "unused-private-directory")
+    environment["JEV_TEST_CHILD_FAILURE"] = "1" if child_failure else "0"
+    environment["JEV_TEST_LAUNCHER_NAME"] = launcher
+    isolated_scripts = tmp_path / "scripts"
+    isolated_scripts.mkdir()
+    environment["JEV_TEST_LAUNCHER"] = str(isolated_scripts / launcher)
+    source = (REPOSITORY / "scripts" / launcher).read_text(encoding="utf-8-sig")
+    storage_expression = (
+        "[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)"
+        if launcher == "Start-Mcp.ps1"
+        else "[Environment]::GetFolderPath('LocalApplicationData')"
+    )
+    assert source.count(storage_expression) == 1
+    source = source.replace(storage_expression, "$env:JEV_TEST_LOCAL_DATA")
+    assert "GetFolderPath" not in source
+    (isolated_scripts / launcher).write_text(source, encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("# synthetic launcher fixture\n", encoding="utf-8")
+    shutil.copyfile(
+        REPOSITORY / "scripts/Import-JevSecurity.ps1",
+        isolated_scripts / "Import-JevSecurity.ps1",
+    )
+    script = tmp_path / "check-launcher.ps1"
+    script.write_text(
+        r"""
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+$jevTestNames = @(
+    'OPENROUTER_API_KEY', 'JEV_CREDENTIAL_SOURCE', 'JEV_PROFILES_FILE', 'JEV_PROFILE',
+    'JEV_BRIDGE_TOKEN', 'JEV_BRIDGE_TOKEN_FILE', 'JEV_EXPECTED_PROJECT', 'JEV_BRIDGE_URL',
+    'JEV_BRIDGE_PORT', 'JEV_CATALOG_FILE', 'JEV_RUNTIME_CONFIG'
+)
+$jevTestOriginal = @{}
+foreach ($jevTestName in $jevTestNames) {
+    $jevTestValue = 'before-' + $jevTestName
+    if ($jevTestName -eq 'OPENROUTER_API_KEY') { $jevTestValue = $env:JEV_TEST_SYNTHETIC_KEY }
+    if ($jevTestName -in @('JEV_CATALOG_FILE', 'JEV_RUNTIME_CONFIG')) { $jevTestValue = $null }
+    [Environment]::SetEnvironmentVariable($jevTestName, $jevTestValue, 'Process')
+    $jevTestOriginal[$jevTestName] = $jevTestValue
+}
+$global:jevTestInvocations = 0
+function uv {
+    $global:jevTestInvocations += 1
+    if (($args -join '|').Contains($env:JEV_TEST_SYNTHETIC_KEY)) {
+        throw 'Credential appeared in child arguments.'
+    }
+    if ($env:OPENROUTER_API_KEY -cne $env:JEV_TEST_SYNTHETIC_KEY -or
+        $env:JEV_CREDENTIAL_SOURCE -cne 'process_environment') {
+        throw 'Child received the wrong credential source.'
+    }
+    if ($env:JEV_PROFILE -cne 'synthetic-profile' -or
+        $env:JEV_PROFILES_FILE -cne [IO.Path]::GetFullPath('synthetic-profiles.json')) {
+        throw 'Child did not receive the explicitly selected profile.'
+    }
+    foreach ($jevTestLegacy in @('JEV_BRIDGE_TOKEN', 'JEV_BRIDGE_TOKEN_FILE',
+        'JEV_EXPECTED_PROJECT', 'JEV_BRIDGE_URL', 'JEV_BRIDGE_PORT')) {
+        if ($null -ne [Environment]::GetEnvironmentVariable($jevTestLegacy, 'Process')) {
+            throw 'Inherited bridge setting was not cleared for the profile.'
+        }
+    }
+    if ($env:JEV_TEST_CHILD_FAILURE -eq '1') { throw 'Synthetic child failure.' }
+    $global:LASTEXITCODE = 17
+}
+$jevTestCaught = $null
+try {
+    if ($env:JEV_TEST_LAUNCHER_NAME -eq 'Benchmark-Agent.ps1') {
+        & $env:JEV_TEST_LAUNCHER -ProfilesFile 'synthetic-profiles.json' `
+            -Profile 'synthetic-profile' -OutputDirectory 'synthetic-output'
+    } else {
+        & $env:JEV_TEST_LAUNCHER -ProfilesFile 'synthetic-profiles.json' `
+            -Profile 'synthetic-profile'
+    }
+} catch {
+    $jevTestCaught = $_.Exception.Message
+}
+if ($global:jevTestInvocations -ne 1) { throw 'Expected exactly one fake child invocation.' }
+if ($env:JEV_TEST_CHILD_FAILURE -eq '1') {
+    if ($jevTestCaught -cne 'Synthetic child failure.') { throw 'Unexpected launcher failure.' }
+} elseif ($null -ne $jevTestCaught -or $LASTEXITCODE -ne 17) {
+    throw 'Child exit status was not preserved.'
+}
+foreach ($jevTestName in $jevTestNames) {
+    if ([Environment]::GetEnvironmentVariable($jevTestName, 'Process') -cne
+        $jevTestOriginal[$jevTestName]) {
+        throw 'Launcher failed to restore a process environment variable.'
+    }
+}
+[Console]::Out.WriteLine('LAUNCHER_OK')
+exit 0
+""",
+        encoding="utf-8",
+    )
+    result = _run_powershell(windows_powershell, script, environment)
+    assert SYNTHETIC_KEY not in result.stdout + result.stderr
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "LAUNCHER_OK"
+    assert not result.stderr.strip()

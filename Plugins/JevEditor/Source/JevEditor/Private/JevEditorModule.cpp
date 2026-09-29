@@ -1,5 +1,7 @@
 #include "JevEditorBridge.h"
 #include "JevEditorFunctionalTools.h"
+#include "JevEditorRuntimeGameplay.h"
+#include "JevEditorHandoffTools.h"
 #include "JevEditorProjectTools.h"
 #include "JevEditorBlueprintTools.h"
 #include "JevEditorWorkflowTools.h"
@@ -134,12 +136,14 @@ public:
         }
         ProjectTools = MakeUnique<FJevProjectTools>();
         FunctionalTools = MakeUnique<FJevFunctionalTools>();
+        RuntimeGameplay = MakeUnique<FJevRuntimeGameplay>();
+        HandoffTools = MakeUnique<FJevHandoffTools>();
         BlueprintTools = MakeUnique<FJevBlueprintTools>();
         WorkflowTools = MakeUnique<FJevWorkflowTools>();
         Bridge->SetExternalMutationBlocker([this]
         {
             return (ProjectTools && ProjectTools->HasActiveJob()) || (FunctionalTools && FunctionalTools->HasActiveJob()) ||
-                (BlueprintTools && BlueprintTools->HasActiveJob()) || (WorkflowTools && WorkflowTools->HasActiveJob());
+                (BlueprintTools && BlueprintTools->HasActiveJob()) || (WorkflowTools && WorkflowTools->HasActiveJob()) || (RuntimeGameplay && RuntimeGameplay->HasActiveJob()) || (HandoffTools && HandoffTools->HasActiveJob());
         });
         ReviewPanel->SetBridge(Bridge.Get());
         TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FJevEditorModule::Tick));
@@ -153,6 +157,10 @@ public:
         ProjectTools.Reset();
         if (FunctionalTools) FunctionalTools->Shutdown();
         FunctionalTools.Reset();
+        if (RuntimeGameplay) RuntimeGameplay->Shutdown();
+        RuntimeGameplay.Reset();
+        if (HandoffTools) HandoffTools->Shutdown();
+        HandoffTools.Reset();
         BlueprintTools.Reset();
         WorkflowTools.Reset();
         if (ReviewPanel) ReviewPanel->Unregister();
@@ -180,7 +188,7 @@ private:
 
     bool Tick(float DeltaSeconds)
     {
-        if ((!ProjectTools || !ProjectTools->HasActiveJob()) && (!FunctionalTools || !FunctionalTools->HasActiveJob()) && (!WorkflowTools || !WorkflowTools->HasActiveJob())) return true;
+        if ((!ProjectTools || !ProjectTools->HasActiveJob()) && (!FunctionalTools || !FunctionalTools->HasActiveJob()) && (!WorkflowTools || !WorkflowTools->HasActiveJob()) && (!RuntimeGameplay || !RuntimeGameplay->HasActiveJob())) return true;
         const auto Current = Identity();
         if (!Current)
         {
@@ -190,6 +198,7 @@ private:
         }
         if (ProjectTools && Current) ProjectTools->Tick(Current.ToSharedRef());
         if (FunctionalTools && Current) FunctionalTools->Tick(Current.ToSharedRef());
+        if (RuntimeGameplay && Current) RuntimeGameplay->Tick(Current.ToSharedRef());
         if (WorkflowTools && Current) WorkflowTools->Tick(Current.ToSharedRef(), DeltaSeconds);
         return true;
     }
@@ -246,7 +255,7 @@ private:
         }
         FString Action;
         if (Object->TryGetStringField(TEXT("action"), Action) &&
-            ((ProjectTools && FJevProjectTools::HandlesAction(Action)) || (FunctionalTools && FJevFunctionalTools::HandlesAction(Action)) || (BlueprintTools && FJevBlueprintTools::HandlesAction(Action)) || (WorkflowTools && FJevWorkflowTools::HandlesAction(Action))))
+            ((ProjectTools && FJevProjectTools::HandlesAction(Action)) || (FunctionalTools && FJevFunctionalTools::HandlesAction(Action)) || (BlueprintTools && FJevBlueprintTools::HandlesAction(Action)) || (WorkflowTools && FJevWorkflowTools::HandlesAction(Action)) || (RuntimeGameplay && FJevRuntimeGameplay::HandlesAction(Action)) || (HandoffTools && FJevHandoffTools::HandlesAction(Action))))
         {
             const TSharedPtr<FJsonObject>* Params = nullptr;
             bool bValid = Object->TryGetObjectField(TEXT("params"), Params);
@@ -254,10 +263,15 @@ private:
             const auto Current = Identity();
             if (!bValid) Reply(Complete, FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Use action and an object params only.")));
             else if (!Current) Reply(Complete, FJevEditorBridge::Error(TEXT("editor_unavailable"), TEXT("Editor identity is unavailable.")));
-            else if ((Action == TEXT("validation_start") && (FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())) ||
+            else if (HandoffTools->HasActiveJob() || (Action == TEXT("handoff_apply") && (ProjectTools->HasActiveJob() || FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob() || RuntimeGameplay->HasActiveJob())) ||
+                (Action == TEXT("runtime_apply") && (ProjectTools->HasActiveJob() || FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())) ||
+                (RuntimeGameplay->HasActiveJob() && (Action == TEXT("validation_start") || Action == TEXT("functional_start") || Action == TEXT("blueprint_compile") || Action == TEXT("workflow_apply") || Action == TEXT("performance_start"))) ||
+                (Action == TEXT("validation_start") && (FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())) ||
                 (Action == TEXT("functional_start") && (ProjectTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())) ||
                 ((Action == TEXT("blueprint_compile") || Action == TEXT("workflow_apply") || Action == TEXT("performance_start")) && (ProjectTools->HasActiveJob() || FunctionalTools->HasActiveJob() || BlueprintTools->HasActiveJob() || WorkflowTools->HasActiveJob())))
                 Reply(Complete, FJevEditorBridge::Error(TEXT("job_busy"), TEXT("Another project job is active.")));
+            else if (FJevHandoffTools::HandlesAction(Action)) Reply(Complete, HandoffTools->Execute(Action, *Params, Current.ToSharedRef()));
+            else if (FJevRuntimeGameplay::HandlesAction(Action)) Reply(Complete, RuntimeGameplay->Execute(Action, *Params, Current.ToSharedRef()));
             else if (FJevWorkflowTools::HandlesAction(Action)) Reply(Complete, WorkflowTools->Execute(Action, *Params, Current.ToSharedRef()));
             else if (FJevBlueprintTools::HandlesAction(Action)) Reply(Complete, BlueprintTools->Execute(Action, *Params, Current.ToSharedRef()));
             else if (FJevFunctionalTools::HandlesAction(Action)) Reply(Complete, FunctionalTools->Execute(Action, *Params, Current.ToSharedRef()));
@@ -272,6 +286,8 @@ private:
     TUniquePtr<FJevEditorBridge> Bridge;
     TUniquePtr<FJevProjectTools> ProjectTools;
     TUniquePtr<FJevFunctionalTools> FunctionalTools;
+    TUniquePtr<FJevRuntimeGameplay> RuntimeGameplay;
+    TUniquePtr<FJevHandoffTools> HandoffTools;
     TUniquePtr<FJevBlueprintTools> BlueprintTools;
     TUniquePtr<FJevWorkflowTools> WorkflowTools;
     TUniquePtr<FJevEditorReviewPanel> ReviewPanel;

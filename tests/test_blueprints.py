@@ -88,3 +88,41 @@ async def test_uncertain_transport_error_is_returned_without_retry():
     result = await server.call_tool("unreal_blueprint_compile", {"plan_id": "reviewed"})
     assert "bridge_timeout" in str(result)
     bridge.call.assert_awaited_once()
+
+
+async def test_gameplay_graph_vocabulary_is_bounded_and_preserved():
+    from pydantic import TypeAdapter, ValidationError
+
+    from jev_unreal.blueprints import GraphEdit
+
+    adapter = TypeAdapter(GraphEdit)
+    base = {"graph_id": "12345678-1234-1234-1234-123456789012", "x": 0, "y": 0}
+    for operation in [
+        {"operation": "add_event", "event": "ReceiveActorBeginOverlap"},
+        {"operation": "add_branch"},
+        {"operation": "add_variable_get", "name": "CanOpen"},
+        {"operation": "add_variable_set", "name": "CanOpen"},
+        {"operation": "add_actor_call", "function": "K2_SetActorRelativeLocation",
+         "location": [0, 0, 300]},
+    ]:
+        edit = adapter.validate_python({**base, **operation})
+        assert edit.operation == operation["operation"]
+    for operation in [
+        {"operation": "add_event", "event": "ArbitraryCallback"},
+        {"operation": "add_actor_call", "function": "ExecuteConsoleCommand"},
+        {"operation": "add_variable_get", "name": "/Game/External"},
+        {"operation": "add_actor_call", "function": "K2_SetActorRelativeLocation",
+         "location": [0, 0, float("inf")]},
+    ]:
+        with pytest.raises(ValidationError):
+            adapter.validate_python({**base, **operation})
+    bridge = AsyncMock()
+    server = FastMCP("blueprint-test")
+    register_blueprint_tools(server, bridge)
+    edit = {**base, "operation": "add_actor_call", "function": "SetActorEnableCollision"}
+    await server.call_tool("unreal_blueprint_graph_preview", {
+        "target_id": "door", "graph_edit": edit, "expected_state": STATE,
+    })
+    bridge.call.assert_awaited_once_with("blueprint_graph_preview", {
+        "target_id": "door", "graph_edit": edit, "expected_state": STATE,
+    })

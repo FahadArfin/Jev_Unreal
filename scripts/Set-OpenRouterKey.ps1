@@ -36,6 +36,8 @@ try {
     $jevEncryptedKey = ConvertFrom-SecureString -SecureString $jevSecureKey
     [IO.File]::WriteAllText($jevCredentialPath, $jevEncryptedKey, [Text.UTF8Encoding]::new($false))
     Write-Host 'Saved the encrypted OpenRouter key for the current Windows user.'
+    Write-Host ('Credential file: ' + $jevCredentialPath)
+    Write-Host ('Saved at (UTC): ' + (Get-Item -LiteralPath $jevCredentialPath).LastWriteTimeUtc.ToString('o'))
     Write-Host 'Start the MCP server with scripts/Start-Mcp.ps1. Keep the encrypted file local.'
 }
 finally {

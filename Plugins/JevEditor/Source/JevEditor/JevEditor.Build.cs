@@ -9,7 +9,8 @@ public class JevEditor : ModuleRules
             "Core", "CoreUObject", "Engine", "UnrealEd", "Json", "HTTPServer",
             "AssetRegistry", "Sockets", "PhysicsCore", "RenderCore", "RHI",
             "Slate", "SlateCore", "InputCore", "ToolMenus", "DataValidation", "BlueprintGraph", "KismetCompiler", "FunctionalTesting",
-            "UMG", "UMGEditor", "NavigationSystem"
+            "UMG", "UMGEditor", "NavigationSystem", "AssetTools"
         });
+        AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL");
     }
 }

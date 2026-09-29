@@ -1,6 +1,7 @@
 """MCP tools for bounded decisions, progressive discovery, and verified editor work."""
 
 import json
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,17 +23,21 @@ from .diagnostics import group_diagnostics
 from .domain_workflows import register_domain_tools
 from .errors import JevError
 from .handoff import register_handoff_tools
+from .handoff_import import register_handoff_import_tools
 from .health import provider_health
 from .infrastructure import register_infrastructure_tools
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
 from .meshes import MeshRecipe, preview_mesh
+from .project_checkpoints import register_checkpoint_tools
 from .project_tools import register_project_tools
 from .recipes import register_recipe_resources
 from .routing import selective_route
+from .runtime_gameplay import register_runtime_gameplay_tools
 from .selection import AssetCandidate, AssetFilters, rank_candidates
 from .spatial import SpatialRecipe, preview_spatial
 from .tool_groups import GroupedMCP, register_group_tools
 from .verification import Check, SceneSnapshots, SessionIdentity, verify_fresh
+from .workflow_runs import register_workflow_run_tools
 from .workflows import CATALOG, Candidate, ExpectedState, Operation, route, triage
 
 
@@ -695,6 +700,10 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     register_blueprint_tools(server, bridge)
     register_domain_tools(server, bridge, previews)
     register_handoff_tools(server, bridge)
+    register_handoff_import_tools(server, bridge, os.environ.get("JEV_HANDOFF_CONFIG", ""))
+    register_runtime_gameplay_tools(server, bridge)
+    register_workflow_run_tools(server, bridge, previews)
+    register_checkpoint_tools(server, bridge, os.environ.get("JEV_CHECKPOINT_CONFIG", ""))
     register_infrastructure_tools(server, bridge)
     register_recipe_resources(server)
     register_acceptance_tools(server, bridge)

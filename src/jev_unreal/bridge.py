@@ -120,6 +120,12 @@ class UnrealBridge:
                     "target_not_allowed",
                     "compile_failed",
                     "plan_consumed",
+                    "runtime_disabled",
+                    "runtime_unavailable",
+                    "session_not_owned",
+                    "map_not_allowed",
+                    "handoff_disabled",
+                    "source_changed",
                 }
                 if code not in known:
                     code = "bridge_error"
@@ -173,6 +179,15 @@ class UnrealBridge:
             "functional_start",
             "functional_job",
             "functional_cancel",
+            "compact_read",
+            "runtime_status",
+            "runtime_preview",
+            "runtime_apply",
+            "runtime_receipt",
+            "runtime_capture",
+            "handoff_manifest",
+            "handoff_preview",
+            "handoff_apply",
         }:
             raise JevError("unknown_action", "Operation is not part of the editor allowlist.")
         async with self._lock:
@@ -203,6 +218,10 @@ class UnrealBridge:
                     "workflow_apply",
                     "performance_start",
                     "performance_cancel",
+                    "runtime_preview",
+                    "runtime_apply",
+                    "handoff_preview",
+                    "handoff_apply",
                 }
                 and not expected
             ):
@@ -212,6 +231,14 @@ class UnrealBridge:
             if action == "status":
                 return status
             required_capabilities = set()
+            if action == "compact_read":
+                required_capabilities.add("compact_read")
+            if action.startswith("runtime_"):
+                required_capabilities.add("runtime_gameplay")
+                if action == "runtime_capture":
+                    required_capabilities.add("runtime_capture")
+            if action.startswith("handoff_"):
+                required_capabilities.add("handoff_import")
             if action.startswith(("workflow_", "performance_")) or action in {
                 "blueprint_pin_preview",
                 "blueprint_graph_preview",
@@ -296,6 +323,10 @@ class UnrealBridge:
                 "workflow_apply",
                 "performance_start",
                 "performance_cancel",
+                "runtime_preview",
+                "runtime_apply",
+                "handoff_preview",
+                "handoff_apply",
             }:
                 if len(actual) > 2048 or any(ord(character) < 32 for character in actual):
                     raise JevError("bridge_error", "Editor returned an invalid project identity.")

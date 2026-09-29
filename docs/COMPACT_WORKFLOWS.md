@@ -1,8 +1,9 @@
 # Compact inspection and scoped tool catalogs
 
-These MCP-layer features work with the existing 0.9 editor bridge. They do not
-alter native edit permissions or replace preview, one-shot application and fresh
-verification. The full catalog remains the default.
+Compact reads negotiate the native `compact_read` capability. Older bridges use
+the existing MCP projection fallback. Neither changes native edit permissions or
+replaces preview, one-shot application and fresh verification. The full catalog
+remains the default.
 
 ## Read only the fields needed
 
@@ -39,16 +40,25 @@ For an exact asset, use `source: "asset_details"` and `path`.
 Registry search remains restricted to the native `/Game` root; exact asset
 inspection also supports native `/Engine` assets.
 
-Omitting `fields` chooses a compact default. This reduces returned detail, not
-native inspection work. The bridge still reads full bounded native metadata.
+Omitting `fields` chooses a compact default. With the native capability, the
+editor skips unrequested actor material arrays and mesh settings, and skips
+unrequested asset material/LOD arrays and collision details. A name/class-only
+exact asset read does not load the mesh. Native identity/revision checks still
+run and can dominate inspection time; no speedup is claimed without measurement.
+`metadata.projection_location` reports `native` or `mcp_legacy_fallback`.
+The legacy path still fetches full bounded metadata before projection.
 
 ## Pages and changes
 
 Repeat exactly the same request with `cursor: <next_cursor>` to read another
 page. Pages come from one frozen capture. A changed editor identity/revision
-refuses continuation; start a new read. Native scans are capped at 200 entries
+refuses continuation; start a new read. Native captured results are capped at 200 entries
 (20 for exact actor details). Pagination does **not** extend that cap. Inspect
-native truncation flags and narrow the query when incomplete.
+native truncation flags and narrow the query when incomplete. Native discovery
+examines at most 5,000 candidates before reporting `scan_incomplete`; a filtered
+query can therefore remain incomplete. Native transport pages contain at most
+100 projected rows. The MCP process gathers the bounded capture to preserve
+complete change comparisons across all pages, then serves caller-sized pages.
 
 Repeat the request with `since: <read_id>` for a fresh change-only response.
 Changed/added rows contain the selected fields; `removed_from_result` means a row
@@ -58,7 +68,9 @@ pages. Unselected properties are not compared. Asset content and selection may
 change without changing the native actor revision; frozen pages remain historical.
 
 Reads expire after 120 seconds, at most 32 reads / 8 MiB per MCP process, with a
-1 MiB per-read budget. Old reads can be evicted early. Restart clears all IDs.
+1 MiB per-read budget. Native captures have their own 32-read / 8 MiB budget,
+120-second expiry and 900,000-byte per-capture cap. Old reads can be evicted early.
+Restart clears all IDs.
 Concurrent calls are serialized. A detected state change during capture refuses
 the read rather than storing a mixed baseline. Use `unreal_verify` for actual
 edit acceptance; these projections are an inspection convenience.
@@ -80,8 +92,24 @@ this grouping does not narrow the dispatcher's native allowlists.
 `jev_tool_groups` returns group membership, active count, exact catalog hash and
 serialized schema bytes. It does not estimate tokens. `jev_tool_schema(name)`
 returns one exact schema, including whether the tool is active, without enabling
-or executing it. To activate another group, update the environment and reconnect
-the MCP server. Clients may retain their old schema list until reconnection.
+or executing it. To activate another group in a compatible client:
+
+```json
+{"groups": ["core", "scene", "acceptance"], "client_supports_list_changed": true}
+```
+
+Call `jev_tool_groups_activate` with this object. Activation replaces this MCP
+session's groups and sends the real `notifications/tools/list_changed` message;
+core always stays available. Other clients sharing a server retain their own
+catalogs. Reconnecting restores startup configuration. Calls already in progress
+are not cancelled. A transport notification failure restores the previous groups.
+
+MCP defines the server's `tools.listChanged` capability, but does not define a
+client capability promising refresh. Set the explicit opt-in only when your
+client supports that notification. The server cannot verify the client's UI
+refresh. Without opt-in or a live session it changes nothing and returns
+reconnect instructions. Clients that cache schemas should use `JEV_TOOL_GROUPS`
+and reconnect instead. See the [MCP tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 
 Inactive tools are absent from `tools/list` and refused by `tools/call`. Groups
 are a context-management feature, not a security boundary: native project policy,

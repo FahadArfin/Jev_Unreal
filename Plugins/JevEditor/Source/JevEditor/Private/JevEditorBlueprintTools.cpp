@@ -102,6 +102,17 @@ FPolicy Policy()
     return Result;
 }
 
+bool GameplayAllowed(const FString& TargetId)
+{
+    bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnableGameplayGraphEdits"), Enabled, GGameIni);
+    TArray<FString> Ids; GConfig->GetArray(Section, TEXT("GameplayTargets"), Ids, GGameIni);
+    if (!Enabled || Ids.Num() > 64) return false;
+    TSet<FString> Seen;
+    const auto Config = Policy();
+    for (const FString& Id : Ids) { if (!Alias(Id) || Seen.Contains(Id) || !Config.Targets.Contains(Id)) return false; Seen.Add(Id); }
+    return Seen.Contains(TargetId);
+}
+
 UBlueprint* Loaded(const FString& Asset)
 {
     const FAssetData Data = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().GetAssetByObjectPath(FSoftObjectPath(Asset));
@@ -187,6 +198,7 @@ struct FJevBlueprintTools::FPlan
     TSharedPtr<FJsonObject> GraphEdit;
     FString GraphBaseline;
     FGuid AddedNodeId;
+    bool bGameplay = false;
 };
 
 FJevBlueprintTools::FJevBlueprintTools(TFunction<double()> InClock)
@@ -237,6 +249,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Targets(const TSharedRef<FJsonObject
         Row->SetStringField(TEXT("target_id"), Id);
         Row->SetStringField(TEXT("asset_path"), Asset);
         Row->SetBoolField(TEXT("loaded_supported_asset"), Loaded(Asset) != nullptr);
+        Row->SetBoolField(TEXT("gameplay_graph_editing_enabled"), Config.bEnabled && Config.bValid && GameplayAllowed(Id));
         Rows.Add(MakeShared<FJsonValueObject>(Row));
     }
     Result->SetArrayField(TEXT("targets"), Rows);
@@ -269,13 +282,14 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
     if (Plans.Num() >= MaximumPlans) return FJevEditorBridge::Error(TEXT("too_many_plans"), TEXT("The bounded compile receipt store is full; wait for older receipts to expire."));
     const FString PlanId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
     auto Plan = MakeShared<FPlan>();
+    Plan->bGameplay = GameplayAllowed(TargetId);
     if (Params->HasField(TEXT("pin_edit")))
     {
         bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnablePinEdits"), Enabled, GGameIni);
         if (!Enabled) return FJevEditorBridge::Error(TEXT("target_not_allowed"), TEXT("Enable bEnablePinEdits explicitly in the project BlueprintCompilation policy."));
         const TSharedPtr<FJsonObject>* Edit = nullptr;
         if (!Params->TryGetObjectField(TEXT("pin_edit"), Edit) || !Only(*Edit, {TEXT("node_id"), TEXT("pin_id"), TEXT("value")}) || !Text(*Edit, TEXT("node_id"), Plan->NodeId, 64) || !Text(*Edit, TEXT("pin_id"), Plan->PinId, 64) || !Text(*Edit, TEXT("value"), Plan->PinAfter, 32)) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply exact node_id, pin_id and a bounded primitive literal."));
-        UEdGraphPin* Pin = EditablePin(BP, Plan->NodeId, Plan->PinId);
+        UEdGraphPin* Pin = Plan->bGameplay ? JevBlueprintGraph::GameplayLiteralPin(BP, Plan->NodeId, Plan->PinId) : EditablePin(BP, Plan->NodeId, Plan->PinId);
         if (!PinValue(Pin, Plan->PinAfter) || Pin->DefaultValue.Len() > 64) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Only bounded unlinked primitive inputs on the documented native math nodes are editable."));
         Plan->PinBefore = Pin->DefaultValue;
     }
@@ -284,7 +298,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
         bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnableGraphEdits"), Enabled, GGameIni);
         if (!Enabled) return FJevEditorBridge::Error(TEXT("target_not_allowed"), TEXT("Enable bEnableGraphEdits explicitly in the project BlueprintCompilation policy."));
         const TSharedPtr<FJsonObject>* Edit = nullptr; FString Reason;
-        if (!Params->TryGetObjectField(TEXT("graph_edit"), Edit) || !JevBlueprintGraph::Validate(BP, *Edit, Reason)) return FJevEditorBridge::Error(TEXT("unsupported_graph_edit"), Reason.IsEmpty() ? TEXT("Supply one documented typed graph edit.") : Reason);
+        if (!Params->TryGetObjectField(TEXT("graph_edit"), Edit) || !JevBlueprintGraph::Validate(BP, *Edit, Reason, Plan->bGameplay)) return FJevEditorBridge::Error(TEXT("unsupported_graph_edit"), Reason.IsEmpty() ? TEXT("Supply one documented typed graph edit.") : Reason);
         Plan->GraphEdit = *Edit;
         if (!JevBlueprintGraph::Snapshot(JevBlueprintGraph::Graph(BP, (*Edit)->GetStringField(TEXT("graph_id"))), Plan->GraphBaseline)) return FJevEditorBridge::Error(TEXT("unsupported_graph_edit"), TEXT("Graph exceeds the bounded snapshot limits."));
         Plan->AddedNodeId = FGuid::NewGuid();
@@ -317,7 +331,7 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Preview(const TSharedPtr<FJsonObject
     if (Plan->GraphEdit)
     {
         Result->SetObjectField(TEXT("graph_edit"), Plan->GraphEdit);
-        if (Plan->GraphEdit->GetStringField(TEXT("operation")) == TEXT("add_math_node")) Result->SetStringField(TEXT("added_node_id"), Plan->AddedNodeId.ToString());
+        if (Plan->GraphEdit->GetStringField(TEXT("operation")).StartsWith(TEXT("add_")) && Plan->GraphEdit->GetStringField(TEXT("operation")) != TEXT("add_variable")) Result->SetStringField(TEXT("added_node_id"), Plan->AddedNodeId.ToString());
         Result->SetStringField(TEXT("edit_failure_policy"), TEXT("One native Undo transaction records the graph edit. Compilation failure retains the edit and fresh diagnostics; explicit Undo or a reviewed correction is required. Compiler callbacks are not comprehensively rolled back."));
     }
     Plan->Receipt = Result; Plans.Add(PlanId, Plan);
@@ -357,22 +371,23 @@ TSharedRef<FJsonObject> FJevBlueprintTools::Compile(const TSharedPtr<FJsonObject
     TGuardValue<bool> Guard(bCompiling, true);
     TStrongObjectPtr<UBlueprint> KeepAlive(BP);
     TUniquePtr<FScopedTransaction> EditTransaction;
+    if (Plan->bGameplay && !GameplayAllowed(Plan->TargetId)) return Reject(TEXT("target_not_allowed"), TEXT("Gameplay graph permission for this target was revoked."));
     if (Plan->GraphEdit)
     {
         bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnableGraphEdits"), Enabled, GGameIni);
         if (!Enabled) return Reject(TEXT("policy_invalid"), TEXT("Project graph editing approval changed."));
         FString Current, Reason;
-        if (!JevBlueprintGraph::Validate(BP, Plan->GraphEdit, Reason) || !JevBlueprintGraph::Snapshot(JevBlueprintGraph::Graph(BP, Plan->GraphEdit->GetStringField(TEXT("graph_id"))), Current) || Current != Plan->GraphBaseline) return Reject(TEXT("stale_plan"), TEXT("The reviewed graph, nodes, pins or links changed."));
+        if (!JevBlueprintGraph::Validate(BP, Plan->GraphEdit, Reason, Plan->bGameplay) || !JevBlueprintGraph::Snapshot(JevBlueprintGraph::Graph(BP, Plan->GraphEdit->GetStringField(TEXT("graph_id"))), Current) || Current != Plan->GraphBaseline) return Reject(TEXT("stale_plan"), TEXT("The reviewed graph, nodes, pins or links changed."));
         if (!GEditor || !GEditor->CanTransact() || GEditor->IsTransactionActive() || GIsTransacting) return Reject(TEXT("editor_busy"), TEXT("A separate Undo transaction is required."));
         EditTransaction = MakeUnique<FScopedTransaction>(NSLOCTEXT("JevEditor", "GraphEdit", "Edit Jev Blueprint graph"));
         Plan->Receipt->SetStringField(TEXT("status"), TEXT("applying"));
-        const bool Applied = JevBlueprintGraph::Apply(BP, Plan->GraphEdit, Plan->AddedNodeId);
+        const bool Applied = JevBlueprintGraph::Apply(BP, Plan->GraphEdit, Plan->AddedNodeId, Plan->bGameplay);
         Plan->Receipt->SetBoolField(TEXT("graph_edit_applied"), Applied);
         if (!Applied) return Reject(TEXT("apply_failed"), TEXT("The schema did not retain the reviewed edit; inspect the asset and Undo transaction."));
     }
     if (!Plan->PinId.IsEmpty())
     {
-        UEdGraphPin* Pin = EditablePin(BP, Plan->NodeId, Plan->PinId);
+        UEdGraphPin* Pin = Plan->bGameplay ? JevBlueprintGraph::GameplayLiteralPin(BP, Plan->NodeId, Plan->PinId) : EditablePin(BP, Plan->NodeId, Plan->PinId);
         bool Enabled = false; GConfig->GetBool(Section, TEXT("bEnablePinEdits"), Enabled, GGameIni);
         if (!Enabled) return Reject(TEXT("policy_invalid"), TEXT("Project pin editing approval changed."));
         if (!PinValue(Pin, Plan->PinAfter) || Pin->DefaultValue != Plan->PinBefore) return Reject(TEXT("stale_plan"), TEXT("The reviewed graph pin changed."));

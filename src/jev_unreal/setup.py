@@ -17,6 +17,7 @@ import stat
 import sys
 import uuid
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path, PurePosixPath
 
@@ -982,6 +983,7 @@ def _presence(path: Path) -> dict:
             "present": True,
             "regular_file": stat.S_ISREG(metadata.st_mode),
             "bytes": metadata.st_size,
+            "modified_at_utc": datetime.fromtimestamp(metadata.st_mtime, UTC).isoformat(),
             "contents_read": False,
         }
     except FileNotFoundError:

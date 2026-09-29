@@ -260,7 +260,9 @@ async def run(profiles_path: Path):
                 sessions[name] = await connect(stack, profiles_path, profiles[name])
                 initial[name] = await context(sessions[name], PROJECTS[name])
                 status = initial[name]
-                require(status["bridge_version"] == "0.9.0", "Rebuild both native plugins for 0.9.")
+                require(
+                    status["bridge_version"] == "0.10.0", "Rebuild both native plugins for 0.10."
+                )
                 require(
                     {"plan_status", "validation_start", "validation_job"}
                     <= set(status["capabilities"]),

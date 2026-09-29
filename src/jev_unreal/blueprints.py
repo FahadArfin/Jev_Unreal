@@ -49,7 +49,54 @@ class MathLink(Strict):
     input_pin_id: Guid
 
 
-GraphEdit = Annotated[AddMathNode | RemoveMathNode | MathLink, Field(discriminator="operation")]
+class GraphPosition(Strict):
+    graph_id: Guid
+    x: int = Field(ge=-100_000, le=100_000)
+    y: int = Field(ge=-100_000, le=100_000)
+
+
+class AddEvent(GraphPosition):
+    operation: Literal["add_event"]
+    event: Literal["ReceiveBeginPlay", "ReceiveActorBeginOverlap"]
+
+
+class AddBranch(GraphPosition):
+    operation: Literal["add_branch"]
+
+
+VariableName = Annotated[
+    str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+]
+
+
+class AddVariable(Strict):
+    operation: Literal["add_variable"]
+    graph_id: Guid
+    name: VariableName
+    type: Literal["bool", "int", "double"]
+
+
+class AddVariableNode(GraphPosition):
+    operation: Literal["add_variable_get", "add_variable_set"]
+    name: VariableName
+
+
+class AddActorCall(GraphPosition):
+    operation: Literal["add_actor_call"]
+    function: Literal[
+        "K2_SetActorRelativeLocation", "SetActorEnableCollision", "SetActorHiddenInGame"
+    ]
+    location: Annotated[
+        list[Annotated[float, Field(ge=-1_000_000, le=1_000_000)]],
+        Field(min_length=3, max_length=3),
+    ] | None = None
+
+
+GraphEdit = Annotated[
+    AddMathNode | RemoveMathNode | MathLink | AddEvent | AddBranch | AddVariable
+    | AddVariableNode | AddActorCall,
+    Field(discriminator="operation"),
+]
 
 
 def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
@@ -109,11 +156,12 @@ def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
     async def unreal_blueprint_pin_preview(
         target_id: TargetId, pin_edit: PinEdit, expected_state: ExpectedState
     ) -> dict[str, Any]:
-        """Preview one unconnected bool/int/real input literal on an approved native math node.
+        """Preview one unconnected bool/int/real literal on an approved native graph node.
 
         Supports Add_IntInt, Multiply_IntInt, Add_DoubleDouble, Multiply_DoubleDouble and
-        Not_PreBool in a loaded ordinary Blueprint approved for compilation. Inspect graph
-        node/pin GUIDs first. No new nodes, links, object defaults or arbitrary expressions.
+        Not_PreBool in a loaded ordinary Blueprint approved for compilation. Additional
+        project GameplayTargets permit primitive literals on approved branch, variable and
+        actor-call nodes. Inspect node/pin GUIDs first. No object defaults or expressions.
         Commit using unreal_blueprint_compile: it edits in an Undo transaction and compiles.
         Compiler failure retains the edit for explicit Undo/correction. Callbacks are trusted
         project code; complete rollback and runtime/semantic success are not guaranteed.
@@ -140,18 +188,21 @@ def register_blueprint_tools(server: FastMCP, bridge: UnrealBridge) -> None:
     async def unreal_blueprint_graph_preview(
         target_id: TargetId, graph_edit: GraphEdit, expected_state: ExpectedState
     ) -> dict[str, Any]:
-        """Preview an approved native math node or exact-type link edit; never arbitrary nodes.
+        """Preview one approved graph edit, then compile the reviewed one-shot plan.
 
         Inspect GUIDs first. Requires project graph-edit policy; no coercion, implicit link
-        breaks or cycles. Remove only unlinked supported math nodes. Commit the reviewed
-        one-shot plan with unreal_blueprint_compile, then inspect fresh compiler diagnostics.
+        breaks or cycles. Remove only unlinked supported math nodes. Additional project
+        bEnableGameplayGraphEdits and GameplayTargets approval permits actor BeginPlay/overlap
+        events, branches, local bool/int/double variables and their get/set nodes, and three
+        fixed self-actor calls. Relative location requires three bounded centimetre values.
+        No arbitrary functions, object links, new classes, timelines or generated code.
         Compiler callbacks are trusted project code; compilation is not gameplay verification.
         """
         return await call(
             "blueprint_graph_preview",
             {
                 "target_id": target_id,
-                "graph_edit": graph_edit.model_dump(mode="json"),
+                "graph_edit": graph_edit.model_dump(mode="json", exclude_none=True),
                 "expected_state": expected_state.model_dump(),
             },
         )

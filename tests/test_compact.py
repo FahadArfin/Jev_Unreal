@@ -44,6 +44,72 @@ class Bridge:
                 "truncated": self.truncated}
 
 
+class NativeBridge(Bridge):
+    def __init__(self):
+        super().__init__()
+        self.status["capabilities"] = ["compact_read"]
+        self.rows = [{"path": f"/Actor{i}", "label": f"Actor {i}", "editable": False,
+                      "edit_blockers": ["locked"]} for i in range(105)]
+        self.tamper = None
+
+    async def call(self, action, params=None):
+        if action == "status":
+            return await super().call(action, params)
+        assert action == "compact_read"
+        self.calls.append((action, copy.deepcopy(params)))
+        offset = 100 if params.get("cursor") else 0
+        rows = copy.deepcopy(self.rows[offset:offset + 100])
+        page = {"identity": {k: self.status[k] for k in
+                              ("project_file", "session_id", "world_path", "revision")},
+                "items": rows, "metadata": {"truncated": False},
+                "captured_count": len(self.rows), "returned_count": len(rows),
+                "native_read_id": "native", "next_cursor": "native:100" if not offset else None}
+        if self.tamper:
+            self.tamper(page, offset)
+        return page
+
+
+async def test_native_projection_negotiates_once_and_collects_bounded_frozen_pages_for_delta():
+    bridge = NativeBridge()
+    reads = CompactReads(bridge)
+    req = ReadRequest(source="actors", fields=["label"], page_size=2)
+    first = await reads.read(req)
+    assert first["metadata"]["projection_location"] == "native"
+    assert first["metadata"]["native_transport_pages"] == 2
+    assert first["captured_count"] == 105 and first["returned_count"] == 2
+    native_calls = [p for a, p in bridge.calls if a == "compact_read"]
+    assert native_calls[0]["fields"] == ["label"]
+    assert native_calls[1]["cursor"] == "native:100"
+    assert first["items"][0]["edit_blockers"] == ["locked"]
+    bridge.rows[100]["label"] = "Changed beyond first native page"
+    delta = await reads.read(req.model_copy(update={"since": first["read_id"]}))
+    assert delta["delta"]["changed_paths"] == ["/Actor100"]
+    assert delta["items"][0]["label"] == "Changed beyond first native page"
+
+
+@pytest.mark.parametrize("defect", ["identity", "count", "metadata", "snapshot", "loop"])
+async def test_native_page_corruption_fails_closed_without_legacy_retry(defect):
+    bridge = NativeBridge()
+
+    def tamper(page, offset):
+        if defect == "identity":
+            page["identity"]["session_id"] = "other"
+        elif defect == "count":
+            page["captured_count"] = 106
+        elif offset:
+            if defect == "metadata":
+                page["metadata"]["truncated"] = True
+            elif defect == "snapshot":
+                page["native_read_id"] = "other"
+            else:
+                page["next_cursor"] = "native:100"
+
+    bridge.tamper = tamper
+    with error_code("bridge_error"):
+        await CompactReads(bridge).read(ReadRequest(source="actors", fields=["label"]))
+    assert all(action in {"status", "compact_read"} for action, _ in bridge.calls)
+
+
 async def test_projection_preserves_safety_and_pages_are_frozen():
     bridge = Bridge()
     reads = CompactReads(bridge)

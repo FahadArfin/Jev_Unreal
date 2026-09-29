@@ -43,3 +43,69 @@ def test_group_config_is_explicit_and_fails_closed(monkeypatch):
     assert parse_groups("scene, blueprints") == {"core", "scene", "blueprints"}
     monkeypatch.setenv("JEV_TOOL_GROUPS", "core")
     assert Settings.from_env().tool_groups == "core"
+
+
+async def test_live_catalog_notification_is_session_local_and_can_disable_cached_tools():
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    from jev_unreal.tool_groups import GroupedMCP, register_group_tools
+
+    server = GroupedMCP("groups-test", tool_groups="core")
+    register_group_tools(server)
+
+    @server.tool()
+    async def unreal_actors() -> dict:
+        return {"inspected": True}
+
+    notifications = []
+
+    async def receive(message):
+        if getattr(getattr(message, "root", None), "method", None):
+            notifications.append(message.root.method)
+
+    assert server._mcp_server.create_initialization_options().capabilities.tools.listChanged
+    async with (
+        create_connected_server_and_client_session(server, message_handler=receive) as first,
+        create_connected_server_and_client_session(server) as other,
+    ):
+        initial = {t.name for t in (await first.list_tools()).tools}
+        no_opt_in = await first.call_tool("jev_tool_groups_activate", {"groups": ["inspection"]})
+        assert no_opt_in.structuredContent["result"]["reconnect_required"]
+        assert initial == {t.name for t in (await first.list_tools()).tools}
+        activated = await first.call_tool("jev_tool_groups_activate", {
+            "groups": ["inspection"], "client_supports_list_changed": True
+        })
+        assert activated.structuredContent["result"]["notification_sent"]
+        assert "notifications/tools/list_changed" in notifications
+        assert "unreal_actors" in {t.name for t in (await first.list_tools()).tools}
+        assert "unreal_actors" not in {t.name for t in (await other.list_tools()).tools}
+        assert not (await first.call_tool("unreal_actors", {})).isError
+        assert (await other.call_tool("unreal_actors", {})).isError
+        await first.call_tool("jev_tool_groups_activate", {
+            "groups": ["core"], "client_supports_list_changed": True
+        })
+        assert (await first.call_tool("unreal_actors", {})).isError
+        assert initial == {t.name for t in (await first.list_tools()).tools}
+    assert server.selected_groups == {"core"}
+
+
+async def test_activation_failure_and_missing_session_preserve_previous_catalog(monkeypatch):
+    from jev_unreal.tool_groups import GroupedMCP
+
+    server = GroupedMCP("groups-test", tool_groups="core")
+    fallback = await server.activate_groups(["scene"], True)
+    assert fallback["reconnect_required"] and server.selected_groups == {"core"}
+
+    class BrokenSession:
+        async def send_tool_list_changed(self):
+            raise OSError("transport closed")
+
+    session = BrokenSession()
+    monkeypatch.setattr(server, "current_session", lambda: session)
+    with pytest.raises(OSError):
+        await server.activate_groups(["scene"], True)
+    assert server.selected_groups == {"core"}
+    for groups in (["core", "core"], [], ["unknown"], ["all", "scene"]):
+        with pytest.raises(JevError):
+            await server.activate_groups(groups, True)
+    assert server.selected_groups == {"core"}

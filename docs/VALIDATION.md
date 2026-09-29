@@ -1,5 +1,46 @@
 # Validation evidence
 
+## 0.10 roadmap implementation and acceptance
+
+Validated on **2026-09-29 UTC**, on this existing Windows host with licensed
+**Unreal 5.8.2**, Python **0.10.0a1** and native bridge **0.10.0**. The exact
+repository JevSandbox was checked before live changes; engine operations were
+serialized. See the [ten-item implementation map](ROADMAP.md).
+
+| Evidence | Result | Scope and limits |
+| --- | --- | --- |
+| Python | Locked all-extras sync, Ruff and `uv build` passed. Full suite: **1,806 passed in 133.99 seconds**; subsequent focused workflow/checkpoint/MCP/credential run: **58 passed**, plus **4** isolated launcher cases | Includes temporary SQLite cross-process claims, mocked providers/editor/VCS, real SDK transport and sanitized child processes. The later SDK output regression exercises all seven new workflow/checkpoint tools. Not a native/gameplay efficiency measurement. |
+| Native build | Successful UE 5.8.2 editor target | Source build includes native compact reads, owned PIE, gameplay graphs and fixed FBX import/reimport. Engine-bundled OpenSSL provides SHA-256; no native binaries or engine source are distributed. |
+| Native editor automation | **56 passed**, including three suites with retained engine warnings; zero failures | Includes native page/cursor projections, Blueprint gameplay policy revocation, generated trigger-door graph compilation, actual positive/negative overlaps, owned PIE cleanup, import policy/source/stale/expiry/one-shot guards and prior regressions. |
+| Rendered automation | **7 passed**, zero failures | Includes new owned runtime viewport capture, PNG decoding/dimensions, settled frames and existing review/widget/camera fixtures. [RuntimeDoor.png](images/RuntimeDoor-v0.10.png) was viewed: visible fixture floor, door blocks and probe. This is a calibration scene, not visual-quality or human-play acceptance. |
+| Live SDK MCP baseline | Passed authenticated sandbox edits, stale/one-shot guards, framing and rendered capture | `scripts/smoke_editor.py --require-capture`; test actors remained unsaved. |
+| Live SDK workflow and checkpoints | **91 tools / 8 core**, session group activation, reconnect-before-apply and fresh layout verification passed | `scripts/smoke_roadmap_completion.py`; separate MCP processes resumed one private SQLite review and applied once. Approved disk manifest compared unchanged; real pinned Git reported selected tracked files clean. Perforce was not configured. |
+| Live approved Blender import and reimport | Both independently measured **verified** | Retained public `.blend`/FBX/texture hashes matched; dimensions approximately **200 × 100 × 50 cm**, pivot-relative center **[0,0,25] cm**, and ordered material slot matched. Reimport used a clean loaded saved fixture; its disk asset hash stayed unchanged. No save requested, no texture/material import, no visual/collision acceptance inferred. |
+| Compact native reads | Full advertised schemas **138,650 bytes**, core **6,976 bytes**; three selected actor rows **2,010 → 985 bytes**, unchanged delta empty | `scripts/smoke_efficiency.py` used native `compact_read`. Byte counts are fixture-specific serialized payload measurements, **not token, latency or workflow-speed measurements**. |
+| Actual Codex agent | One off-only inspection passed with one native read tool call and zero Jev requests | Installed CLI's configured `gpt-6-sol`, fresh ephemeral read-only context, independently verified public Cube answer and unchanged state. Input **17,235 tokens**, including **8,320 cached**; output **87**. Monetary cost unknown. This baseline ran against the pre-upgrade 0.9 bridge and does not establish 0.10 performance or classifier advantage. |
+| Provider | Fresh saved-key Decisions probes and a separate key-information check received **HTTP 401** | Routing-on agent trials remain blocked. No paid-response, accuracy, cost or speedup claim; guardrail settings were not inferred from the rejection. Credentials and raw provider payloads were not published. |
+| Packaging | All **47 Python implementation modules** present in wheel and sdist; privacy/content audit passed | Source artifacts exclude local configurations, credentials, databases, raw logs, engine binaries and generated engine directories. This is not clean-host installation or signed native-package evidence. |
+
+Editor report: **`2026.09.29-06.07.53`**. Rendered report:
+**`2026.09.29-06.09.12`**. Local sanitized evidence includes
+`artifacts/roadmap-live-smoke.json`, `artifacts/roadmap-reimport-smoke.json`,
+`artifacts/codex-agent-off-20260929-v1/report.json` and the corresponding focused
+test/build summaries. Private artifacts are intentionally excluded from Git.
+
+Acceptance found and fixed a Windows-unimplemented generic SHA-256 entry point,
+Unreal's duplicate PIE settings ownership, a native macro/name collision and
+missing structured SDK outputs for seven new tools. An independent review also
+closed unsafe Perforce command transports, recursive path syntax, malformed Git
+status handling, linked import staging, blocking bundle hashing and substituted
+receipt identities. The first failed attempts are not counted as passing evidence.
+
+Independent clean-host/community acceptance, real Perforce servers, screen readers,
+reviewed translations, representative projects, wider native platforms/engines,
+packaged/multiplayer gameplay and a representative paired productivity study remain
+open. Follow [compatibility](COMPATIBILITY.md) and the
+[community protocol](COMMUNITY_ACCEPTANCE.md); breadth does not certify production
+readiness or suitability for millions of users.
+
 ## Unreleased MCP efficiency and acceptance pass
 
 Validated on **2026-09-29 UTC** on the existing Windows host, using the unchanged

@@ -104,7 +104,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::StatusSnapshot(UWorld* World) const
     Result->SetStringField(TEXT("world_path"), World->GetPathName());
     Result->SetStringField(TEXT("current_level"), GetPathNameSafe(World->GetCurrentLevel()));
     Result->SetStringField(TEXT("revision"), Revision(World));
-    Result->SetStringField(TEXT("bridge_version"), TEXT("0.9.0"));
+    Result->SetStringField(TEXT("bridge_version"), TEXT("0.10.0"));
     Result->SetBoolField(TEXT("play_in_editor"), GEditor->PlayWorld != nullptr);
     Result->SetBoolField(TEXT("simulating"), GEditor->bIsSimulatingInEditor);
     Result->SetBoolField(TEXT("editor_world"), true);
@@ -114,6 +114,10 @@ TSharedRef<FJsonObject> FJevEditorBridge::StatusSnapshot(UWorld* World) const
     Capabilities.Add(MakeShared<FJsonValueString>(TEXT("replace_mesh")));
     Capabilities.Add(MakeShared<FJsonValueString>(TEXT("duplicate_mesh")));
     Capabilities.Add(MakeShared<FJsonValueString>(TEXT("mesh_attachment_copy")));
+    Capabilities.Add(MakeShared<FJsonValueString>(TEXT("compact_read")));
+    Capabilities.Add(MakeShared<FJsonValueString>(TEXT("handoff_import")));
+    Capabilities.Add(MakeShared<FJsonValueString>(TEXT("runtime_gameplay")));
+    Capabilities.Add(MakeShared<FJsonValueString>(TEXT("runtime_capture")));
     Result->SetArrayField(TEXT("capabilities"), Capabilities);
     return Result;
 }
@@ -162,8 +166,9 @@ TSharedRef<FJsonObject> FJevEditorBridge::Context(UWorld* World, const TSharedPt
     return JevInspection::Success(Result);
 }
 
-TSharedRef<FJsonObject> FJevEditorBridge::AssetDetails(const TSharedPtr<FJsonObject>& Params) const
+TSharedRef<FJsonObject> FJevEditorBridge::AssetDetails(const TSharedPtr<FJsonObject>& Params, const TSet<FString>* Fields) const
 {
+    const auto Want = [Fields](const TCHAR* Name) { return !Fields || Fields->Contains(Name); };
     FString Path;
     if (!JevInspection::OnlyFields(Params, {TEXT("path")}) || !Params->HasTypedField<EJson::String>(TEXT("path")) || !Params->TryGetStringField(TEXT("path"), Path) || Path.Len() > 512 || !Path.Contains(TEXT(".")) || !FPackageName::IsValidObjectPath(Path) || Path.Contains(TEXT(":")) || Path.Contains(TEXT("..")) || (!Path.StartsWith(TEXT("/Game/")) && !Path.StartsWith(TEXT("/Engine/"))))
         return Error(TEXT("bad_request"), TEXT("asset_details requires an exact /Game or /Engine asset object path, without subobjects or traversal, at most 512 characters."));
@@ -178,6 +183,12 @@ TSharedRef<FJsonObject> FJevEditorBridge::AssetDetails(const TSharedPtr<FJsonObj
     Result->SetBoolField(TEXT("loaded"), false);
     Result->SetBoolField(TEXT("registry_loading"), Registry.IsLoadingAssets());
     if (Asset.AssetClassPath != UStaticMesh::StaticClass()->GetClassPathName()) return JevInspection::Success(Result);
+    if (Fields && !Fields->Contains(TEXT("loaded")))
+    {
+        bool bNeedsMesh = false;
+        for (const FString& Field : *Fields) bNeedsMesh |= Field.StartsWith(TEXT("static_mesh."));
+        if (!bNeedsMesh) return JevInspection::Success(Result);
+    }
 
     // Only the explicitly selected static mesh is loaded; Unreal may load its dependencies.
     UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset());
@@ -193,7 +204,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::AssetDetails(const TSharedPtr<FJsonObj
     Details->SetObjectField(TEXT("bounds_cm"), Bounds);
     const auto& Materials = Mesh->GetStaticMaterials();
     TArray<TSharedPtr<FJsonValue>> Slots;
-    for (int32 I = 0; I < FMath::Min(Materials.Num(), JevInspection::MaxMaterials); ++I)
+    for (int32 I = 0; Want(TEXT("static_mesh.material_slots")) && I < FMath::Min(Materials.Num(), JevInspection::MaxMaterials); ++I)
     {
         auto Slot = MakeShared<FJsonObject>();
         Slot->SetNumberField(TEXT("index"), I);
@@ -202,12 +213,12 @@ TSharedRef<FJsonObject> FJevEditorBridge::AssetDetails(const TSharedPtr<FJsonObj
         Slot->SetBoolField(TEXT("missing"), !IsValid(Materials[I].MaterialInterface.Get()));
         Slots.Add(MakeShared<FJsonValueObject>(Slot));
     }
-    Details->SetArrayField(TEXT("material_slots"), Slots);
+    if (Want(TEXT("static_mesh.material_slots"))) Details->SetArrayField(TEXT("material_slots"), Slots);
     Details->SetNumberField(TEXT("material_slot_count"), Materials.Num());
     Details->SetBoolField(TEXT("materials_truncated"), Materials.Num() > JevInspection::MaxMaterials);
     const int32 LodCount = Mesh->GetNumLODs();
     TArray<TSharedPtr<FJsonValue>> Lods;
-    for (int32 I = 0; I < FMath::Min(LodCount, 16); ++I)
+    for (int32 I = 0; Want(TEXT("static_mesh.lods")) && I < FMath::Min(LodCount, 16); ++I)
     {
         auto Lod = MakeShared<FJsonObject>();
         Lod->SetNumberField(TEXT("index"), I);
@@ -215,15 +226,18 @@ TSharedRef<FJsonObject> FJevEditorBridge::AssetDetails(const TSharedPtr<FJsonObj
         Lod->SetNumberField(TEXT("triangles"), Mesh->GetNumTriangles(I));
         Lods.Add(MakeShared<FJsonValueObject>(Lod));
     }
-    Details->SetArrayField(TEXT("lods"), Lods);
+    if (Want(TEXT("static_mesh.lods"))) Details->SetArrayField(TEXT("lods"), Lods);
     Details->SetNumberField(TEXT("lod_count"), LodCount);
     Details->SetBoolField(TEXT("lods_truncated"), LodCount > 16);
-    auto Collision = MakeShared<FJsonObject>();
-    const UBodySetup* Body = Mesh->GetBodySetup();
-    Collision->SetBoolField(TEXT("has_body_setup"), Body != nullptr);
-    Collision->SetNumberField(TEXT("simple_shape_count"), Body ? Body->AggGeom.GetElementCount() : 0);
-    Collision->SetStringField(TEXT("trace_flag"), Body ? JevInspection::TraceFlag(Body->GetCollisionTraceFlag()) : TEXT("none"));
-    Details->SetObjectField(TEXT("collision"), Collision);
+    if (Want(TEXT("static_mesh.collision")))
+    {
+        auto Collision = MakeShared<FJsonObject>();
+        const UBodySetup* Body = Mesh->GetBodySetup();
+        Collision->SetBoolField(TEXT("has_body_setup"), Body != nullptr);
+        Collision->SetNumberField(TEXT("simple_shape_count"), Body ? Body->AggGeom.GetElementCount() : 0);
+        Collision->SetStringField(TEXT("trace_flag"), Body ? JevInspection::TraceFlag(Body->GetCollisionTraceFlag()) : TEXT("none"));
+        Details->SetObjectField(TEXT("collision"), Collision);
+    }
     Result->SetObjectField(TEXT("static_mesh"), Details);
     return JevInspection::Success(Result);
 }

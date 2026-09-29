@@ -5,12 +5,14 @@
 
 class UBlueprint;
 class UEdGraph;
+class UEdGraphPin;
 
 /** Closed graph vocabulary. All work is performed on the editor game thread. */
 namespace JevBlueprintGraph
 {
 UEdGraph* Graph(UBlueprint* Blueprint, const FString& Id);
 bool Snapshot(UEdGraph* Graph, FString& Out);
-bool Validate(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Edit, FString& Reason);
-bool Apply(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Edit, const FGuid& AddedNodeId);
+UEdGraphPin* GameplayLiteralPin(UBlueprint* Blueprint, const FString& NodeId, const FString& PinId);
+bool Validate(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Edit, FString& Reason, bool bGameplay = false);
+bool Apply(UBlueprint* Blueprint, const TSharedPtr<FJsonObject>& Edit, const FGuid& AddedNodeId, bool bGameplay = false);
 }

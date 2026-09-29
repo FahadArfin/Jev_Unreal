@@ -65,7 +65,7 @@ async def main():
                 assert time.monotonic() < ready_deadline, "Sandbox bridge readiness timed out"
                 await asyncio.sleep(1)
             assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
-            assert status["bridge_version"] == "0.9.0"
+            assert status["bridge_version"] == "0.10.0"
             report.update(engine_version=status["engine_version"], session_id=status["session_id"])
             prefix = f"JevDomain_{int(time.time())}"
             plan = await call(

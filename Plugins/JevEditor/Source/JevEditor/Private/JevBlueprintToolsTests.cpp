@@ -315,4 +315,25 @@ bool FJevBlueprintSpecializedCompilation::RunTest(const FString&)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FJevBlueprintGameplayPolicy, "Jev.Editor.BlueprintGameplayPolicy", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FJevBlueprintGameplayPolicy::RunTest(const FString&)
+{
+    using namespace JevBlueprintTests; FFixture Fixture; UBlueprint* BP = Fixture.CompileAsset();
+    const TCHAR* Section = TEXT("JevEditor.BlueprintCompilation"); bool Graph = false, Gameplay = false;
+    const bool HadGraph = GConfig->GetBool(Section, TEXT("bEnableGraphEdits"), Graph, GGameIni), HadGameplay = GConfig->GetBool(Section, TEXT("bEnableGameplayGraphEdits"), Gameplay, GGameIni); TArray<FString> Targets; GConfig->GetArray(Section, TEXT("GameplayTargets"), Targets, GGameIni);
+    ON_SCOPE_EXIT { if (HadGraph) GConfig->SetBool(Section, TEXT("bEnableGraphEdits"), Graph, GGameIni); else GConfig->RemoveKey(Section, TEXT("bEnableGraphEdits"), GGameIni); if (HadGameplay) GConfig->SetBool(Section, TEXT("bEnableGameplayGraphEdits"), Gameplay, GGameIni); else GConfig->RemoveKey(Section, TEXT("bEnableGameplayGraphEdits"), GGameIni); GConfig->SetArray(Section, TEXT("GameplayTargets"), Targets, GGameIni); };
+    GConfig->SetBool(Section, TEXT("bEnableGraphEdits"), true, GGameIni); GConfig->SetBool(Section, TEXT("bEnableGameplayGraphEdits"), true, GGameIni); GConfig->SetArray(Section, TEXT("GameplayTargets"), {}, GGameIni);
+    auto Edit = MakeShared<FJsonObject>(); Edit->SetStringField(TEXT("operation"), TEXT("add_branch")); Edit->SetStringField(TEXT("graph_id"), BP->UbergraphPages[0]->GraphGuid.ToString()); Edit->SetNumberField(TEXT("x"), 0); Edit->SetNumberField(TEXT("y"), 0);
+    FJevBlueprintTools Tools; auto Params = PreviewParams(); Params->SetObjectField(TEXT("graph_edit"), Edit);
+    TestEqual(TEXT("gameplay edits need exact target opt-in"), ErrorCode(Tools.Execute(TEXT("blueprint_graph_preview"), Params, Identity())), FString(TEXT("unsupported_graph_edit")));
+    GConfig->SetArray(Section, TEXT("GameplayTargets"), {TEXT("fixture")}, GGameIni);
+    auto Plan = Tools.Execute(TEXT("blueprint_graph_preview"), Params, Identity()); if (!TestTrue(TEXT("explicit target can preview gameplay node"), Plan->GetBoolField(TEXT("ok")))) return false;
+    const int32 Before = BP->UbergraphPages[0]->Nodes.Num(); GConfig->SetBool(Section, TEXT("bEnableGameplayGraphEdits"), false, GGameIni);
+    auto Commit = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); TestEqual(TEXT("revocation between review and commit fails closed"), ErrorCode(Commit), FString(TEXT("target_not_allowed"))); TestEqual(TEXT("revoked plan cannot edit graph"), BP->UbergraphPages[0]->Nodes.Num(), Before);
+    GConfig->SetBool(Section, TEXT("bEnableGameplayGraphEdits"), true, GGameIni);
+    Plan = Tools.Execute(TEXT("blueprint_graph_preview"), Params, Identity()); Commit = Tools.Execute(TEXT("blueprint_compile"), CommitParams(Plan), Identity()); if (!TestTrue(TEXT("reviewed approved branch compiles"), Commit->GetBoolField(TEXT("ok")))) return false;
+    TestEqual(TEXT("one approved branch added"), BP->UbergraphPages[0]->Nodes.Num(), Before + 1);
+    TestEqual(TEXT("gameplay compile succeeds"), Commit->GetObjectField(TEXT("result"))->GetStringField(TEXT("status")), FString(TEXT("passed"))); return true;
+}
+
 #endif
