@@ -18,6 +18,7 @@ async def test_stdio_protocol_and_offline_failure():
             "JEV_PROVIDER": "openrouter",
             "JEV_PROFILE": "",
             "JEV_PROFILES_FILE": "",
+            "JEV_TOOL_GROUPS": "all",
         },
     )
     async with stdio_client(params) as (read, write):
@@ -27,6 +28,15 @@ async def test_stdio_protocol_and_offline_failure():
             tools = await session.list_tools()
             by_name = {tool.name: tool for tool in tools.tools}
             assert set(by_name) == {
+                "unreal_read",
+                "jev_tool_groups",
+                "jev_tool_schema",
+                "jev_provider_health",
+                "jev_route_selective",
+                "unreal_acceptance_capture",
+                "unreal_acceptance_compare",
+                "unreal_acceptance_playtest_start",
+                "unreal_acceptance_playtest_job",
                 "unreal_handoff_verify",
                 "unreal_blueprint_graph_preview",
                 "unreal_team_status",
@@ -95,7 +105,6 @@ async def test_stdio_protocol_and_offline_failure():
                 "unreal_functional_cancel",
             }
             assert by_name["unreal_apply"].annotations.readOnlyHint is False
-            assert len(by_name) == 66
             assert by_name["unreal_frame"].annotations.readOnlyHint is False
             assert set(by_name["unreal_frame"].inputSchema["properties"]["view"]["enum"]) == {
                 "current",
@@ -105,6 +114,17 @@ async def test_stdio_protocol_and_offline_failure():
                 "right",
             }
             assert by_name["jev_route"].annotations.openWorldHint is True
+            health = await session.call_tool("jev_provider_health", {})
+            assert health.structuredContent["result"]["probe"]["request_sent"] is False
+            routed = await session.call_tool(
+                "jev_route_selective",
+                {
+                    "goal": "Inspect the current project",
+                    "explicit_tool": "unreal_status",
+                },
+            )
+            assert routed.structuredContent["result"]["selected"] == "unreal_status"
+            assert routed.structuredContent["result"]["routing"]["provider_request_sent"] is False
             result = await session.call_tool(
                 "jev_decide",
                 {

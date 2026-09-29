@@ -1,5 +1,29 @@
 # Validation evidence
 
+## Unreleased MCP efficiency and acceptance pass
+
+Validated on **2026-09-29 UTC** on the existing Windows host, using the unchanged
+licensed **UE 5.8.2** / native bridge **0.9.0** and this repository's exact
+JevSandbox. [Implemented scope](ROADMAP.md#implemented-next-efficiency-and-acceptance-workflows).
+
+| Evidence | Result | Scope |
+| --- | --- | --- |
+| Python checks | Locked extras sync, full Ruff, **1,712 tests passed in 83.23 seconds**, and `uv build` | Synthetic provider/image fixtures, paired-runner failure/budget cases, transport/stdio integration and existing regression suite. No live provider accuracy or gameplay claim. |
+| Distribution contents | Wheel contains all six new implementation modules; source/wheel exclude private artifacts and generated engine directories | Package-content inspection, not an independently installed clean-host acceptance. No new dependency or C++ changes. |
+| Fresh SDK MCP / native smoke | Full catalog **75 tools**, core catalog **7 tools**; required sandbox identity verified; hidden apply call refused before dispatch | `scripts/smoke_efficiency.py` uses official SDK stdio clients and authenticated native reads. No scene edits, camera changes, PIE launch or provider requests. |
+| Catalog measurement | Serialized active schema bytes **115,973 → 5,942** for full versus core | Exact schemas using the same JSON serialization; not token counts, cost, latency or equivalent capability breadth. Core exposes fewer capabilities. |
+| Compact inspection | Three sampled actor rows **2,010 → 985 JSON bytes**; retained bounds/identity/blockers matched native details; paging covered all three; unchanged delta returned zero rows | Row bytes only, excluding response envelopes. This small fixture does not establish end-to-end savings. Full native bounded reads still occur internally. |
+| Native capture comparison | Two same-camera 256-pixel-maximum captures returned real images and comparable receipts; automatic status remained **inconclusive / review required** | Both images were viewed and showed the sandbox blockout. About 13.01% of pixels differed, with maximum channel difference **2/255**, despite unchanged tracked scene state. This is not representative visual-quality acceptance. |
+| Paired benchmark CLI | Four offline synthetic trials executed and reported; synthetic provenance excludes a classifier advantage claim | Real model-specific adapter or independent measured observations remain required. Provider errors, missing trials and invalid identities cannot become a valid completed comparison. |
+| New gameplay composition | Mock native discovery/start/poll/cleanup/capture fixtures passed, including retention and failure cases | No new live PIE/gameplay run. Existing native gameplay evidence below is separate; editor captures are not PIE frames. |
+| Provider and native build | **Zero new provider requests**; no C++ rebuild or editor automation rerun | Explicit health probes were tested through mock transport only. Existing native release evidence is unchanged. No measured Jev workflow speedup or production-readiness claim. |
+
+Local detailed logs and screenshots remain under ignored `artifacts/`; no keys,
+bridge tokens, private scene payloads or provider responses are published. Focused
+checks were used during editing, followed by one full final Python run. The new
+cases cover distinct state, identity, budget, authentication and evidence failures;
+the larger case count is not an efficiency metric.
+
 ## Test-suite value audit after 0.9
 
 On **2026-09-29 UTC**, the [test-value audit](TESTING.md) consolidated two duplicate

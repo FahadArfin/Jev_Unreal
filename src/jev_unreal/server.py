@@ -10,23 +10,28 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field
 
+from .acceptance_workflow import register_acceptance_tools
 from .blueprints import register_blueprint_tools
 from .bridge import UnrealBridge
 from .capture import capture_content
 from .catalog import ToolCatalog
+from .compact import register_compact_tools
 from .config import Settings
 from .decision import DecisionClient
 from .diagnostics import group_diagnostics
 from .domain_workflows import register_domain_tools
 from .errors import JevError
 from .handoff import register_handoff_tools
+from .health import provider_health
 from .infrastructure import register_infrastructure_tools
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
 from .meshes import MeshRecipe, preview_mesh
 from .project_tools import register_project_tools
 from .recipes import register_recipe_resources
+from .routing import selective_route
 from .selection import AssetCandidate, AssetFilters, rank_candidates
 from .spatial import SpatialRecipe, preview_spatial
+from .tool_groups import GroupedMCP, register_group_tools
 from .verification import Check, SceneSnapshots, SessionIdentity, verify_fresh
 from .workflows import CATALOG, Candidate, ExpectedState, Operation, route, triage
 
@@ -47,8 +52,9 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             await decisions.close()
             await bridge.close()
 
-    server = FastMCP(
+    server = GroupedMCP(
         "Jev Unreal",
+        tool_groups=settings.tool_groups,
         instructions=(
             "Jev provides bounded judgments, not code generation or proof. Use deterministic "
             "Unreal tools directly when the next action is known. Decision tools send ONLY their "
@@ -65,6 +71,8 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             "After apply use fresh unreal_verify "
             "and unreal_diff, not only apply readback. If apply times out, inspect unreal_plan "
             "and the scene; never automatically repeat the application."
+            " Prefer unreal_read for compact fields/pages/deltas and jev_tool_groups for the "
+            "active catalog. jev_route_selective uses no cloud unless explicitly requested."
         ),
         lifespan=lifespan,
     )
@@ -82,6 +90,46 @@ def create_server(settings: Settings | None = None) -> FastMCP:
         """Show local provider counters and authenticated Unreal connection identity."""
         editor = await safely(bridge.call("status"))
         return {"decisions": decisions.metrics(), "editor": editor, "catalog": external.status()}
+
+    @server.tool(annotations=cloud)
+    async def jev_provider_health(
+        probe: Annotated[bool, Field(strict=True)] = False,
+    ) -> dict[str, Any]:
+        """Read provider authentication observations. Default makes no cloud request.
+
+        A saved key is not proof of authentication. Explicit probe=true sends one fixed synthetic
+        Decisions request, bypasses cache, and may incur cost. No project data is sent.
+        Editor connectivity/project identity is reported separately by jev_status.
+        """
+        return await safely(provider_health(decisions, probe=probe))
+
+    @server.tool(annotations=cloud)
+    async def jev_route_selective(
+        goal: Annotated[str, Field(min_length=1, max_length=12000)],
+        candidates: Annotated[list[Candidate] | None, Field(max_length=64)] = None,
+        explicit_tool: Annotated[str | None, Field(min_length=1, max_length=128)] = None,
+        allow_cloud: Annotated[bool, Field(strict=True)] = False,
+    ) -> dict[str, Any]:
+        """Use an explicit known tool or sole candidate locally; defer ambiguous choices by default.
+
+        allow_cloud=true permits Jev advice for ambiguity. No tool is executed or authorized.
+        Default candidates are limited to built-in routing entries in this active tool catalog.
+        Supplied external candidates describe advice only, not tools this server can execute.
+        """
+        shortlist = (
+            candidates
+            if candidates is not None
+            else [
+                Candidate(id=name, description=description)
+                for name, description in CATALOG.items()
+                if name in server.enabled_tools
+            ]
+        )
+        return await safely(
+            selective_route(
+                decisions, goal, shortlist, explicit_tool=explicit_tool, allow_cloud=allow_cloud
+            )
+        )
 
     @server.tool(annotations=cloud)
     async def jev_decide(
@@ -649,4 +697,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     register_handoff_tools(server, bridge)
     register_infrastructure_tools(server, bridge)
     register_recipe_resources(server)
+    register_acceptance_tools(server, bridge)
+    register_compact_tools(server, bridge)
+    register_group_tools(server)
     return server

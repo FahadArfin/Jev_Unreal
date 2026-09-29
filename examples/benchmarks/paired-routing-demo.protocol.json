@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "public-cube-bounds-demo",
+  "provenance": "synthetic_demo",
+  "model_id": "synthetic-driver-no-model",
+  "agent_configuration_sha256": "177b6e23217d2ef0fcd92bcfa1a2cc055b02f39307993ec4214f6b439a79107f",
+  "environment_sha256": "c73b4c13d2c4203846b2e8bffc29e089679f7bdacb97a79a95ad7163da0ccf8b",
+  "project_id": "synthetic-owned-sandbox",
+  "catalog_sha256": "2e41f0b69b1857e8af6b1bfc18d2e1f04a9bd45a92b90283164212239de1c6ba",
+  "allowed_tools": [
+    "synthetic_bounds"
+  ],
+  "tasks": [
+    {
+      "id": "cube-bounds",
+      "goal": "Read the synthetic cube bounds and report x/y/z in centimetres.",
+      "initial_state_sha256": "5c35f94f654c4c238a5d31329c3b54ffb6c593088525a4245eaccc098bf20da7",
+      "acceptance_sha256": "69d241b255f309541d0dcad17962afbd34af73102b26967ea8ffc65e11491d40"
+    }
+  ],
+  "repetitions": 2,
+  "seed": 0,
+  "max_tool_calls": 8,
+  "trial_timeout_seconds": 60.0,
+  "total_timeout_seconds": 600.0,
+  "cache_policy": "record_only"
+}

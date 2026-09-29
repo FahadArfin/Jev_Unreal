@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added nine MCP tools (75 total) for compact native field/page/delta inspection,
+  provider authentication observations, selective optional routing, tool-group/schema
+  discovery and repeatable visual/gameplay acceptance evidence.
+- Added startup tool groups that reduce advertised schemas while retaining native
+  authorization. Default catalog and existing tool behavior remain compatible.
+- Added a bounded two-arm workflow benchmark runner, saved-observation validation,
+  failure accounting and a clearly synthetic offline demo; no efficiency claim.
+- Added read-only sandbox coverage for compact inspection, real viewport comparisons
+  and full/core MCP catalogs. No native changes or new provider requests.
 - Audited test value, removed 24 redundant input combinations while retaining all
   fields/failure classes, consolidated duplicate assertions and shortened two mock waits.
 - Avoided duplicate feature-push/PR CI and documented focused iteration with concise logs.

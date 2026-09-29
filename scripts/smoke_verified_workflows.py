@@ -55,7 +55,9 @@ async def main():
                 "set_metadata",
             } <= set(status["capabilities"]), status
             tools = (await session.list_tools()).tools
-            assert len(tools) == 66
+            assert {"unreal_actor_details", "unreal_preview", "unreal_apply", "unreal_verify"} <= {
+                tool.name for tool in tools
+            }
             operations = [
                 {
                     "op": "spawn_primitive",

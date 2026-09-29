@@ -45,8 +45,13 @@ async def main():
                 assert payload.get("ok"), payload
                 return payload["result"]
 
-            report["tool_count"] = len((await session.list_tools()).tools)
-            assert report["tool_count"] == 66
+            tools = (await session.list_tools()).tools
+            report["tool_count"] = len(tools)
+            assert {
+                "unreal_workflow_inspect",
+                "unreal_workflow_preview",
+                "unreal_workflow_apply",
+            } <= {tool.name for tool in tools}
             ready_deadline = time.monotonic() + 90
             while True:
                 ready = (await session.call_tool("unreal_status", {})).structuredContent

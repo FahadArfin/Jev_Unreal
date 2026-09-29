@@ -30,6 +30,10 @@ class DecisionClient:
         self.cache_hits = 0
         self.failures = 0
         self._blocked_until = 0.0
+        self._authentication = "unknown"
+        self._authentication_observed_at: float | None = None
+        self._last_request: dict | None = None
+        self._last_request_at: float | None = None
 
     async def close(self):
         await self._http.aclose()
@@ -42,9 +46,39 @@ class DecisionClient:
             "request_limit": self.settings.max_requests,
             "cache_hits": self.cache_hits,
             "configured": bool(self.settings.api_key),
+            "health": self.health(),
         }
 
-    async def decide(self, state, questions: dict) -> dict:
+    def health(self) -> dict:
+        """Local observations only: key presence and past acceptance are different facts."""
+        now = time.monotonic()
+        return {
+            "key_present": bool(self.settings.api_key),
+            "authentication": {
+                "status": self._authentication,
+                "observed_age_seconds": (
+                    round(max(0, now - self._authentication_observed_at), 3)
+                    if self._authentication_observed_at is not None else None
+                ),
+            },
+            "last_request": (
+                {
+                    **self._last_request,
+                    "observed_age_seconds": round(max(0, now - self._last_request_at), 3),
+                }
+                if self._last_request is not None else None
+            ),
+        }
+
+    def _observe(self, outcome: str, status: int | None, error: str | None = None):
+        observed_at = time.monotonic()
+        self._last_request = {"outcome": outcome, "http_status": status, "error_code": error}
+        self._last_request_at = observed_at
+        if outcome == "success" or status == 401:
+            self._authentication = "authenticated" if outcome == "success" else "rejected"
+            self._authentication_observed_at = observed_at
+
+    async def decide(self, state, questions: dict, *, use_cache: bool = True) -> dict:
         body = request_body(state, questions, self.settings.model)
         if not self.settings.api_key:
             raise JevError("missing_api_key", "Configure the provider API key locally to use Jev.")
@@ -52,7 +86,7 @@ class DecisionClient:
         async with self._lock:
             now = time.monotonic()
             cached = self._cache.get(digest)
-            if cached and now < cached[0]:
+            if use_cache and cached and now < cached[0]:
                 self.cache_hits += 1
                 self._cache.move_to_end(digest)
                 return {**copy.deepcopy(cached[1]), "cached": True, "latency_ms": 0.0}
@@ -62,6 +96,7 @@ class DecisionClient:
                 raise JevError("request_limit", "Session provider request limit reached.")
             self.requests += 1
             start = time.perf_counter()
+            status = None
             try:
                 async with self._http.stream(
                     "POST",
@@ -72,6 +107,7 @@ class DecisionClient:
                     },
                     json=body,
                 ) as response:
+                    status = response.status_code
                     if response.status_code != 200:
                         code = "rate_limited" if response.status_code == 429 else "provider_error"
                         raise JevError(code, f"Provider returned HTTP {response.status_code}.")
@@ -88,6 +124,10 @@ class DecisionClient:
                     ) from None
                 result = validate_answers(raw, body["questions"])
             except (httpx.HTTPError, JevError) as exc:
+                self._observe(
+                    "failed", status,
+                    exc.code if isinstance(exc, JevError) else "provider_unavailable",
+                )
                 self.failures += 1
                 if self.failures >= 3:
                     self._blocked_until = time.monotonic() + 30
@@ -97,16 +137,18 @@ class DecisionClient:
                     "provider_unavailable", "Provider request failed or timed out."
                 ) from None
             self.failures = 0
+            self._observe("success", status)
             result.update(
                 provider=self.settings.provider,
                 cached=False,
                 latency_ms=round((time.perf_counter() - start) * 1000, 2),
             )
-            self._cache[digest] = (
-                time.monotonic() + self.settings.cache_seconds,
-                copy.deepcopy(result),
-            )
-            self._cache.move_to_end(digest)
-            while len(self._cache) > 128:
-                self._cache.popitem(last=False)
+            if use_cache:
+                self._cache[digest] = (
+                    time.monotonic() + self.settings.cache_seconds,
+                    copy.deepcopy(result),
+                )
+                self._cache.move_to_end(digest)
+                while len(self._cache) > 128:
+                    self._cache.popitem(last=False)
             return result

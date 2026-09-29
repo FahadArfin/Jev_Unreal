@@ -131,6 +131,32 @@ Guides: [editing](EDITING_EXTENSIONS.md), [advanced inspection](ADVANCED_INSPECT
 [localization/recipes](LOCALIZATION_RECIPES.md), [acceptance reports](ACCEPTANCE_REPORTS.md).
 The [validation record](VALIDATION.md) records the actual completed checks.
 
+## Implemented next: efficiency and acceptance workflows
+
+This MCP-only development pass implements all six immediate improvements below.
+The default source catalog now contains **75 tools**; selecting `core` exposes
+seven. These changes use the existing 0.9 native bridge and preserve its execution
+and project-policy boundaries.
+
+| Improvement | Implemented behavior | Remaining evidence or limits |
+| --- | --- | --- |
+| Compact responses | Explicit field projections, native safety metadata, frozen pages and fresh selected-field deltas with bounded expiring receipts. | Native reads still fetch full bounded metadata; pagination does not extend the native scan cap. No billed-token or workflow-speed claim. |
+| Selective routing | Explicit tool or sole candidate resolves locally; ambiguous cases defer unless cloud advice is requested. Outcomes retain request/cache/failure accounting. | No learned routing threshold or confidence-based permission. Representative routing-on/off trials remain required. |
+| Provider health | Saved-key presence, dated authentication observation and latest request failure are separate; explicit synthetic probe bypasses cache once. | No automatic probe or claim that historical authentication guarantees current access. Live provider evaluation remains a separate action. |
+| Smaller tool groups | Startup-scoped advertised/callable catalogs, compact group membership, one-schema discovery and exact active catalog hash/byte count. | Clients must reconnect after environment changes. Group selection is context management, not authorization. |
+| Paired workflow benchmarks | Two-arm counterbalanced runner with fresh adapter contexts, frozen identities, budgets, verification, failure/missing accounting and nullable timing/token/cost telemetry; CLI demo/template/report. | The runnable demo uses fake tools. A real agent adapter or independently collected observations are required for a real experiment. |
+| Visual/gameplay acceptance | Identity/camera-bound native images, bounded pixel comparison, explicitly attributed visual review, approved playtest start/poll and post-test evidence. | Pixels do not prove visual quality; editor captures are not PIE frames. Representative project gameplay and human visual acceptance remain open. |
+
+Guides: [compact reads and groups](COMPACT_WORKFLOWS.md),
+[routing and health](ROUTING_HEALTH.md), [paired benchmarks](PAIRED_BENCHMARKS.md),
+[acceptance workflows](ACCEPTANCE_WORKFLOWS.md). See [validation](VALIDATION.md)
+for separate mock, native integration and visual inspection evidence.
+
+The next evidence priorities are real model-specific paired trials when provider
+access is available, representative approved playtests, and clean-host/client
+reconnection checks. Feature breadth alone does not establish readiness for a
+large user population.
+
 ## Remaining acceptance and broader scope
 
 The following earlier backlog is retained to show its original acceptance goals.
