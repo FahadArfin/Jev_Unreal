@@ -1,8 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.10.0a1 (unreleased source; native bridge 0.10.0)
 
-- Added nine MCP tools (75 total) for compact native field/page/delta inspection,
+- Added sixteen MCP tools beyond the prior development catalog: deliberate
+  session tool-group activation, durable recipe runs, file checkpoints/VCS status,
+  approved PIE lifecycle/capture and reviewed static-mesh handoff imports. The
+  full catalog contains 91 tools; core contains eight.
+- Added native selected-field inspection and bounded frozen transport pages,
+  retaining mandatory identity/blockers/truncation and the legacy bridge fallback.
+- Added a real Codex app-server benchmark adapter with isolated dynamic read
+  tools, independent native verification and explicit unknown cost/revision fields.
+  One off-arm smoke passed; the latest provider authentication still returned
+  HTTP 401. No paired advantage or productivity claim is made.
+- Added durable review checkpoints for spatial/layout recipes with atomic
+  one-shot dispatch claims, cancellation before dispatch and observational
+  reconciliation after reconnects. Uncertain outcomes are never replayed.
+- Added unified connection/source diagnostics and concrete repair guidance;
+  local credential presence remains distinct from provider authentication.
+- Added project-approved standalone PIE start/stop review, owned-session
+  receipts and game-viewport capture, plus bounded Actor Blueprint events,
+  primitive variables, branches and three self-only actor calls for a door recipe.
+- Added pinned Git/Perforce inspection and disk-hash checkpoints. Git handles
+  nested project roots; Perforce requires a reviewed TCP endpoint. No automatic
+  save, checkout, backup, revert or restore is introduced.
+- Added reviewed retained-source Blender FBX import/reimport with local aliases,
+  byte hashes, one-shot native plans and fresh dimension/pivot/material-slot checks.
+- Added a compatibility matrix and reproducible clean-host/community acceptance
+  procedure. Independent users, broader native platforms, real Perforce servers,
+  packaged sessions and multiplayer remain outside the established evidence.
+- New native actions require rebuilding the matching plugin. See
+  [validation](docs/VALIDATION.md) for the dated Python, engine, provider and visual
+  results; feature presence alone does not certify a host or workflow.
+
+### Earlier MCP efficiency pass included in this source version
+
+- Added nine MCP tools (75 total) for compact field/page/delta inspection over native reads,
   provider authentication observations, selective optional routing, tool-group/schema
   discovery and repeatable visual/gameplay acceptance evidence.
 - Added startup tool groups that reduce advertised schemas while retaining native
@@ -10,7 +42,7 @@
 - Added a bounded two-arm workflow benchmark runner, saved-observation validation,
   failure accounting and a clearly synthetic offline demo; no efficiency claim.
 - Added read-only sandbox coverage for compact inspection, real viewport comparisons
-  and full/core MCP catalogs. No native changes or new provider requests.
+  and full/core MCP catalogs. That earlier pass changed only the MCP layer.
 - Audited test value, removed 24 redundant input combinations while retaining all
   fields/failure classes, consolidated duplicate assertions and shortened two mock waits.
 - Avoided duplicate feature-push/PR CI and documented focused iteration with concise logs.

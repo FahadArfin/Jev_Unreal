@@ -53,7 +53,7 @@ async def main():
 
                 status, _ = await call("unreal_status")
                 assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
-                assert status["bridge_version"] == "0.9.0"
+                assert status["bridge_version"] == "0.10.0"
                 if initial is None:
                     initial = status
                 for field in ("session_id", "world_path", "revision"):

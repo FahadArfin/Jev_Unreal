@@ -54,7 +54,7 @@ async def main():
         async with ClientSession(read, write) as session:
             await session.initialize()
             status = await context(session)
-            require(status["bridge_version"] == "0.9.0", "Matching native plugin required.")
+            require(status["bridge_version"] == "0.10.0", "Matching native plugin required.")
             require("mesh_attachment_copy" in status["capabilities"], "Missing capability.")
             prefix = "JevHierarchySmoke_" + uuid.uuid4().hex[:12]
             spawned = await typed_edit(session, [{

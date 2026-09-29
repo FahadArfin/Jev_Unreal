@@ -163,6 +163,47 @@ running. The manifest and receipt establish local bookkeeping, not source trust 
 cryptographic authenticity. Power-loss durability and hostile concurrent filesystem
 replacement are not promised.
 
+## OpenRouter authentication
+
+`Set-OpenRouterKey.ps1` confirms local encrypted storage, not provider acceptance.
+It prints the credential path and save time without revealing the key. Run it as
+the same Windows user as the MCP launcher and check that the save time advances.
+The default file is `%LOCALAPPDATA%\JevUnreal\openrouter.dpapi`, resolved through
+Windows' LocalApplicationData known folder.
+
+`Start-Mcp.ps1` prefers `OPENROUTER_API_KEY` already present in its process;
+otherwise it decrypts the saved file. An old environment key can therefore shadow
+a newly saved key. `doctor` reports credential-source metadata without sending a
+provider request. After updating the selected credential, restart the MCP server
+connection: an existing process keeps the key it loaded at startup.
+
+If the setup script prints a new save time but the client sees an older one at the
+same path, inspect the resolved physical path. A Windows MSIX client can read a
+private copy under `%LOCALAPPDATA%\Packages\<package-family>\LocalCache\Local`
+before the file written by an ordinary PowerShell window. `doctor` reports the
+logical and resolved paths and flags this redirection without reading the key.
+See [Microsoft's AppData virtualization behavior](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#appdata-operations-on-windows-10-version-1903-and-later).
+
+Confirm which encrypted file is current before making changes. Preserve a backup
+of a confirmed stale private copy at its explicit physical path, then move that
+copy out of the way and verify that the logical path sees the intended newer save.
+If it does not, restore the backup. Do not remove a whole package cache or copy
+plaintext credentials. Reconnect and perform one explicit health check afterward.
+
+For an explicit live check, `jev_provider_health(probe=true)` sends one bounded
+synthetic Decisions request, subject to the normal session limit; it can consume
+provider usage. `probe=false` only reports past observations. Recognized OpenRouter
+401 expiry responses receive fixed diagnostic guidance; unknown or malformed errors
+retain the generic HTTP status. Provider response bodies are never echoed.
+
+An **expired API key** needs an active replacement from your
+[OpenRouter key settings](https://openrouter.ai/settings/keys). Check its expiry,
+save it through the hidden prompt and reconnect. Changing guardrails, adding
+credits or restarting an unchanged server does not renew an expired credential.
+OpenRouter's separate [current-key endpoint](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key)
+can check authentication without requesting model inference. A rejection there
+also establishes that the failure is not specific to Jev's Decisions payload.
+
 ## What inspection proves
 
 `setup inspect` reports the explicit project path, plugin enablement, managed source

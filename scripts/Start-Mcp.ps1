@@ -38,6 +38,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $jevRepositoryRoot 'pyproject.toml')
 }
 
 $jevPreviousApiKey = [Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY', 'Process')
+$jevPreviousCredentialSource = [Environment]::GetEnvironmentVariable('JEV_CREDENTIAL_SOURCE', 'Process')
 $jevPreviousBridgeToken = [Environment]::GetEnvironmentVariable('JEV_BRIDGE_TOKEN', 'Process')
 $jevPreviousExpectedProject = [Environment]::GetEnvironmentVariable('JEV_EXPECTED_PROJECT', 'Process')
 $jevPreviousCatalogFile = [Environment]::GetEnvironmentVariable('JEV_CATALOG_FILE', 'Process')
@@ -52,6 +53,7 @@ $jevKeyPointer = [IntPtr]::Zero
 $jevExitCode = 1
 
 try {
+    [Environment]::SetEnvironmentVariable('JEV_CREDENTIAL_SOURCE', 'process_environment', 'Process')
     if (-not [string]::IsNullOrWhiteSpace($RuntimeConfig)) {
         [Environment]::SetEnvironmentVariable('JEV_RUNTIME_CONFIG', [IO.Path]::GetFullPath($RuntimeConfig), 'Process')
     }
@@ -97,6 +99,7 @@ try {
                 [Runtime.InteropServices.Marshal]::PtrToStringBSTR($jevKeyPointer),
                 'Process'
             )
+            [Environment]::SetEnvironmentVariable('JEV_CREDENTIAL_SOURCE', 'saved_dpapi', 'Process')
         }
     }
 
@@ -114,6 +117,7 @@ try {
 }
 finally {
     [Environment]::SetEnvironmentVariable('OPENROUTER_API_KEY', $jevPreviousApiKey, 'Process')
+    [Environment]::SetEnvironmentVariable('JEV_CREDENTIAL_SOURCE', $jevPreviousCredentialSource, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_BRIDGE_TOKEN', $jevPreviousBridgeToken, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_EXPECTED_PROJECT', $jevPreviousExpectedProject, 'Process')
     [Environment]::SetEnvironmentVariable('JEV_CATALOG_FILE', $jevPreviousCatalogFile, 'Process')

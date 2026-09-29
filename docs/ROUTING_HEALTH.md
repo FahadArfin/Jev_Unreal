@@ -67,6 +67,12 @@ Update credentials locally using `scripts/Set-OpenRouterKey.ps1`; never paste a
 key into chat or commit it. Restart/reconnect the MCP process to load a changed
 key, then explicitly request a probe if desired.
 
+An OpenRouter 401 with the recognized expiry reason returns fixed guidance to
+replace the expired key. Error-body inspection is limited to 16 KiB and two seconds;
+unknown, malformed, oversized or unreadable errors keep the generic HTTP status.
+Raw messages and metadata are never returned. If a newly saved key still appears
+old, check [credential source and Windows file redirection](SETUP.md#openrouter-authentication).
+
 The implementation is covered with synthetic HTTP fixtures, including 401
 recovery, cache behavior, 403/rate limits/network failures, bounded probes and
 local routing without transport. It does not establish live provider availability

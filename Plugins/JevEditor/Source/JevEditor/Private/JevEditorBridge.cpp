@@ -231,8 +231,9 @@ FString FJevEditorBridge::BoundedResponseBody(const TSharedRef<FJsonObject>& Res
     return Body;
 }
 
-TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
+TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor, const TSet<FString>* Fields) const
 {
+    const auto Want = [Fields](const TCHAR* Name) { return !Fields || Fields->Contains(Name); };
     auto Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("path"), Actor->GetPathName());
     Result->SetStringField(TEXT("instance_id"), SessionId + TEXT(":") + Jev::ObjectIdentity(Actor));
@@ -257,11 +258,11 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
         else Result->SetField(TEXT("static_mesh_path"), MakeShared<FJsonValueNull>());
         Result->SetBoolField(TEXT("collision_enabled"), Component->GetCollisionEnabled() != ECollisionEnabled::NoCollision);
         Result->SetStringField(TEXT("collision_profile"), Component->GetCollisionProfileName().ToString());
-        Result->SetObjectField(TEXT("mesh_settings"), MeshSettingsSnapshot(CaptureMeshSettings(const_cast<AStaticMeshActor*>(StaticActor))));
+        if (Want(TEXT("mesh_settings"))) Result->SetObjectField(TEXT("mesh_settings"), MeshSettingsSnapshot(CaptureMeshSettings(const_cast<AStaticMeshActor*>(StaticActor))));
         Result->SetNumberField(TEXT("material_slot_count"), Component->GetNumMaterials());
         Result->SetNumberField(TEXT("material_override_count"), Component->GetNumOverrideMaterials());
         TArray<TSharedPtr<FJsonValue>> Materials;
-        for (int32 Slot = 0; Slot < FMath::Min(Component->GetNumMaterials(), 64); ++Slot)
+        for (int32 Slot = 0; Want(TEXT("materials")) && Slot < FMath::Min(Component->GetNumMaterials(), 64); ++Slot)
         {
             auto Material = MakeShared<FJsonObject>();
             Material->SetNumberField(TEXT("slot"), Slot);
@@ -273,7 +274,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
             else Material->SetField(TEXT("override_path"), MakeShared<FJsonValueNull>());
             Materials.Add(MakeShared<FJsonValueObject>(Material));
         }
-        Result->SetArrayField(TEXT("materials"), Materials);
+        if (Want(TEXT("materials"))) Result->SetArrayField(TEXT("materials"), Materials);
         Result->SetBoolField(TEXT("materials_truncated"), Component->GetNumMaterials() > 64);
     }
     else
@@ -406,6 +407,7 @@ TSharedRef<FJsonObject> FJevEditorBridge::Execute(const TSharedPtr<FJsonObject>&
         return Jev::Success(StatusSnapshot(World));
     }
     if (Action == TEXT("context")) return Context(World, Params);
+    if (Action == TEXT("compact_read")) return CompactRead(World, Params);
     if (Action == TEXT("plan_status")) return PlanStatus(Params);
     if (Action == TEXT("pending_plans")) return PendingPlans(Params);
     if (GEditor->PlayWorld || GEditor->bIsSimulatingInEditor)

@@ -107,6 +107,18 @@ private:
     TMap<FString, FPlan> Plans;
     TMap<FString, FPlanRecord> PlanRecords;
     TArray<FString> PlanRecordOrder;
+    struct FCompactRead
+    {
+        FString Signature;
+        FString World;
+        FString Revision;
+        double ExpiresAt = 0;
+        int32 Bytes = 0;
+        TArray<TSharedPtr<FJsonValue>> Rows;
+        TSharedPtr<FJsonObject> Metadata;
+    };
+    TMap<FString, FCompactRead> CompactReads;
+    TArray<FString> CompactReadOrder;
     bool bApplyingPlan = false;
     TFunction<bool()> ExternalMutationBlocker;
     uint64 AssetChangeEpoch = 0;
@@ -117,7 +129,8 @@ private:
     TFunction<void()> MeshOperationCallbackForTesting;
 #endif
     FString Revision(UWorld* World) const;
-    TSharedRef<FJsonObject> ActorSnapshot(AActor* Actor) const;
+    TSharedRef<FJsonObject> ActorSnapshot(AActor* Actor, const TSet<FString>* Fields = nullptr) const;
+    TSharedRef<FJsonObject> CompactRead(UWorld* World, const TSharedPtr<FJsonObject>& Params);
     FString ActorEditFingerprint(AActor* Actor) const;
     FString MeshAssetFingerprint(UStaticMesh* Mesh) const;
     FString MaterialAssetFingerprint(UMaterialInterface* Material) const;
@@ -129,7 +142,7 @@ private:
     TArray<FString> ActorEditBlockers(AActor* Actor, bool bAllowMeshAttachments = false) const;
     TSharedRef<FJsonObject> StatusSnapshot(UWorld* World) const;
     TSharedRef<FJsonObject> Context(UWorld* World, const TSharedPtr<FJsonObject>& Params) const;
-    TSharedRef<FJsonObject> AssetDetails(const TSharedPtr<FJsonObject>& Params) const;
+    TSharedRef<FJsonObject> AssetDetails(const TSharedPtr<FJsonObject>& Params, const TSet<FString>* Fields = nullptr) const;
     TSharedRef<FJsonObject> ActorDetails(UWorld* World, const TSharedPtr<FJsonObject>& Params) const;
     TSharedRef<FJsonObject> Validate(UWorld* World, const TSharedPtr<FJsonObject>& Params) const;
     TSharedRef<FJsonObject> Capture(UWorld* World, const TSharedPtr<FJsonObject>& Params) const;

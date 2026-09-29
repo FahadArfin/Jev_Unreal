@@ -58,8 +58,8 @@ if ($AutomationTests -or $RenderedReviewTest -or $LocalizationTests) {
         return
     }
     if ($RenderedReviewTest) {
-        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 6) { throw 'Rendered review automation failed or incomplete.' }
-        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow', 'Jev.Rendered.ReviewNarrowAccessibility', 'Jev.Rendered.DomainMaterialsCamera', 'Jev.Rendered.CameraRenderSettings', 'Jev.Rendered.RuntimeWidgetInspection')) {
+        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 7) { throw 'Rendered review automation failed or incomplete.' }
+        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow', 'Jev.Rendered.ReviewNarrowAccessibility', 'Jev.Rendered.DomainMaterialsCamera', 'Jev.Rendered.CameraRenderSettings', 'Jev.Rendered.RuntimeWidgetInspection', 'Jev.Rendered.RuntimeDoorCapture')) {
             $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
             if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected rendered automation test did not pass: $expectedTest" }
         }
@@ -70,6 +70,10 @@ if ($AutomationTests -or $RenderedReviewTest -or $LocalizationTests) {
     foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback', 'Jev.Editor.ReviewPresentation', 'Jev.Editor.ReviewRecovery', 'Jev.Editor.BlueprintVariants', 'Jev.Editor.BlueprintCompileWorkflow', 'Jev.Editor.BlueprintCompileGuards', 'Jev.Editor.ValidatorCompatibility', 'Jev.Editor.GameplayRecipes', 'Jev.Editor.ReviewAccessibleNames', 'Jev.Editor.BlueprintPinWorkflow', 'Jev.Editor.DomainMaterials', 'Jev.Editor.DomainLights', 'Jev.Editor.DomainSurface', 'Jev.Editor.DomainAssets', 'Jev.Editor.DomainRigWidgets', 'Jev.Editor.DomainPerformance', 'Jev.Editor.ExternalJobApplyGuard', 'Jev.Editor.BlueprintGraphWorkflow', 'Jev.Editor.BlueprintSpecializedCompilation', 'Jev.Editor.MaterialTextureSwitch', 'Jev.Editor.MaterialLayerParameter', 'Jev.Editor.MeshHierarchyCopy', 'Jev.Editor.AdvancedSurfaceSupport', 'Jev.Editor.AdvancedRigSampling', 'Jev.Editor.RuntimeWidgetGuards')) {
         $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
         if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected Unreal automation test did not pass: $expectedTest" }
+    }
+    foreach ($expectedTest in @('Jev.Editor.CompactReadPages', 'Jev.Editor.CompactAssetProjection', 'Jev.Editor.RuntimeDoorWorkflow', 'Jev.Editor.BlueprintGameplayPolicy', 'Jev.Editor.HandoffPolicyGuards', 'Jev.Editor.HandoffPolicyValidation', 'Jev.Editor.HandoffOneShotGuards')) {
+        $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
+        if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected roadmap automation test did not pass: $expectedTest" }
     }
     Write-Output "Unreal automation verified: $passedCount passed, $($report.failed) failed. Report: artifacts\unreal-automation\index.json"
 }

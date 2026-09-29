@@ -7,16 +7,23 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.9 alpha.** Python MCP server + source-built Unreal editor plugin. Current source includes **75 MCP tools** (the 0.9.0a1 release had 66), with optional smaller catalogs. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.10.0a1 alpha source; native bridge 0.10.0.** Python MCP server + source-built Unreal editor plugin, with **91 MCP tools** or an **8-tool core catalog**. Initial target: Windows and Unreal 5.8.2. Python checks and native engine acceptance are separate; other native platforms are not certified. See [compatibility](docs/COMPATIBILITY.md), [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
 
-Unreleased MCP improvements add [compact fields/pages/deltas and tool groups](docs/COMPACT_WORKFLOWS.md),
-[local-first routing and explicit provider health](docs/ROUTING_HEALTH.md),
-[repeatable capture/playtest evidence](docs/ACCEPTANCE_WORKFLOWS.md), and a
-[paired routing-off/on benchmark runner](docs/PAIRED_BENCHMARKS.md). These work
-with the existing 0.9 native bridge. Provider probes remain explicit and optional.
-The benchmark's runnable demo is synthetic; no workflow speedup is claimed.
+New in 0.10: [native compact reads and session tool groups](docs/COMPACT_WORKFLOWS.md),
+[durable recipe review/apply/verification](docs/WORKFLOW_RUNS.md), a more actionable
+[connection doctor](docs/DOCTOR.md), [approved PIE lifecycle/capture and gameplay
+Blueprint vocabulary](docs/RUNTIME_GAMEPLAY.md), [project file checkpoints and
+source-control inspection](docs/CHECKPOINTS.md), and [reviewed Blender static-mesh
+import/reimport](docs/HANDOFF_IMPORT.md). New native actions require the matching
+0.10 plugin; compact inspection retains its older-bridge fallback.
+
+The [real Codex benchmark adapter](docs/BENCHMARK_AGENT.md) has completed one
+independently verified read-only off-arm smoke. OpenRouter authentication now passes
+a fresh Decisions health probe; the paired provider comparison
+has not established a benefit. [Selective routing and provider health](docs/ROUTING_HEALTH.md)
+remain optional. No workflow speedup or lower bill is claimed.
 
 New in 0.9: reviewed Blueprint math-node/link edits, material textures/switches and
 exposed layer parameters, complete approved mesh-hierarchy copies, stronger surface
@@ -25,7 +32,8 @@ runtime widget inspection, camera render settings, optional team policies/leases
 durable receipts and named build/cook/package jobs. A measured Blender handoff,
 connection checks, draft French/Spanish review text and beginner recipes extend
 the everyday workflow. See the [current roadmap](docs/ROADMAP.md#version-09-implementation-pass)
-for supported scopes and acceptance still needed.
+for the earlier feature scope. The [0.10 roadmap](docs/ROADMAP.md#version-010-current-implementation)
+records the current ten improvements and remaining acceptance.
 
 - Jev **Choice, Score and Noul** through OpenRouter's Decisions API or TypeSafe directly.
 - Batched questions, strict response validation, bounded in-memory cache, request limits, timeouts and a circuit breaker.
@@ -118,6 +126,10 @@ Optional real Jev access:
 
 This masked prompt stores your key with Windows user-scoped DPAPI encryption. The MCP launcher decrypts it only into its process environment. Never put keys in source control, chat, command arguments or an Unreal project. Elsewhere, set `OPENROUTER_API_KEY` in the server environment. For direct TypeSafe, set `JEV_PROVIDER=typesafe`, `TYPESAFE_API_KEY` and optionally `JEV_MODEL=jev-1.13.0`.
 
+Saving a key does not validate it with OpenRouter. If authentication fails, see
+[credential troubleshooting](docs/SETUP.md#openrouter-authentication): an expired
+key must be replaced, and a running server must reload its credentials.
+
 If an older version fails with duplicate `ObjectSecurity`/`AuditToString` type-data errors, update to `0.1.0a2` or later and reopen the setup script in a fresh PowerShell window. The corrected scripts load the running shell's native security module directly.
 
 ## Connect an MCP client
@@ -158,12 +170,20 @@ are ignored. `jev-unreal profiles list FILE` lists bindings without reading toke
 
 ## Tools
 
-The server exposes 66 tools. New project workflows require the matching
-native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
+The complete catalog exposes 91 tools; `JEV_TOOL_GROUPS=core` exposes 8. Use
+`jev_tool_groups` and `jev_tool_schema` for exact installed names and schemas.
+Compatible clients can deliberately activate groups without reconnecting. New
+project workflows require the matching native plugin; `jev-unreal doctor`
+reports missing capabilities before you edit.
 
 | Tool | Purpose | Cloud |
 | --- | --- | --- |
 | `jev_status` | Provider counters and editor identity | No |
+| `jev_provider_health` | Separate key presence from observed authentication; explicit probe only | Opt-in |
+| `jev_route_selective` | Resolve obvious choices locally; request optional semantic advice | Opt-in |
+| `jev_tool_groups` / `jev_tool_schema` | Inspect active groups and retrieve one exact schema | No |
+| `jev_tool_groups_activate` | Replace this session's groups and notify a compatible client | No |
+| `unreal_read` | Native selected fields, frozen pages and fresh deltas; legacy fallback | No |
 | `jev_decide` | 1-32 typed questions over explicit shared state | Yes |
 | `jev_route` | Recommend a built-in or supplied candidate tool; may defer | Yes |
 | `jev_triage` | Classify a supplied diagnostic excerpt | Yes |
@@ -229,6 +249,15 @@ native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 | `unreal_named_job_start` | Start that fixed local job once within authorized scope | No |
 | `unreal_named_job` | Read lifecycle and bounded artifact evidence | No |
 | `unreal_named_job_cancel` | Terminate this client's contained job process tree | No |
+| `unreal_workflow_run_preview` / `unreal_workflow_run_apply` | Review a durable recipe, apply once and verify fresh requirements | No |
+| `unreal_workflow_run` / `unreal_workflow_run_cancel` | Inspect/reconcile history or abandon an undispatched run | No |
+| `unreal_project_checkpoint` / `unreal_project_checkpoint_compare` | Record and compare hashes of approved disk files; no backup or restore | No |
+| `unreal_project_vcs_status` | Fixed Git/Perforce status for approved files | Perforce server only |
+| `unreal_runtime_status` / `unreal_runtime_preview` / `unreal_runtime_apply` | Discover and review start/stop of one approved, owned standalone PIE session | No |
+| `unreal_runtime_receipt` / `unreal_runtime_capture` | Observe owned PIE lifecycle and capture its actual viewport | No |
+| `unreal_handoff_bundles` / `unreal_handoff_import_preview` / `unreal_handoff_import_apply` | Review a configured retained-source bundle and import/reimport its approved mesh once | No |
+| `unreal_acceptance_capture` / `unreal_acceptance_compare` | Bind before/after images and explicit visual review to editor evidence | No |
+| `unreal_acceptance_playtest_start` / `unreal_acceptance_playtest_job` | Track approved tests and their acceptance evidence | No |
 
 Example `unreal_preview` arguments:
 
@@ -323,18 +352,19 @@ missing costs, failures and unverified outcomes are never filled in as successes
 
 ## Scope and roadmap
 
-Version 0.4 adds human review, installation lifecycle, multiple editor profiles,
-project inspection, selected validation/gameplay jobs and evaluation infrastructure
-to the inspect/edit/verify loop. It does not include runtime NPC Blueprint nodes,
-arbitrary Blueprint generation, arbitrary code execution, asset deletion/import,
-packaging automation, durable crash recovery, remote/multiuser hosting, or a Blender
-executor. Existing Unreal MCP tools remain useful alongside this server; discovery
-helps find their advertised capabilities without duplicating them.
+Version 0.10 connects measured inspection, concrete review, one-shot changes and
+fresh verification across scene recipes, approved gameplay and static-mesh handoffs.
+Durable history helps explain interrupted operations; it never automatically
+replays uncertain work or restores a project. Named packaging jobs already exist;
+packaged-game and multiplayer acceptance remain separate future work. The bridge
+provides no arbitrary code execution, unrestricted Blueprint generation or general
+Blender executor. Existing Unreal MCP tools can remain useful alongside it.
 
 The [prioritized roadmap](docs/ROADMAP.md) distinguishes these implemented foundations
-from remaining usability/accessibility acceptance, fresh-machine installation,
-representative real workflow studies, reviewed Blueprint editing, terrain/material
-workflows, multiplayer/packaged tests, durable recovery and Blender round trips.
+from remaining usability/accessibility acceptance, independent clean-host installs,
+representative real-agent studies, Perforce compatibility, broader asset round trips
+and multiplayer/packaged tests. Follow the [community acceptance procedure](docs/COMMUNITY_ACCEPTANCE.md)
+to collect evidence on a new host or project.
 More features do not establish support for millions of users. No game-development
 speedup has been established.
 
