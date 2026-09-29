@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Audited test value, removed 24 redundant input combinations while retaining all
+  fields/failure classes, consolidated duplicate assertions and shortened two mock waits.
+- Avoided duplicate feature-push/PR CI and documented focused iteration with concise logs.
+
 ## 0.9.0a1
 
 - Added twelve MCP tools (66 total): reviewed graph previews, live handoff

@@ -547,6 +547,14 @@ def test_native_mesh_readback_requires_all_declared_fields(kind):
         ("label", "Wrong"),
         ("location", [0, 0, 0]),
         ("scale", [1, 1, 1]),
+        ("instance_id", "new\nidentity"),
+        ("instance_id", "new\x7fidentity"),
+        ("instance_id", "new\ud800identity"),
+        ("path", B + "\nOther"),
+        ("path", B + "\ud800"),
+        ("path", "not-an-actor-path"),
+        ("path", "/Temp/*"),
+        ("class", "/Script/Game.DerivedMeshActor"),
     ],
     ids=[
         "source-path",
@@ -559,9 +567,17 @@ def test_native_mesh_readback_requires_all_declared_fields(kind):
         "label",
         "location",
         "scale",
+        "id-newline",
+        "id-del",
+        "id-unicode",
+        "path-newline",
+        "path-unicode",
+        "path",
+        "wildcard",
+        "subclass",
     ],
 )
-def test_duplicate_readback_rejects_source_identity_or_changed_state(field, value):
+def test_duplicate_readback_rejects_invalid_identity_or_changed_state(field, value):
     operation = normalized("duplicate")
     output = after(operation)
     output[field] = value
@@ -696,38 +712,6 @@ def test_mesh_evidence_keeps_literal_label_whitespace(label):
         verify(mesh_checks(operation, A, "source-instance"), details([output]))["status"]
         == "failed"
     )
-
-
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("instance_id", "new\nidentity"),
-        ("instance_id", "new\x7fidentity"),
-        ("instance_id", "new\ud800identity"),
-        ("path", B + "\nOther"),
-        ("path", B + "\ud800"),
-        ("path", "not-an-actor-path"),
-        ("path", "/Temp/*"),
-        ("class", "/Script/Game.DerivedMeshActor"),
-    ],
-    ids=[
-        "id-newline",
-        "id-del",
-        "id-unicode",
-        "path-newline",
-        "path-unicode",
-        "path",
-        "wildcard",
-        "subclass",
-    ],
-)
-def test_malformed_duplicate_identity_cannot_pass_or_generate_invalid_fresh_requirements(
-    field, value
-):
-    operation = normalized("duplicate")
-    output = after(operation)
-    output[field] = value
-    assert verify_readback([operation], [output])["status"] == "mismatch"
 
 
 @pytest.mark.parametrize(

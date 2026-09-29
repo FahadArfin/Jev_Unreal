@@ -271,8 +271,24 @@ def test_partial_failure_measurements_never_compare_as_success(status):
     assert error.value.code == "incomplete_measurement"
 
 
-@pytest.mark.parametrize("metric", ["mean_ms", "p50_ms", "p95_ms"])
-@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), "10", True, None])
+@pytest.mark.parametrize(
+    "metric,value",
+    [
+        ("mean_ms", 0),
+        ("mean_ms", -1),
+        ("mean_ms", float("nan")),
+        ("mean_ms", float("inf")),
+        ("mean_ms", "10"),
+        ("mean_ms", True),
+        ("mean_ms", None),
+        ("p50_ms", float("nan")),
+        ("p95_ms", float("nan")),
+    ],
+    ids=[
+        "mean-zero", "mean-negative", "mean-nan", "mean-infinity", "mean-string",
+        "mean-bool", "mean-missing", "p50-nan", "p95-nan",
+    ],
+)
 def test_invalid_timing_values_rejected(metric, value):
     candidate = capture("b")
     candidate["editor_tick_interval"][metric] = value

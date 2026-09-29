@@ -1,6 +1,22 @@
 # Validation evidence
 
-## Current 0.9 roadmap implementation
+## Test-suite value audit after 0.9
+
+On **2026-09-29 UTC**, the [test-value audit](TESTING.md) consolidated two duplicate
+assertion bodies, removed 24 redundant Cartesian combinations and shortened two
+mock-response waits while strengthening handler-reached assertions. All affected
+fields and invalid input classes remain represented. No production or native
+implementation changed.
+
+Locked extras sync, full Ruff, **1,602 Python tests in 113.71 seconds** and
+`uv build` passed on the existing Windows host. The preceding 0.9 run took 150.30
+seconds; these are individual runs, not a controlled speedup or token-cost study.
+No new Unreal, visual or live-provider tests were run for test/CI/documentation
+changes. Their release evidence remains below. CI now runs the full matrix for
+PRs and `main`, avoiding duplicate feature-push runs; its logs use quiet output
+and short failure tracebacks.
+
+## 0.9 roadmap implementation release evidence
 
 Validated on **2026-09-29 UTC** on the existing Windows 11 development host,
 Python **3.13.2**, licensed **UE 5.8.2-56702186+++UE5+Release-5.8**, and Blender
