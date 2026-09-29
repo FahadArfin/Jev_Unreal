@@ -2,6 +2,7 @@ name: Python checks
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -40,7 +41,7 @@ jobs:
       - name: Lint
         run: uv run --frozen ruff check .
       - name: Test
-        run: uv run --frozen pytest
+        run: uv run --frozen pytest -q --tb=short
       - name: Build Python distribution
         run: uv build
 

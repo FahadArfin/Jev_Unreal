@@ -22,6 +22,13 @@ any limits that remain. Documentation fixes do not require new tests. Add or upd
 meaningful tests when changing parsing, decision validation, permissions, protocol
 behavior, or editor mutations.
 
+During implementation, run the affected tests with `-q --tb=short`; run the full
+required checks once after the final Python/test edits. Save detailed output locally
+and report the result plus relevant failures. Repeat green checks only when another
+edit, failure or unresolved concern warrants it. PRs run the complete Python matrix;
+pushes to `main` verify integration without duplicating every feature-branch PR run.
+See [test value and the suite audit](docs/TESTING.md) before adding or removing cases.
+
 ## Unreal changes
 
 Use a disposable Unreal project for editor experiments. Do not use a production

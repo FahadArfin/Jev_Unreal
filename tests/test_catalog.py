@@ -427,9 +427,17 @@ async def test_semantic_budgets_fail_atomically(tmp_path, limits, pages):
 
 async def test_http_declared_and_streamed_body_budget(tmp_path):
     fake = FakeMCP()
-    catalog = configured(tmp_path, fake, limits=CatalogLimits(max_response_bytes=512))
+    catalog = configured(
+        tmp_path,
+        fake,
+        limits=CatalogLimits(
+            max_response_bytes=512, request_timeout_seconds=0.5, refresh_timeout_seconds=2
+        ),
+    )
+    reached = []
 
     async def declared(request):
+        reached.append("declared")
         return httpx.Response(200, headers={"Content-Length": "999999999"})
 
     fake.failure = declared
@@ -451,6 +459,7 @@ async def test_http_declared_and_streamed_body_budget(tmp_path):
     stream = Stream()
 
     async def streamed(request):
+        reached.append("streamed")
         return httpx.Response(200, headers={"Content-Type": "application/json"}, stream=stream)
 
     fake.failure = streamed
@@ -458,6 +467,8 @@ async def test_http_declared_and_streamed_body_budget(tmp_path):
         await catalog.refresh()
     assert caught.value.code == "catalog_budget_exceeded"
     assert stream.closed
+    assert reached == ["declared", "streamed"]
+    assert fake.methods.count("tools/list") == 2
 
 
 async def test_aggregate_http_budget_and_config_budget(tmp_path):
@@ -592,14 +603,23 @@ async def test_bearer_credentials_only_from_environment_and_never_in_catalog(tmp
 
 async def test_sdk_error_logs_do_not_dump_server_payload(tmp_path, caplog):
     fake = FakeMCP()
-    catalog = configured(tmp_path, fake)
+    catalog = configured(
+        tmp_path,
+        fake,
+        limits=CatalogLimits(request_timeout_seconds=0.5, refresh_timeout_seconds=2),
+    )
+    reached = []
 
     async def malformed(request):
+        reached.append("malformed")
         return httpx.Response(200, json={"jsonrpc": "PRIVATE_METADATA_SENTINEL"})
 
     fake.failure = malformed
     with pytest.raises(JevError):
         await catalog.refresh()
+    assert reached == ["malformed"]
+    assert fake.methods.count("tools/list") == 1
+    assert any(record.name.startswith("mcp.") for record in caplog.records)
     assert "PRIVATE_METADATA_SENTINEL" not in caplog.text
 
 

@@ -447,9 +447,22 @@ def test_missing_or_invalid_instance_identity_is_unverifiable(value):
 
 
 @pytest.mark.parametrize(
-    "field", ["project_file", "session_id", "world_path", "current_level", "revision"]
+    "field,value",
+    [
+        ("project_file", " "),
+        ("project_file", "bad\nidentity"),
+        ("project_file", "bad\x7fidentity"),
+        ("project_file", "bad\ud800"),
+        ("session_id", " "),
+        ("world_path", " "),
+        ("current_level", " "),
+        ("revision", " "),
+    ],
+    ids=[
+        "project-blank", "project-newline", "project-del", "project-invalid-unicode",
+        "session-blank", "world-blank", "level-blank", "revision-blank",
+    ],
 )
-@pytest.mark.parametrize("value", [" ", "bad\nidentity", "bad\x7fidentity", "bad\ud800"])
 def test_inspection_identity_cannot_be_blank_or_contain_controls(field, value):
     assert verify([label_check()], details(**{field: value}))["reason"] == "invalid_actor_details"
 

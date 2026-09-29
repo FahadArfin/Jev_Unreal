@@ -8,6 +8,8 @@
 - Do not commit API keys, bridge tokens, private game data, Unreal binaries, engine source, Saved/Intermediate files, or raw provider payloads.
 - Use the OpenRouter Decisions endpoint, not chat completions. Check current primary provider docs before changing the alpha wire contract.
 - Run `uv sync --locked --all-extras`, `uv run ruff check .`, `uv run pytest`, and `uv build` for Python changes.
+- Use focused tests during iteration and the required full checks once after the final Python/test edits. Repeat completed checks only for new edits, failures, or unresolved concerns. Save full logs locally; report concise summaries and relevant failures.
+- Keep tests for distinct behavior and regressions. Consolidate duplicate bodies and redundant parameter products only when every affected field and failure class keeps coverage; do not pursue a target test count. See `docs/TESTING.md`.
 - Build changed C++ against a licensed Unreal installation. Run `Jev.Editor` automation and the live bridge smoke test in the isolated sandbox.
 - Verify the connected project before edits. Serialize Unreal operations. Never modify another game's open editor during integration tests.
 - Describe mock tests, live provider evaluations, engine builds, editor tests, and visual acceptance separately. Never claim unmeasured efficiency or production readiness.
