@@ -304,7 +304,10 @@ async def run(report):
             await session.initialize()
             stage("sandbox_identity_and_assets")
             tools = {tool.name for tool in (await session.list_tools()).tools}
-            require(len(tools) == 66, "Expected the matching 66-tool MCP catalog.")
+            require(
+                {"unreal_mesh_preview", "unreal_verify"} <= tools,
+                "Required mesh tools are unavailable.",
+            )
             require("unreal_mesh_preview" in tools, "Mesh workflow MCP tool is unavailable.")
             status = await context(session)
             require(status.get("bridge_version") == "0.9.0", "Expected native bridge 0.9.0.")

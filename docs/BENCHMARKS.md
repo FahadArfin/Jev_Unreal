@@ -1,5 +1,10 @@
 # Reproducible routing and workflow evidence
 
+For the same agent with routing disabled versus enabled, use the
+[two-arm workflow runner and report](PAIRED_BENCHMARKS.md). It records failures,
+missing trials and unknown telemetry and complements the three-arm study below.
+Its bundled executable demo uses synthetic tools and does not measure Jev's value.
+
 Jev_Unreal includes a local benchmark harness for comparing a fixed keyword baseline,
 Jev routing, and imported direct-agent observations on the same inputs. Routing selects
 the next tool; it does not run an Unreal workflow. Completion, correction time, failures,

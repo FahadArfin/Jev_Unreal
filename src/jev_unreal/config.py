@@ -45,8 +45,12 @@ class Settings:
     max_requests: int = 100
     cache_seconds: float = 60
     timeout_seconds: float = 15
+    tool_groups: str = "all"
 
     def __post_init__(self):
+        from .tool_groups import parse_groups
+
+        parse_groups(self.tool_groups)
         if self.provider not in {"openrouter", "typesafe"}:
             raise JevError("configuration", "JEV_PROVIDER must be openrouter or typesafe.")
         loopback_url(self.bridge_url)
@@ -107,6 +111,7 @@ class Settings:
                 profile_id=profile_id,
                 catalog_file=os.getenv("JEV_CATALOG_FILE", ""),
                 runtime_config_file=os.getenv("JEV_RUNTIME_CONFIG", ""),
+                tool_groups=os.getenv("JEV_TOOL_GROUPS", "all"),
                 max_requests=int(os.getenv("JEV_MAX_REQUESTS", "100")),
             )
         except ValueError:

@@ -84,7 +84,10 @@ async def connect(stack: AsyncExitStack, path: Path, profile: ConnectionProfile)
     session = await stack.enter_async_context(ClientSession(read, write))
     await session.initialize()
     tools = (await session.list_tools()).tools
-    require(len(tools) == 66, "Each selected MCP server must expose the matching 66-tool catalog.")
+    require(
+        {"unreal_status", "jev_status"} <= {tool.name for tool in tools},
+        "Each connection must expose identity tools.",
+    )
     return session
 
 

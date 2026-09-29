@@ -8,6 +8,11 @@ from .decision import DecisionClient
 from .errors import JevError
 
 CATALOG = {
+    "unreal_read": "Read compact native fields, bounded pages or selected-field changes.",
+    "unreal_acceptance_capture": "Record a repeatable viewport capture and fresh checks.",
+    "unreal_acceptance_compare": "Compare before/after captures for explicit visual review.",
+    "unreal_acceptance_playtest_start": "Start an approved gameplay test bound to a capture.",
+    "unreal_acceptance_playtest_job": "Poll an owned gameplay test and collect its evidence.",
     "unreal_team_status": "Inspect configured project policy, leases and durable outcomes.",
     "unreal_durable_receipts": "List bounded persisted mutation outcomes, including uncertainty.",
     "unreal_project_lease": "Acquire the configured project editing lease without scene edits.",

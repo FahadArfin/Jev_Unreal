@@ -44,7 +44,7 @@ async def main():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {tool.name for tool in (await session.list_tools()).tools}
-            assert len(tools) == 66, tools
+            assert {"unreal_context", "unreal_capture", "unreal_plan"} <= tools
             status = await call(session, "unreal_status")
             assert status["bridge_version"] == "0.9.0"
             assert "blueprint_graph_preview" in status["capabilities"]

@@ -7,9 +7,16 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.9 alpha.** Python MCP server + source-built Unreal editor plugin, with **66 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.9 alpha.** Python MCP server + source-built Unreal editor plugin. Current source includes **75 MCP tools** (the 0.9.0a1 release had 66), with optional smaller catalogs. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
+
+Unreleased MCP improvements add [compact fields/pages/deltas and tool groups](docs/COMPACT_WORKFLOWS.md),
+[local-first routing and explicit provider health](docs/ROUTING_HEALTH.md),
+[repeatable capture/playtest evidence](docs/ACCEPTANCE_WORKFLOWS.md), and a
+[paired routing-off/on benchmark runner](docs/PAIRED_BENCHMARKS.md). These work
+with the existing 0.9 native bridge. Provider probes remain explicit and optional.
+The benchmark's runnable demo is synthetic; no workflow speedup is claimed.
 
 New in 0.9: reviewed Blueprint math-node/link edits, material textures/switches and
 exposed layer parameters, complete approved mesh-hierarchy copies, stronger surface
