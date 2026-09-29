@@ -20,8 +20,8 @@ import/reimport](docs/HANDOFF_IMPORT.md). New native actions require the matchin
 0.10 plugin; compact inspection retains its older-bridge fallback.
 
 The [real Codex benchmark adapter](docs/BENCHMARK_AGENT.md) has completed one
-independently verified read-only off-arm smoke. OpenRouter authentication in the
-latest local attempt still returned HTTP 401, so the paired provider comparison
+independently verified read-only off-arm smoke. OpenRouter authentication now passes
+a fresh Decisions health probe; the paired provider comparison
 has not established a benefit. [Selective routing and provider health](docs/ROUTING_HEALTH.md)
 remain optional. No workflow speedup or lower bill is claimed.
 
@@ -125,6 +125,10 @@ Optional real Jev access:
 ```
 
 This masked prompt stores your key with Windows user-scoped DPAPI encryption. The MCP launcher decrypts it only into its process environment. Never put keys in source control, chat, command arguments or an Unreal project. Elsewhere, set `OPENROUTER_API_KEY` in the server environment. For direct TypeSafe, set `JEV_PROVIDER=typesafe`, `TYPESAFE_API_KEY` and optionally `JEV_MODEL=jev-1.13.0`.
+
+Saving a key does not validate it with OpenRouter. If authentication fails, see
+[credential troubleshooting](docs/SETUP.md#openrouter-authentication): an expired
+key must be replaced, and a running server must reload its credentials.
 
 If an older version fails with duplicate `ObjectSecurity`/`AuditToString` type-data errors, update to `0.1.0a2` or later and reopen the setup script in a fresh PowerShell window. The corrected scripts load the running shell's native security module directly.
 

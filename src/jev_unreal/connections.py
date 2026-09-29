@@ -58,18 +58,34 @@ def credential_diagnostics(
     variable = "OPENROUTER_API_KEY" if settings.provider == "openrouter" else "TYPESAFE_API_KEY"
     name = "openrouter.dpapi" if settings.provider == "openrouter" else "typesafe.dpapi"
     present = bool(env.get(variable))
-    saved = {"present": None, "modified_at_utc": None, "contents_read": False}
+    saved = {
+        "present": None, "modified_at_utc": None, "contents_read": False,
+        "logical_path": None, "resolved_path": None, "redirected": None,
+    }
     directory = credential_directory
     if directory is None and env.get("LOCALAPPDATA"):
         directory = Path(env["LOCALAPPDATA"]) / "JevUnreal"
     if directory is not None:
         try:
             path = local_path(str(Path(directory) / name))
+            saved["logical_path"] = str(path)
             metadata = path.stat()
             saved.update(
                 present=stat.S_ISREG(metadata.st_mode),
                 modified_at_utc=datetime.fromtimestamp(metadata.st_mtime, UTC).isoformat(),
             )
+            if saved["present"]:
+                try:
+                    # On Windows this asks for the final handle path, exposing MSIX
+                    # redirection without reading any credential contents.
+                    resolved = path.resolve(strict=True)
+                except OSError:
+                    saved["resolution_error"] = "unavailable"
+                else:
+                    saved.update(
+                        resolved_path=str(resolved),
+                        redirected=os.path.normcase(str(path)) != os.path.normcase(str(resolved)),
+                    )
         except FileNotFoundError:
             saved["present"] = False
         except (OSError, ValueError, JevError):
@@ -101,6 +117,18 @@ def credential_diagnostics(
                 "affects": "optional_cloud_decisions",
                 "next_action": "The launcher prefers a process environment key over the saved "
                 "file. Update that source locally and reconnect; never paste credentials in chat.",
+            }
+        )
+    if saved["redirected"]:
+        issues.append(
+            {
+                "code": "saved_key_path_redirected",
+                "severity": "warning",
+                "affects": "optional_cloud_decisions",
+                "next_action": "The saved credential resolves to a different physical path. "
+                "A packaged app can retain an older separate copy. Compare both paths and "
+                "timestamps with the setup helper, then correct the intended local "
+                "credential source and reconnect.",
             }
         )
     return {

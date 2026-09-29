@@ -13,6 +13,33 @@ from .config import Settings
 from .errors import JevError
 from .schema import request_body, validate_answers
 
+_AUTH_DIAGNOSTIC_TIMEOUT_SECONDS = 2.0
+
+
+async def _openrouter_authentication_message(response: httpx.Response) -> str:
+    """Map a bounded, known provider error to fixed text; never return its payload."""
+    fallback = "Provider returned HTTP 401."
+    content = bytearray()
+    try:
+        async with asyncio.timeout(_AUTH_DIAGNOSTIC_TIMEOUT_SECONDS):
+            async for chunk in response.aiter_bytes(chunk_size=4096):
+                if len(content) + len(chunk) > 16384:
+                    return fallback
+                content.extend(chunk)
+            raw = json.loads(content)
+    except (TimeoutError, httpx.HTTPError, ValueError, RecursionError):
+        return fallback
+    if (
+        isinstance(raw, dict)
+        and isinstance(raw.get("error"), dict)
+        and raw["error"].get("message") == "API key expired."
+    ):
+        return (
+            "OpenRouter returned HTTP 401: the API key has expired. "
+            "Save an active OpenRouter API key locally, then reconnect the MCP server."
+        )
+    return fallback
+
 
 class DecisionClient:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
@@ -110,7 +137,10 @@ class DecisionClient:
                     status = response.status_code
                     if response.status_code != 200:
                         code = "rate_limited" if response.status_code == 429 else "provider_error"
-                        raise JevError(code, f"Provider returned HTTP {response.status_code}.")
+                        message = f"Provider returned HTTP {response.status_code}."
+                        if self.settings.provider == "openrouter" and status == 401:
+                            message = await _openrouter_authentication_message(response)
+                        raise JevError(code, message)
                     content = bytearray()
                     async for chunk in response.aiter_bytes():
                         content.extend(chunk)

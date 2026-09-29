@@ -10,6 +10,7 @@ import pytest
 
 from jev_unreal import decision
 from jev_unreal.errors import JevError
+from jev_unreal.health import provider_health
 
 
 @pytest.mark.parametrize(
@@ -181,6 +182,124 @@ async def test_status_failures_never_echo_provider_text_or_follow_redirects(
     assert "private scene state" not in caplog.text
     assert secret not in repr(client.settings)
     assert secret not in json.dumps(client.metrics())
+
+
+@pytest.mark.parametrize(
+    ("provider", "body", "expired"),
+    [
+        (
+            "openrouter",
+            b'{"error":{"message":"API key expired.","metadata":"synthetic-test-key"}}',
+            True,
+        ),
+        (
+            "openrouter",
+            b'{"error":{"message":"API key expired."}}'.ljust(16384, b" "),
+            True,
+        ),
+        (
+            "openrouter",
+            b'{"error":{"message":"API key expired. synthetic-test-key"}}',
+            False,
+        ),
+        ("openrouter", b"not JSON: synthetic-test-key", False),
+        ("openrouter", b'["synthetic-test-key"]', False),
+        ("openrouter", b'{"error":{"message":["API key expired."]}}', False),
+        ("typesafe", b'{"error":{"message":"API key expired."}}', False),
+    ],
+    ids=["expired", "size-boundary", "unrecognized", "malformed", "shape", "type", "provider"],
+)
+async def test_authentication_guidance_is_exact_allowlisted_and_reaches_health(
+    provider, body, expired, decision_client_factory, caplog
+):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(401, content=body)
+
+    client = decision_client_factory(handler, provider=provider)
+    health = await provider_health(client, probe=True)
+    error = health["probe"]["error"]
+    assert error["code"] == "provider_error"
+    assert error["message"] == (
+        "OpenRouter returned HTTP 401: the API key has expired. "
+        "Save an active OpenRouter API key locally, then reconnect the MCP server."
+        if expired else "Provider returned HTTP 401."
+    )
+    assert health["authentication"]["status"] == "rejected"
+    assert health["last_request"]["http_status"] == 401
+    assert health["probe"]["request_sent"] is True
+    assert health["probe"]["succeeded"] is False
+    assert len(seen) == client.requests == 1
+    assert "synthetic-test-key" not in json.dumps(health) + caplog.text
+
+
+@pytest.mark.parametrize("failure", ["oversized", "read_error"])
+async def test_authentication_diagnostic_read_failure_preserves_401_and_closes_stream(
+    failure, decision_questions, decision_client_factory, caplog
+):
+    class DiagnosticStream(httpx.AsyncByteStream):
+        def __init__(self):
+            self.chunks_read = 0
+            self.closed = False
+
+        async def __aiter__(self):
+            # Even a recognized error cannot bypass the size limit or a failed read.
+            payload = b'{"error":{"message":"API key expired."}}'
+            for index in range(100):
+                self.chunks_read += 1
+                if failure == "read_error" and index == 1:
+                    raise httpx.ReadError("synthetic-test-key")
+                yield payload.ljust(4096, b" ") if index == 0 else b" " * 4096
+
+        async def aclose(self):
+            self.closed = True
+
+    stream = DiagnosticStream()
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(401, stream=stream)
+
+    client = decision_client_factory(handler)
+    with pytest.raises(JevError) as caught:
+        await client.decide("private scene state", decision_questions)
+    assert caught.value.code == "provider_error"
+    assert str(caught.value) == "Provider returned HTTP 401."
+    assert client.health()["last_request"]["http_status"] == 401
+    assert client.health()["authentication"]["status"] == "rejected"
+    assert len(seen) == client.requests == 1
+    assert stream.chunks_read <= 5
+    assert stream.closed
+    assert "synthetic-test-key" not in json.dumps(caught.value.as_dict()) + caplog.text
+
+
+async def test_authentication_diagnostic_deadline_stops_stalled_body(
+    monkeypatch, decision_client_factory
+):
+    class StalledStream(httpx.AsyncByteStream):
+        closed = False
+
+        async def __aiter__(self):
+            yield b'{"error":{"message":"API key expired."}}'
+            await asyncio.Event().wait()
+
+        async def aclose(self):
+            self.closed = True
+
+    monkeypatch.setattr(decision, "_AUTH_DIAGNOSTIC_TIMEOUT_SECONDS", 0.01)
+    stream = StalledStream()
+    client = decision_client_factory(lambda request: httpx.Response(401, stream=stream))
+    health = await asyncio.wait_for(provider_health(client, probe=True), timeout=1)
+    assert health["probe"]["error"] == {
+        "code": "provider_error", "message": "Provider returned HTTP 401."
+    }
+    assert health["authentication"]["status"] == "rejected"
+    assert health["last_request"]["http_status"] == 401
+    assert client.requests == 1
+    assert stream.closed
 
 
 @pytest.mark.parametrize(

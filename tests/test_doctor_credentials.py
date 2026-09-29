@@ -58,7 +58,69 @@ def test_source_precedence_and_marker_enum_never_leak_secrets(tmp_path, marker, 
     assert report["source_evidence"] == evidence
     assert report["provider_tested"] is False
     assert "private" not in json.dumps(report)
-    assert bool(report["issues"]) is (marker != "saved_dpapi")
+    assert any(
+        issue["code"] == "environment_overrides_saved_key" for issue in report["issues"]
+    ) is (marker != "saved_dpapi")
+
+
+@pytest.mark.parametrize("redirected", [False, True], ids=["same-file", "app-overlay"])
+def test_saved_key_physical_path_diagnoses_redirect_without_reading_contents(
+    tmp_path, monkeypatch, redirected
+):
+    saved = tmp_path / "openrouter.dpapi"
+    saved.write_text("synthetic ciphertext never read")
+    physical = tmp_path / "package-cache" / saved.name if redirected else saved
+
+    def resolve_metadata(path, *, strict=False):
+        assert path == saved
+        assert strict is True
+        return physical
+
+    monkeypatch.setattr(Path, "resolve", resolve_metadata)
+    monkeypatch.setattr(Path, "open", lambda *args, **kwargs: pytest.fail("No contents read"))
+    report = connections.credential_diagnostics(
+        Settings(api_key="synthetic loaded key"),
+        credential_directory=tmp_path,
+        environment={"JEV_CREDENTIAL_SOURCE": "saved_dpapi"},
+    )
+    assert report["saved_file"]["logical_path"] == str(saved)
+    assert report["saved_file"]["resolved_path"] == str(physical)
+    assert report["saved_file"]["redirected"] is redirected
+    assert report["saved_file"]["contents_read"] is False
+    assert report["saved_file"]["present"] is True
+    assert report["selected_source"] == "saved_dpapi"
+    assert report["authentication"] == "unknown"
+    assert report["provider_tested"] is False
+    assert [issue["code"] for issue in report["issues"]] == (
+        ["saved_key_path_redirected"] if redirected else []
+    )
+    if redirected:
+        assert report["issues"][0]["severity"] == "warning"
+        assert "Compare both paths and timestamps" in report["issues"][0]["next_action"]
+    assert "synthetic" not in json.dumps(report)
+
+
+def test_saved_key_resolution_failure_retains_known_metadata(tmp_path, monkeypatch):
+    saved = tmp_path / "openrouter.dpapi"
+    saved.write_text("synthetic ciphertext never read")
+
+    def unavailable(path, *, strict=False):
+        raise OSError("synthetic private diagnostic")
+
+    monkeypatch.setattr(Path, "resolve", unavailable)
+    monkeypatch.setattr(Path, "open", lambda *args, **kwargs: pytest.fail("No contents read"))
+    report = connections.credential_diagnostics(
+        Settings(), credential_directory=tmp_path, environment={}
+    )
+    assert report["saved_file"]["present"] is True
+    assert report["saved_file"]["modified_at_utc"]
+    assert report["saved_file"]["logical_path"] == str(saved)
+    assert report["saved_file"]["resolved_path"] is None
+    assert report["saved_file"]["redirected"] is None
+    assert report["saved_file"]["resolution_error"] == "unavailable"
+    assert report["saved_file"]["contents_read"] is False
+    assert report["issues"][0]["code"] == "saved_key_not_loaded"
+    assert "synthetic" not in json.dumps(report)
 
 
 def test_typesafe_and_unavailable_metadata_are_distinct_from_authentication(tmp_path):
