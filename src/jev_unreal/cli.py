@@ -22,6 +22,7 @@ WORKFLOW_CAPABILITIES = {
 }
 
 PROJECT_WORKFLOW_FEATURES = {
+    "blueprint_graph_editing": ("Reviewed Blueprint graph edits", {"blueprint_graph_preview"}),
     "domain_workflows": (
         "Material, light, camera, terrain, DCC, rig, UI and navigation workflows",
         {"workflow_inspect", "workflow_preview", "workflow_apply", "workflow_receipt"},
@@ -212,7 +213,7 @@ async def run_command(args, settings: Settings) -> dict:
             )
             + (
                 [
-                    "Rebuild and relaunch the matching JevEditor 0.8 or later for: "
+                    "Rebuild and relaunch the matching JevEditor 0.9 or later for: "
                     + ", ".join(
                         feature["label"]
                         for feature in project_features.values()
@@ -275,10 +276,30 @@ def main():
     ).add_argument("file")
     commands.add_parser("doctor", help="Check editor connectivity/configuration; no cloud calls")
     commands.add_parser("layouts", help="Show available measured blockout recipes")
+    recipes = commands.add_parser("recipes", help="Read beginner workflows; no tools execute")
+    recipes.add_argument("--locale", choices=["en", "fr", "es"], default="en")
+    acceptance = commands.add_parser("acceptance", help="Inspect hash-bound acceptance evidence")
+    acceptance_commands = acceptance.add_subparsers(dest="acceptance_command", required=True)
+    acceptance_commands.add_parser("schema", help="Print the acceptance manifest JSON schema")
+    acceptance_commands.add_parser(
+        "report", help="Check explicit local evidence and attestations"
+    ).add_argument("--manifest", required=True)
+    handoff = commands.add_parser("handoff", help="Verify explicit local Blender/Unreal contracts")
+    handoff_commands = handoff.add_subparsers(dest="handoff_command", required=True)
+    handoff_inspect = handoff_commands.add_parser("inspect", help="Check retained bundle files")
+    handoff_inspect.add_argument("manifest")
+    handoff_inspect.add_argument("--root", required=True)
+    handoff_verify = handoff_commands.add_parser("verify", help="Compare recorded Unreal evidence")
+    handoff_verify.add_argument("manifest")
+    handoff_verify.add_argument("--observations", required=True)
+    handoff_verify.add_argument("--tolerance-cm", type=float, default=0.1)
     profiles = commands.add_parser("profiles", help="List explicitly configured editor connections")
     profile_commands = profiles.add_subparsers(dest="profiles_command", required=True)
     profile_commands.add_parser(
         "list", help="Read names and endpoints without tokens"
+    ).add_argument("file")
+    profile_commands.add_parser(
+        "check", help="Authenticate each explicit profile without editing or auto-switching"
     ).add_argument("file")
     setup = commands.add_parser("setup", help="Inspect or review local plugin installation changes")
     setup_commands = setup.add_subparsers(dest="setup_command", required=True)
@@ -322,10 +343,55 @@ def main():
     commands.add_parser("decide", help="Evaluate a JSON state/questions file").add_argument("file")
     args = parser.parse_args()
     try:
+        if args.command == "recipes":
+            from .recipes import recipe_catalog
+
+            print(json.dumps(recipe_catalog(args.locale), indent=2, ensure_ascii=False))
+            return
+        if args.command == "acceptance":
+            from .acceptance import acceptance_schema, inspect_acceptance
+
+            report = (
+                acceptance_schema()
+                if args.acceptance_command == "schema"
+                else inspect_acceptance(args.manifest)
+            )
+            print(json.dumps(report, indent=2, allow_nan=False))
+            if args.acceptance_command == "report" and not report["all_priorities_attested_pass"]:
+                raise SystemExit(1)
+            return
+        if args.command == "handoff":
+            from .handoff import compare_manifest, inspect_bundle, read_manifest
+            from .setup import _absolute, _read
+
+            manifest = read_manifest(args.manifest)
+            result = (
+                inspect_bundle(manifest, args.root)
+                if args.handoff_command == "inspect"
+                else (
+                    compare_manifest(
+                        manifest,
+                        json.loads(_read(_absolute(args.observations), 1024 * 1024)),
+                        args.tolerance_cm,
+                    )
+                )
+            )
+            print(json.dumps(result, indent=2, allow_nan=False))
+            if result["status"] != "passed":
+                raise SystemExit(1)
+            return
         if args.command == "setup":
             print(json.dumps(setup_command(args), indent=2, allow_nan=False))
             return
         if args.command == "profiles":
+            if args.profiles_command == "check":
+                from .connections import check_profiles
+
+                report = asyncio.run(check_profiles(args.file))
+                print(json.dumps(report, indent=2, allow_nan=False))
+                if not report["all_connected"]:
+                    raise SystemExit(1)
+                return
             from .profiles import summaries
 
             print(json.dumps({"profiles": summaries(args.file)}, indent=2, allow_nan=False))

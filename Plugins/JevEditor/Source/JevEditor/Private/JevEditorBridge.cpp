@@ -243,6 +243,13 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
     const FRotator Rotation = Actor->GetActorRotation();
     Result->SetArrayField(TEXT("rotation"), Jev::Vector(FVector(Rotation.Pitch, Rotation.Yaw, Rotation.Roll)));
     Result->SetArrayField(TEXT("scale"), Jev::Vector(Actor->GetActorScale3D()));
+    const AActor* AttachmentParent = Actor->GetAttachParentActor();
+    if (AttachmentParent) { Result->SetStringField(TEXT("attachment_parent_path"), AttachmentParent->GetPathName()); Result->SetStringField(TEXT("attachment_parent_instance_id"), SessionId + TEXT(":") + Jev::ObjectIdentity(AttachmentParent)); }
+    else { Result->SetField(TEXT("attachment_parent_path"), MakeShared<FJsonValueNull>()); Result->SetField(TEXT("attachment_parent_instance_id"), MakeShared<FJsonValueNull>()); }
+    if (const USceneComponent* Root = Actor->GetRootComponent())
+    {
+        auto Relative = MakeShared<FJsonObject>(); const FRotator R = Root->GetRelativeRotation(); Relative->SetArrayField(TEXT("location"), Jev::Vector(Root->GetRelativeLocation())); Relative->SetArrayField(TEXT("rotation"), Jev::Vector(FVector(R.Pitch, R.Yaw, R.Roll))); Relative->SetArrayField(TEXT("scale"), Jev::Vector(Root->GetRelativeScale3D())); Result->SetObjectField(TEXT("attachment_relative_transform"), Relative); Result->SetStringField(TEXT("attachment_socket"), Root->GetAttachSocketName().ToString());
+    }
     if (const AStaticMeshActor* StaticActor = Cast<AStaticMeshActor>(Actor))
     {
         const UStaticMeshComponent* Component = StaticActor->GetStaticMeshComponent();
@@ -280,17 +287,17 @@ TSharedRef<FJsonObject> FJevEditorBridge::ActorSnapshot(AActor* Actor) const
     return Result;
 }
 
-TArray<FString> FJevEditorBridge::ActorEditBlockers(AActor* Actor) const
+TArray<FString> FJevEditorBridge::ActorEditBlockers(AActor* Actor, bool bAllowMeshAttachments) const
 {
     TArray<FString> Blockers;
     if (!IsValid(Actor)) { Blockers.Add(TEXT("actor_unavailable")); return Blockers; }
     if (Actor->GetClass() != AStaticMeshActor::StaticClass()) Blockers.Add(TEXT("unsupported_class"));
     if (!Actor->GetRootComponent()) Blockers.Add(TEXT("missing_root"));
-    if (Actor->GetAttachParentActor()) Blockers.Add(TEXT("attached_parent"));
+    if (!bAllowMeshAttachments && Actor->GetAttachParentActor()) Blockers.Add(TEXT("attached_parent"));
     if (Actor->GetParentActor()) Blockers.Add(TEXT("child_actor"));
     TArray<AActor*> Attached;
     Actor->GetAttachedActors(Attached);
-    if (!Attached.IsEmpty()) Blockers.Add(TEXT("attached_children"));
+    if (!bAllowMeshAttachments && !Attached.IsEmpty()) Blockers.Add(TEXT("attached_children"));
     if (Actor->IsLockLocation()) Blockers.Add(TEXT("actor_locked"));
     if (!Actor->IsEditable()) Blockers.Add(TEXT("actor_read_only"));
     if (!Actor->GetLevel() || FLevelUtils::IsLevelLocked(Actor->GetLevel())) Blockers.Add(TEXT("level_locked"));
@@ -308,6 +315,11 @@ FString FJevEditorBridge::ActorEditFingerprint(AActor* Actor) const
     State->SetStringField(TEXT("level_id"), Jev::ObjectIdentity(Actor->GetLevel()));
     State->SetStringField(TEXT("transform"), Actor->GetActorTransform().ToString());
     State->SetArrayField(TEXT("pivot_offset"), Jev::Vector(Actor->GetPivotOffset()));
+    if (const USceneComponent* Root = Actor->GetRootComponent())
+    {
+        State->SetStringField(TEXT("attachment_parent"), Jev::ObjectIdentity(Root->GetAttachParent())); State->SetStringField(TEXT("attachment_socket"), Root->GetAttachSocketName().ToString()); State->SetStringField(TEXT("attachment_relative"), Root->GetRelativeTransform().ToString());
+        TArray<FString> Children; for (const USceneComponent* Child : Root->GetAttachChildren()) Children.Add(Jev::ObjectIdentity(Child)); Children.Sort(); State->SetStringField(TEXT("attachment_children"), FString::Join(Children, TEXT("|")));
+    }
     if (const AStaticMeshActor* StaticActor = Cast<AStaticMeshActor>(Actor))
     {
         const UStaticMeshComponent* Component = StaticActor->GetStaticMeshComponent();
@@ -404,7 +416,11 @@ TSharedRef<FJsonObject> FJevEditorBridge::Execute(const TSharedPtr<FJsonObject>&
     if (Action == TEXT("capture")) return Capture(World, Params);
     if (Action == TEXT("frame")) return Frame(World, Params);
     if (Action == TEXT("preview")) return Preview(World, Params);
-    if (Action == TEXT("apply")) return ApplyTracked(World, Params);
+    if (Action == TEXT("apply"))
+    {
+        if (ExternalMutationBlocker && ExternalMutationBlocker()) return Error(TEXT("job_busy"), TEXT("A project validation, functional, Blueprint or workflow job is active. Inspect its outcome before applying a scene plan."));
+        return ApplyTracked(World, Params);
+    }
     if (Action != TEXT("actors") && Action != TEXT("assets"))
         return Error(TEXT("unknown_action"), TEXT("Supported actions: status, context, actors, actor_details, assets, asset_details, validate, capture, frame, preview, apply, plan_status, pending_plans."));
 

@@ -1,6 +1,6 @@
 # Reusable gameplay test recipes
 
-The source-only `JevSandbox` example now contains four project-owned
+The source-only `JevSandbox` example now contains five project-owned
 `AFunctionalTest` recipes. They use the existing named functional-test adapter;
 there is no new execution endpoint or model-generated callback. Each recipe runs
 in PIE, observes actual native gameplay state, and reports Unreal's native result.
@@ -11,20 +11,25 @@ in PIE, observes actual native gameplay state, and reports Unreal's native resul
 | `AJevInteractionRecipe` | A native interaction interface; out-of-range rejection; accepted nearby use; consumed-target rejection | `bDisableInteraction=true` prevents the nearby use |
 | `AJevCombatRecipe` | `UGameplayStatics::ApplyDamage`; 25% armor; health reduction; overkill clamping and dead-target rejection | `DamageScale=0` prevents health from changing |
 | `AJevNavigationRecipe` | Projection of two configured endpoints onto existing navigation and a complete, finite native path connecting them | A destination outside the built navmesh fails projection; partial paths cannot pass |
+| `AJevPawnTraversalRecipe` | Actual `CharacterMovement` ticks through an owned corridor and 20 cm step, with a 30 cm capsule radius and 45 cm configured maximum step | `bBlockPath=true` replaces the step with a wall; failure to reach the destination in six seconds fails the recipe |
 
 These are working examples of the test pattern, not proof that another project's
-doors, interactions, combat or AI work. Navigation verifies path reachability,
-not controller movement, animation, avoidance or network replication.
+doors, interactions, combat or AI work. The navigation recipe verifies path
+reachability. The separate traversal recipe moves its own native Character;
+neither certifies a project's controller, animation, avoidance or replication.
 
 ## Use the example in Unreal
 
 1. Build the supplied `examples/JevSandbox/JevSandbox.uproject` and open it.
 2. In your own disposable test map, place the relevant `Jev Door Recipe`,
-   `Jev Interaction Recipe`, `Jev Combat Recipe` or `Jev Navigation Recipe` actor.
+   `Jev Interaction Recipe`, `Jev Combat Recipe`, `Jev Navigation Recipe` or
+   `Jev Pawn Traversal Recipe` actor.
 3. For navigation, provide a built navmesh and place the recipe on it. Its
    `DestinationOffset` defaults to 400 cm along X. Both endpoints must project
    within `EndpointTolerance` (default 50 cm). The recipe only queries existing
    navigation; missing navigation data is an error, never a successful skip.
+   Traversal builds only its owned transient physical fixture 2,000 cm above the
+   recipe location. Provide a clear area there; it never rebuilds navigation.
 4. Save the map yourself and copy the exact recipe actor path. Add only the
    approved aliases and their exact paths to `Config/DefaultGame.ini`, following
    [the example policy](../examples/recipes/DefaultGame.recipe-policy.example.ini).
@@ -72,25 +77,33 @@ another owner are intentionally left alone; custom project teardown must account
 for such ownership transfers.
 
 The navigation recipe spawns no actor and changes no navmesh. The other recipes
-spawn their own small native subjects at the test actor's location and do not
-use the player's pawn. Keep fixture locations away from unrelated gameplay and
+spawn their own native subjects at recipe-defined positions and do not use the
+player's pawn. Keep fixture locations away from unrelated gameplay and
 provide any additional project isolation your adapted subjects require.
 
+Traversal places its fixture above the recipe location. Its Character moves
+through the native movement component without teleportation or possession of a
+player pawn. The positive case requires at least 380 cm of observed forward
+travel, a measured rise onto the 20 cm step, and a return to walkable ground.
+The negative case must fail against the blocking wall. Both destroy their owned
+floor, walls, obstacle and Character during cleanup.
+
 `ObservationCount`, `LastObservation`, and `CleanupCount` are transient properties
-on the native recipe. Navigation also records `ObservedPathLength`. The MCP
+on the native recipe. Navigation also records `ObservedPathLength`; traversal
+records `ObservedTravelCm` and `ObservedStepRiseCm`. The MCP
 receipt uses the existing bounded native result, elapsed time and cleanup fields;
 it does not upload arbitrary actor data. As with all project callbacks, the
 bridge cannot prove that unrelated custom code avoided every side effect.
 
 ## Native acceptance fixture
 
-`Jev.Editor.GameplayRecipes` discovers only the four exact classes in the loaded
+`Jev.Editor.GameplayRecipes` discovers only the five exact classes in the loaded
 `JevSandbox` source module. It constructs an unsaved floor and bounds using Unreal's
 native cube builder, builds actual navigation data, and waits for a usable route.
 It then starts its own standalone PIE session and configures exact temporary
 actor aliases in memory. Through the real functional adapter it runs:
 
-- One successful and one deliberately broken case for each of the four recipes.
+- One successful and one deliberately broken case for each of the five recipes.
 - A repeated door run to check fresh setup and cleanup across runs.
 - Observed native result, observation count, exactly one cleanup per run, removal
   of owned subjects, and survival of an unrelated editor actor.
@@ -103,3 +116,6 @@ executed results belong in [validation evidence](VALIDATION.md).
 
 See [project-owned functional tests](FUNCTIONAL_TESTS.md) for authorization,
 identity checks, cancellation, limitations and receipt semantics.
+See [advanced inspections](ADVANCED_INSPECTIONS.md) for separate bounded
+navigation geometry probes and the distinction between collision checks and
+actual pawn traversal.

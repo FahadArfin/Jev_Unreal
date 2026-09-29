@@ -4,21 +4,23 @@ param(
     [switch]$Headless,
     [switch]$AutomationTests,
     [switch]$RenderedReviewTest,
+    [switch]$LocalizationTests,
     [switch]$Unattended,
     [ValidateRange(1024, 65535)][int]$Port = 9845
 )
 $ErrorActionPreference = 'Stop'
+if ($LocalizationTests -and ($RenderedReviewTest -or $AutomationTests)) { throw 'Run localization acceptance separately after Build-Localization.ps1.' }
 if ($RenderedReviewTest -and ($Headless -or $AutomationTests)) { throw 'RenderedReviewTest requires a rendered editor; run it separately from headless automation.' }
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $projectFile = Join-Path $repositoryRoot 'examples\JevSandbox\JevSandbox.uproject'
 $editorFile = Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor.exe'
-if ($Headless -or $AutomationTests) { $editorFile = Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe' }
+if ($Headless -or $AutomationTests -or $LocalizationTests) { $editorFile = Join-Path $EngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe' }
 if (-not (Test-Path -LiteralPath $editorFile -PathType Leaf)) { throw "UnrealEditor.exe not found beneath $EngineRoot" }
-if (-not $AutomationTests -and ($env:JEV_BRIDGE_TOKEN.Length -lt 32 -or $env:JEV_BRIDGE_TOKEN.Length -gt 256 -or $env:JEV_BRIDGE_TOKEN -notmatch '^[\x21-\x7E]+$')) {
+if (-not ($AutomationTests -or $LocalizationTests) -and ($env:JEV_BRIDGE_TOKEN.Length -lt 32 -or $env:JEV_BRIDGE_TOKEN.Length -gt 256 -or $env:JEV_BRIDGE_TOKEN -notmatch '^[\x21-\x7E]+$')) {
     throw 'Set JEV_BRIDGE_TOKEN to a random 32-256 character printable ASCII secret before launching. Never pass the token as a command-line argument.'
 }
 $editorArguments = @(('"' + $projectFile + '"'), '-NoSplash', '-NoSound', '-NoLiveCoding', '-NoSourceControl')
-if ($Headless -or $AutomationTests) { $editorArguments += @('-NullRHI', '-Unattended', '-NoPause') }
+if ($Headless -or $AutomationTests -or $LocalizationTests) { $editorArguments += @('-NullRHI', '-Unattended', '-NoPause') }
 elseif ($Unattended -and -not $RenderedReviewTest) { $editorArguments += @('-Unattended', '-NoPause') }
 if ($AutomationTests) {
     $reportPath = Join-Path $repositoryRoot 'artifacts\unreal-automation'
@@ -28,13 +30,17 @@ if ($RenderedReviewTest) {
     $reportPath = Join-Path $repositoryRoot 'artifacts\unreal-rendered'
     $editorArguments += @('-Unattended', '-NoPause', '-ExecCmds="Automation RunTests Jev.Rendered"', '-TestExit="Automation Test Queue Empty"', ('-ReportExportPath="' + $reportPath + '"'))
 }
+if ($LocalizationTests) {
+    $reportPath = Join-Path $repositoryRoot 'artifacts\unreal-localization'
+    $editorArguments += @('-ExecCmds="Automation RunTests Jev.Localization"', '-TestExit="Automation Test Queue Empty"', ('-ReportExportPath="' + $reportPath + '"'))
+}
 $jevPreviousPort = $env:JEV_BRIDGE_PORT
 $env:JEV_BRIDGE_PORT = [string]$Port
 $startedAt = Get-Date
 try { $process = Start-Process -FilePath $editorFile -ArgumentList $editorArguments -PassThru -WindowStyle Hidden }
 finally { $env:JEV_BRIDGE_PORT = $jevPreviousPort }
 Write-Output "Started isolated JevSandbox editor (PID $($process.Id))."
-if ($AutomationTests -or $RenderedReviewTest) {
+if ($AutomationTests -or $RenderedReviewTest -or $LocalizationTests) {
     if (-not $process.WaitForExit(600000)) {
         Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
         throw 'Isolated Unreal automation exceeded 10 minutes. Inspect the sandbox log.'
@@ -45,17 +51,23 @@ if ($AutomationTests -or $RenderedReviewTest) {
     if ((Get-Item -LiteralPath $reportFile).LastWriteTime -lt $startedAt) { throw 'The automation report is stale.' }
     $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
     $passedCount = [int]$report.succeeded + [int]$report.succeededWithWarnings
+    if ($LocalizationTests) {
+        $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq 'Jev.Localization.CultureSwitch' })
+        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 1 -or $testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw 'Compiled localization acceptance failed or incomplete.' }
+        Write-Output 'Compiled French/Spanish culture switching passed; human translation review remains open.'
+        return
+    }
     if ($RenderedReviewTest) {
-        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 4) { throw 'Rendered review automation failed or incomplete.' }
-        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow', 'Jev.Rendered.ReviewNarrowAccessibility', 'Jev.Rendered.DomainMaterialsCamera')) {
+        if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -ne 6) { throw 'Rendered review automation failed or incomplete.' }
+        foreach ($expectedTest in @('Jev.Rendered.ReviewPanel', 'Jev.Rendered.ReviewWorkflow', 'Jev.Rendered.ReviewNarrowAccessibility', 'Jev.Rendered.DomainMaterialsCamera', 'Jev.Rendered.CameraRenderSettings', 'Jev.Rendered.RuntimeWidgetInspection')) {
             $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
             if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected rendered automation test did not pass: $expectedTest" }
         }
         Write-Output 'Rendered review automation passed. Inspect Saved/Automation/Jev/Review*.png for visual acceptance.'
         return
     }
-    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 40) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
-    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback', 'Jev.Editor.ReviewPresentation', 'Jev.Editor.ReviewRecovery', 'Jev.Editor.BlueprintVariants', 'Jev.Editor.BlueprintCompileWorkflow', 'Jev.Editor.BlueprintCompileGuards', 'Jev.Editor.ValidatorCompatibility', 'Jev.Editor.GameplayRecipes', 'Jev.Editor.ReviewAccessibleNames', 'Jev.Editor.BlueprintPinWorkflow', 'Jev.Editor.DomainMaterials', 'Jev.Editor.DomainLights', 'Jev.Editor.DomainSurface', 'Jev.Editor.DomainAssets', 'Jev.Editor.DomainRigWidgets', 'Jev.Editor.DomainPerformance')) {
+    if ([int]$report.failed -ne 0 -or [int]$report.notRun -ne 0 -or [int]$report.inProcess -ne 0 -or $passedCount -lt 49) { throw "Unreal automation failed or incomplete: passed=$passedCount, failed=$($report.failed)." }
+    foreach ($expectedTest in @('Jev.Editor.PlanLifecycle', 'Jev.Editor.PlanSafety', 'Jev.Editor.SchemaSafety', 'Jev.Editor.ContextInspection', 'Jev.Editor.SceneValidation', 'Jev.Editor.AssetInspection', 'Jev.Editor.CaptureSafety', 'Jev.Editor.FrameSafety', 'Jev.Editor.StaticMeshPlacement', 'Jev.Editor.ActorDetails', 'Jev.Editor.ExpectedState', 'Jev.Editor.MetadataEdits', 'Jev.Editor.MaterialEdits', 'Jev.Editor.EditRollback', 'Jev.Editor.NativePlanHistory', 'Jev.Editor.ReviewSelection', 'Jev.Editor.BlueprintInspection', 'Jev.Editor.AssetProjectInspection', 'Jev.Editor.ValidationJobs', 'Jev.Editor.ValidationJobSafety', 'Jev.Editor.FunctionalJobs', 'Jev.Editor.MeshReplacement', 'Jev.Editor.MeshDuplicate', 'Jev.Editor.MeshGuards', 'Jev.Editor.MeshRollback', 'Jev.Editor.ReviewPresentation', 'Jev.Editor.ReviewRecovery', 'Jev.Editor.BlueprintVariants', 'Jev.Editor.BlueprintCompileWorkflow', 'Jev.Editor.BlueprintCompileGuards', 'Jev.Editor.ValidatorCompatibility', 'Jev.Editor.GameplayRecipes', 'Jev.Editor.ReviewAccessibleNames', 'Jev.Editor.BlueprintPinWorkflow', 'Jev.Editor.DomainMaterials', 'Jev.Editor.DomainLights', 'Jev.Editor.DomainSurface', 'Jev.Editor.DomainAssets', 'Jev.Editor.DomainRigWidgets', 'Jev.Editor.DomainPerformance', 'Jev.Editor.ExternalJobApplyGuard', 'Jev.Editor.BlueprintGraphWorkflow', 'Jev.Editor.BlueprintSpecializedCompilation', 'Jev.Editor.MaterialTextureSwitch', 'Jev.Editor.MaterialLayerParameter', 'Jev.Editor.MeshHierarchyCopy', 'Jev.Editor.AdvancedSurfaceSupport', 'Jev.Editor.AdvancedRigSampling', 'Jev.Editor.RuntimeWidgetGuards')) {
         $testResult = @($report.tests | Where-Object { $_.fullTestPath -eq $expectedTest })
         if ($testResult.Count -ne 1 -or $testResult[0].state -ne 'Success') { throw "Expected Unreal automation test did not pass: $expectedTest" }
     }

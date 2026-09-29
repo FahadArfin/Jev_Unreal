@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.0a1
+
+- Added twelve MCP tools (66 total): reviewed graph previews, live handoff
+  verification, team status/leases, durable receipts and named local job lifecycle.
+- Added explicit pure-math Blueprint graph operations with identity/type/cycle
+  guards, fresh compilation, Undo and specialized Blueprint compilation fixtures.
+- Extended material edits to exposed layer/blend parameters, approved textures
+  and static switches; added reviewed camera exposure/view/realtime/motion controls.
+- Added complete approved native mesh-hierarchy copying and fresh attachment
+  verification, including stale/partial-failure protection and rollback.
+- Extended terrain support, navigation geometry, root-motion/skin-weight diagnosis,
+  runtime widget inspection and engine-published timing measurements with explicit
+  uncertainty and attribution limits. Added real pawn traversal and rendered UI fixtures.
+- Added opt-in local team policies, renewable cross-process leases and private
+  durable metadata receipts. Lost outcomes remain uncertain and are never replayed.
+- Added named Windows build/cook/package jobs with exact project/engine pins,
+  bundled .NET selection, one-shot plans, process-tree containment and budgets.
+- Added retained-source Blender export, hashed handoff manifests and measured
+  Blender/Unreal/Blender calibration checks without arbitrary bridge execution.
+- Added explicit-profile connection checks, richer installation prerequisites,
+  hash-bound acceptance reports, draft French/Spanish localization and eight
+  beginner recipes in English/French/Spanish.
+- Closed a native job concurrency gap for scene apply, including the review panel.
+- Independent user studies, clean-host and broader native-platform certification
+  remain open. See [validation](docs/VALIDATION.md) for measured evidence and limits.
+
 ## 0.8.0a1
 
 - Added ten MCP tools (54 total) covering the next ten roadmap engineering slices.

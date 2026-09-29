@@ -6,6 +6,7 @@
 #include "JevGameplayRecipes.generated.h"
 
 class UBoxComponent;
+class ACharacter;
 
 /** Example project contract. Replace this with the interaction interface your game owns. */
 UINTERFACE(MinimalAPI)
@@ -135,4 +136,24 @@ public:
     UPROPERTY(VisibleInstanceOnly, Transient, Category="Recipe evidence") double ObservedPathLength = 0;
 protected:
     virtual void RunScenario() override;
+};
+
+/** Moves only its own transient Character through an owned corridor and step. */
+UCLASS(NotBlueprintable)
+class AJevPawnTraversalRecipe : public AJevGameplayRecipe
+{
+    GENERATED_BODY()
+public:
+    AJevPawnTraversalRecipe();
+    virtual void Tick(float DeltaSeconds) override;
+    UPROPERTY(EditInstanceOnly, Category="Recipe regression") bool bBlockPath = false;
+    UPROPERTY(VisibleInstanceOnly, Transient, Category="Recipe evidence") double ObservedTravelCm = 0;
+    UPROPERTY(VisibleInstanceOnly, Transient, Category="Recipe evidence") double ObservedStepRiseCm = 0;
+protected:
+    virtual void RunScenario() override;
+private:
+    UPROPERTY(Transient) TObjectPtr<ACharacter> Subject;
+    FVector Origin = FVector::ZeroVector;
+    float Elapsed = 0;
+    bool bTraversing = false;
 };

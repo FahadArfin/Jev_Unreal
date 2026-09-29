@@ -1,6 +1,82 @@
 # Validation evidence
 
-## Current 0.8 domain workflows
+## Current 0.9 roadmap implementation
+
+Validated on **2026-09-29 UTC** on the existing Windows 11 development host,
+Python **3.13.2**, licensed **UE 5.8.2-56702186+++UE5+Release-5.8**, and Blender
+**5.2.1 LTS**. Unreal work used the exact repository JevSandbox; no other game's
+editor was used. [Current roadmap](ROADMAP.md#version-09-implementation-pass).
+
+| Evidence | Result | Scope |
+| --- | --- | --- |
+| Python | **1,626 passed**, **150.30 seconds** | Typed contracts, synthetic transports, real local stdio/process/lease tests and refusal fixtures. Not Unreal or provider accuracy evidence. |
+| Environment and package | Locked extras sync, Ruff, source/wheel builds and separate installed-wheel checks passed | Installed wheel exposes 66 tools and eight French recipes; generated native resources/binaries, private state and game data are excluded. |
+| Licensed C++ build | Passed; final incremental compile/link **21.79 seconds** | Installed Win64 UE 5.8.2 only; engine-header/toolchain preference warnings remain. |
+| Editor automation | **49/49 passed**, 46 clean and three warning-bearing suites | New graph, material layer/texture/switch, hierarchy rollback, terrain, rig, runtime guards and job exclusion coverage. |
+| Rendered automation | **6/6 passed**, five clean and one warning-bearing suite | Review UI, material/camera workflows and actual PIE widget geometry/focus/overflow captures. |
+| Localization | Source-catalog compilation and **1/1 culture-switch suite passed** | Actual French/Spanish FText lookup and restoration; draft translations still require human review. |
+| Source installer | **14/14 lifecycle checks passed** for Blueprint-style and C++-style descriptors | Real 0.8 → 0.9 sources, interruption/recovery, hashes, modified-file preservation, repair/removal. Existing host, not clean-machine acceptance. |
+| Named engine jobs | Real build produced a DLL/hash; build/cook/package rerun exited zero; package produced five candidate artifacts | No-op build and Zen-store cook correctly reported `output_unverified`; conventional package output was observed. |
+| Packaged startup | Win64 Development executable initialized, loaded its default map and exited zero under NullRHI | Startup only; no packaged gameplay, input, visuals, network or performance acceptance. |
+| Blender handoff | Original static calibration prop passed Blender → Unreal → Blender dimensions/pivot checks | Retained editable source and generic exporter hash checks; one public fixture, not arbitrary DCC/rig/material equivalence. |
+| Live official MCP | **66 tools**, authenticated bridge **0.9.0**; eight smoke workflows passed | Baseline, roadmap/reconnect, mesh, domain, team/jobs infrastructure, handoff, inspect/edit/verify and single-root hierarchy copy. Multi-node attachments have native automation coverage, not a live multi-node MCP claim. |
+| Saved launcher and profile health | Both connected to the exact sandbox with matching 0.9 versions | Existing encrypted provider-key setup initialized with zero provider requests. Explicit profile check performed no edits or endpoint scan. |
+| Provider | **Zero new provider requests** | No measured Jev speedup, routing improvement or cost advantage claimed. |
+
+Editor report: **`2026.09.29-03.14.55`**. Rendered report:
+**`2026.09.29-03.03.02`**. Localization report:
+**`2026.09.29-02.54.11`**. The rendered warning is Unreal's
+`r.MotionVectorSimulation` render-thread flag warning. The three editor warning
+suites retain empty-bounds, missing Recast/crowd-manager and typed-element engine
+warnings. FBX calibration import reported missing smoothing groups. These warnings
+are retained separately from successful assertions.
+
+The new pawn recipe uses actual CharacterMovement across an owned corridor/step,
+with a blocked-wall failure and cleanup. Root-motion evidence comes from authored
+animation keys; deliberate skin-weight defects are detected. Runtime UI evidence
+uses an owned Widget Blueprint in PIE and the native workflow dispatcher with real
+bridge identity, then captures [wide](images/RuntimeWidgetWide-v0.9.png) and
+[compact](images/RuntimeWidgetCompact-v0.9.png) allocations. Both images were viewed
+and show the intentionally overlong clipped label and button. Allocation sizes are
+not physical display-resolution/DPI acceptance. No screen-reader claim is made.
+
+Process tests cover owner termination, cancellation, descendants, timeouts, disk/
+output limits, pre-spawn lease loss, renewal during slow inventory scans and bounded
+bookkeeping. Durable receipts remain historical metadata. Crash injection does not
+establish machine power-loss durability or restore an Unreal scene.
+
+Earlier attempts exposed an animation fixture population issue, a coalesced
+transaction callback that did not inject the intended hierarchy failure, background
+viewport override ownership, incorrect runtime-widget test routing, text-only MCP
+outputs and a missing graph capability advertisement. Fixtures/contracts were fixed
+and rerun; failed attempts are not counted as successful evidence. An audit also
+found generated localization resources entering the source archive; root exclusions
+now keep them out. The provider alpha contract was unchanged.
+
+Live handoff verification retains native project/session/world/revision identity
+and rejects an intentionally shifted pivot. The hierarchy smoke uses a rotated
+single-root mesh, fresh attachment checks and one-shot replay refusal. A first
+domain smoke attempt correctly refused an unrelated fixture blocking its trace;
+the fixture was moved to disjoint coordinates before the successful rerun.
+
+Local raw evidence stays in ignored `artifacts/pytest-v09-release.xml`,
+`build-v09-capability.log`, `unreal-automation/`, `unreal-rendered/`,
+`unreal-localization/`, `setup-lifecycle-v09-release.json`, `handoff-v09/`,
+`infrastructure-*.json`, `*-v0.9.json`, `profile-health-v09.json` and
+`packaged-boot-v09.log`. Build job state/output lives in
+private local AppData. Explicit live-handoff preparation saved only three newly
+generated public calibration assets in the ignored sandbox `Content/JevHandoff`
+folder; no map was saved. These assets and the licensed packaged game are not
+release attachments.
+
+Remaining acceptance includes independent participants/studies, real-project
+compiler/validator/gameplay adoption, physical accessibility and native-speaker
+review, clean hosts and licensed native platform/version matrices. Broader node
+families, structural material layers, retarget/playback, frame-correlated GPU
+attribution, lighting bake/time control and packaged/multiplayer test orchestration
+remain explicitly outside this release's supported scopes.
+
+## Historical 0.8 domain workflows
 
 Validated on **2026-09-22 UTC** on the existing Windows 11 host and licensed
 **Unreal Engine 5.8.2-56702186+++UE5+Release-5.8** in the exact repository
@@ -516,7 +592,7 @@ The keyword baseline did better on this small, easy, non-held-out set. These res
 
 Actual discovery of the installed Epic server's complete tool catalog remains unverified. Catalog tests used synthetic metadata, including real local SDK/network exchanges; discovery never executes advertised tools. A gateway listing is not proof of underlying catalog coverage. See [tool discovery](TOOL_DISCOVERY.md).
 
-No production accuracy, game-development speedup, broad gameplay/visual acceptance, other engine/platform build, production-map performance, sustained load, runtime NPC system, Blender executor, or multiplayer behavior is claimed. Native transforms exclude Blueprint actors and attachment hierarchies. Existing-mesh placement validates the exact path and reviewed UObject identity; it does not hash every byte of mutable asset content. The local bridge is for a trusted workstation, not internet deployment. Review [architecture](ARCHITECTURE.md) and [security](../SECURITY.md).
+No production accuracy, game-development speedup, broad gameplay/visual acceptance, other engine/platform build, production-map performance, sustained load, runtime NPC system, arbitrary Blender executor, or multiplayer behavior is claimed. General native transforms exclude Blueprint actors and attached actors; 0.9 adds a separately bounded complete native mesh-hierarchy copy workflow. Existing-mesh placement validates the exact path and reviewed UObject identity; it does not hash every byte of mutable asset content. The local bridge is for a trusted workstation, not internet deployment. Review [architecture](ARCHITECTURE.md) and [security](../SECURITY.md).
 
 ## Windows credential setup regression
 

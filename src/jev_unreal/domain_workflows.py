@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .bridge import UnrealBridge
 from .errors import JevError
@@ -37,8 +37,14 @@ class Strict(BaseModel):
 
 
 class AssetInspection(Strict):
-    kind: Literal["material", "light", "widgets"]
+    kind: Literal["material", "light"]
     target_path: Path
+
+
+class WidgetInspection(Strict):
+    kind: Literal["widgets"]
+    target_path: Path
+    runtime_instance_path: Path | None = None
 
 
 class CameraInspection(Strict):
@@ -56,6 +62,8 @@ class RigInspection(Strict):
     target_path: Path
     animation_path: Path | None = None
     required_bones: list[Name] = Field(default_factory=list, max_length=64)
+    inspect_skin_weights: bool = False
+    root_motion_samples: int = Field(default=8, ge=1, le=64)
 
 
 class SurfaceInspection(Strict):
@@ -68,6 +76,17 @@ class SurfaceInspection(Strict):
     max_slope_degrees: float = Field(default=30, ge=0, le=60, allow_inf_nan=False)
     clearance_cm: float = Field(default=1, ge=0, le=1000, allow_inf_nan=False)
     align_to_normal: bool = False
+    trace_complex: bool = False
+    support_samples: Literal[1, 5, 9] = 5
+    max_support_variation_cm: float = Field(default=10, ge=0, le=1000, allow_inf_nan=False)
+
+    @field_validator("support_samples", mode="before")
+    @classmethod
+    def integer_support_samples(cls, value):
+        # Literal equality accepts True == 1 and 1.0 == 1 even on a strict model.
+        if type(value) is not int:
+            raise ValueError("Support samples must be the integer 1, 5 or 9.")
+        return value
 
 
 class NavigationInspection(Strict):
@@ -80,10 +99,13 @@ class NavigationInspection(Strict):
     ]
     required_width_cm: float = Field(ge=1, le=10_000, allow_inf_nan=False)
     maximum_step_cm: float = Field(ge=0, le=1000, allow_inf_nan=False)
+    probe_geometry: bool = False
+    probe_spacing_cm: float = Field(default=50, ge=1, le=200, allow_inf_nan=False)
 
 
 Inspection = Annotated[
     AssetInspection
+    | WidgetInspection
     | CameraInspection
     | AssetDiagnosis
     | RigInspection
@@ -93,21 +115,40 @@ Inspection = Annotated[
 ]
 
 
-class ScalarChange(Strict):
-    kind: Literal["material_scalar"]
+class MaterialParameter(Strict):
     target_path: Path
     parameter: Name
+    association: Literal["global", "layer", "blend"] = "global"
+    index: int = Field(default=-1, ge=-1, le=63)
+
+    @model_validator(mode="after")
+    def valid_parameter_identity(self):
+        if (self.association == "global") != (self.index == -1):
+            raise ValueError("Global parameters require index -1; layers/blends require 0..63.")
+        return self
+
+
+class ScalarChange(MaterialParameter):
+    kind: Literal["material_scalar"]
     value: float = Field(ge=-1_000_000, le=1_000_000, allow_inf_nan=False)
 
 
-class VectorChange(Strict):
+class VectorChange(MaterialParameter):
     kind: Literal["material_vector"]
-    target_path: Path
-    parameter: Name
     value: Annotated[
         list[Annotated[float, Field(ge=0, le=16, allow_inf_nan=False)]],
         Field(min_length=4, max_length=4),
     ]
+
+
+class TextureChange(MaterialParameter):
+    kind: Literal["material_texture"]
+    value: Path
+
+
+class StaticSwitchChange(MaterialParameter):
+    kind: Literal["material_static_switch"]
+    value: bool
 
 
 class LightChange(Strict):
@@ -124,8 +165,24 @@ class CameraChange(Strict):
     fov_degrees: float = Field(ge=5, le=170, allow_inf_nan=False)
 
 
+class CameraRenderChange(Strict):
+    kind: Literal["camera_render"]
+    exposure_mode: Literal["fixed", "automatic"]
+    fixed_ev100: float = Field(ge=-16, le=32, allow_inf_nan=False)
+    view_mode: Literal["lit", "unlit"]
+    realtime: bool
+    motion_blur: bool
+
+
 Change = Annotated[
-    ScalarChange | VectorChange | LightChange | CameraChange, Field(discriminator="kind")
+    ScalarChange
+    | VectorChange
+    | TextureChange
+    | StaticSwitchChange
+    | LightChange
+    | CameraChange
+    | CameraRenderChange,
+    Field(discriminator="kind"),
 ]
 
 

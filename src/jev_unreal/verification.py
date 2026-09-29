@@ -98,6 +98,13 @@ class _Material(BaseModel):
     override_path: Text | None = None
 
 
+class _AttachmentTransform(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+    location: Vector
+    rotation: Vector
+    scale: Vector
+
+
 class _Actor(BaseModel):
     model_config = ConfigDict(extra="ignore", strict=True, allow_inf_nan=False)
     path: ActorPath
@@ -119,6 +126,10 @@ class _Actor(BaseModel):
     bounds_cm: _Bounds | None
     editable: bool
     edit_blockers: list[Text] = Field(max_length=32)
+    attachment_parent_path: ActorPath | None = None
+    attachment_parent_instance_id: InstanceID | None = None
+    attachment_relative_transform: _AttachmentTransform | None = None
+    attachment_socket: Text | None = None
 
     @model_validator(mode="after")
     def complete(self):
@@ -184,6 +195,16 @@ def _normalize(
         normalized = details.model_dump(by_alias=True, mode="json")
         # Material order is not semantic; slot identity is. Blocker ordering is also not semantic.
         for actor, parsed_actor in zip(normalized["actors"], details.actors, strict=True):
+            actor["attachment_state_available"] = (
+                {
+                    "attachment_parent_path",
+                    "attachment_parent_instance_id",
+                    "attachment_relative_transform",
+                    "attachment_socket",
+                }
+                <= parsed_actor.model_fields_set
+                and parsed_actor.attachment_relative_transform is not None
+            )
             actor["mesh_state_available"] = (
                 parsed_actor.mesh_settings is not None
                 and parsed_actor.material_override_count is not None
@@ -540,6 +561,19 @@ class MeshEquals(_ActorCheck):
     expected: MeshState
 
 
+class AttachmentEquals(_ActorCheck):
+    kind: Literal["attachment"]
+    parent_path: ActorPath | None
+    parent_instance_id: InstanceID | None
+    relative_transform: _AttachmentTransform
+
+    @model_validator(mode="after")
+    def parent_identity(self):
+        if (self.parent_path is None) != (self.parent_instance_id is None):
+            raise ValueError("Parent path and instance identity must both be present or null.")
+        return self
+
+
 class MinimumGap(_CheckBase):
     kind: Literal["min_gap"]
     first_actor_path: ActorPath
@@ -566,6 +600,7 @@ Check = Annotated[
     | LabelEquals
     | FolderEquals
     | MeshEquals
+    | AttachmentEquals
     | MinimumGap,
     Field(discriminator="kind"),
 ]
@@ -741,6 +776,34 @@ def _check_one(check: Check, actors: dict[str, dict]) -> dict:
             }
         expected["materials"].sort(key=lambda item: item["slot"])
         passed = actual == expected
+    elif isinstance(check, AttachmentEquals):
+        if not actor["attachment_state_available"]:
+            return {"status": "unverifiable", "reason": "attachment_state_unavailable"}
+        expected = {
+            "parent_path": check.parent_path,
+            "parent_instance_id": check.parent_instance_id,
+            "relative_transform": check.relative_transform.model_dump(mode="json"),
+        }
+        actual = {
+            "parent_path": actor["attachment_parent_path"],
+            "parent_instance_id": actor["attachment_parent_instance_id"],
+            "relative_transform": actor["attachment_relative_transform"],
+        }
+        passed = (
+            expected["parent_path"] == actual["parent_path"]
+            and expected["parent_instance_id"] == actual["parent_instance_id"]
+            and actor["attachment_socket"] == "None"
+        )
+        for field in ("location", "rotation", "scale"):
+            old, new = expected["relative_transform"][field], actual["relative_transform"][field]
+            passed = passed and (
+                _orientation_delta(old, new) <= 0.001
+                if field == "rotation"
+                else all(
+                    math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-3)
+                    for a, b in zip(old, new, strict=True)
+                )
+            )
     elif isinstance(check, MaterialSlot):
         expected = {"slot": check.slot, "path": check.expected_path}
         slot = next((item for item in actor["materials"] if item["slot"] == check.slot), None)

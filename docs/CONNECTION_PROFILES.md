@@ -5,6 +5,18 @@ process per selected profile. A profile selects its project, loopback URL and
 token file together at startup. Existing environment-only configurations continue
 to work. There is no endpoint scan, automatic project switching or shared edit queue.
 
+Version 0.9 adds `jev-unreal profiles check FILE`: it authenticates each explicitly
+listed profile in sequence, verifies the exact project and reports the native
+bridge/server version match plus reconnect guidance. Unlike `profiles list`, this
+command reads the configured local token files and contacts those endpoints.
+It performs no editor edits or provider requests. A connected older bridge is
+reported with `versions_match: false`; rebuild/relaunch the matching plugin before
+using new capabilities. This is a health check, not a certified engine matrix.
+
+For cooperating agents on one project, use the separately configured
+[team policy and lease workflow](TEAM_WORKFLOWS.md). Profiles isolate project
+identities; they do not themselves reserve the scene against another client.
+
 Create a private local JSON file, for example `.local/editor-profiles.json`:
 
 ```json

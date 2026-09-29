@@ -19,9 +19,12 @@ from .decision import DecisionClient
 from .diagnostics import group_diagnostics
 from .domain_workflows import register_domain_tools
 from .errors import JevError
+from .handoff import register_handoff_tools
+from .infrastructure import register_infrastructure_tools
 from .layouts import LAYOUT_CATALOG, Layout, PreviewTracker, compile_layout
 from .meshes import MeshRecipe, preview_mesh
 from .project_tools import register_project_tools
+from .recipes import register_recipe_resources
 from .selection import AssetCandidate, AssetFilters, rank_candidates
 from .spatial import SpatialRecipe, preview_spatial
 from .verification import Check, SceneSnapshots, SessionIdentity, verify_fresh
@@ -643,4 +646,7 @@ def create_server(settings: Settings | None = None) -> FastMCP:
     register_project_tools(server, bridge)
     register_blueprint_tools(server, bridge)
     register_domain_tools(server, bridge, previews)
+    register_handoff_tools(server, bridge)
+    register_infrastructure_tools(server, bridge)
+    register_recipe_resources(server)
     return server

@@ -3,6 +3,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/Skeleton.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetCompilingManager.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanelSlot.h"
@@ -17,6 +18,14 @@
 #include "StaticMeshResources.h"
 #include "WidgetBlueprint.h"
 #include "UObject/UnrealType.h"
+#include "Rendering/SkeletalMeshModel.h"
+#include "Rendering/SkeletalMeshLODModel.h"
+#include "Blueprint/UserWidget.h"
+#include "Editor.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWidget.h"
 
 namespace JevWorkflow
 {
@@ -47,6 +56,9 @@ TSharedRef<FJsonObject> AssetDiagnosis(const TSharedPtr<FJsonObject>& P)
         if (Shapes == 0) Issue(TEXT("no_simple_collision_shapes"));
         if (!Render || Render->LODResources.IsEmpty()) Issue(TEXT("render_lods_unavailable"));
         int32 Missing = 0; for (const auto& Slot : Mesh->GetStaticMaterials()) if (!Slot.MaterialInterface) ++Missing;
+        TArray<TSharedPtr<FJsonValue>> SlotNames;
+        for (int32 Index = 0; Index < FMath::Min(256, Mesh->GetStaticMaterials().Num()); ++Index) SlotNames.Add(MakeShared<FJsonValueString>(Mesh->GetStaticMaterials()[Index].MaterialSlotName.ToString().Left(128)));
+        R->SetArrayField(TEXT("material_slot_names"), SlotNames); R->SetBoolField(TEXT("material_slots_truncated"), Mesh->GetStaticMaterials().Num() > 256);
         R->SetNumberField(TEXT("unassigned_material_slots"), Missing); if (Missing) Issue(TEXT("unassigned_material_slots"));
     }
     else if (auto* Skeletal = Cast<USkeletalMesh>(O)) Import = Skeletal->GetAssetImportData();
@@ -85,8 +97,8 @@ TSharedRef<FJsonObject> AssetDiagnosis(const TSharedPtr<FJsonObject>& P)
 
 TSharedRef<FJsonObject> Rig(const TSharedPtr<FJsonObject>& P)
 {
-    FString Path, AnimationPath; const TArray<TSharedPtr<FJsonValue>>* Required = nullptr;
-    if (!Only(P, {TEXT("kind"), TEXT("target_path"), TEXT("animation_path"), TEXT("required_bones")}) || !Text(P, TEXT("target_path"), Path) || !P->TryGetArrayField(TEXT("required_bones"), Required) || Required->Num() > 64 || (P->HasField(TEXT("animation_path")) && !Text(P, TEXT("animation_path"), AnimationPath))) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply a mesh/skeleton, up to 64 required bone names and optional sequence."));
+    FString Path, AnimationPath; const TArray<TSharedPtr<FJsonValue>>* Required = nullptr; bool Weights = false; double RootSamples = 8;
+    if (!Only(P, {TEXT("kind"), TEXT("target_path"), TEXT("animation_path"), TEXT("required_bones"), TEXT("inspect_skin_weights"), TEXT("root_motion_samples")}) || !Text(P, TEXT("target_path"), Path) || !P->TryGetArrayField(TEXT("required_bones"), Required) || Required->Num() > 64 || (P->HasField(TEXT("animation_path")) && !Text(P, TEXT("animation_path"), AnimationPath)) || (P->HasField(TEXT("inspect_skin_weights")) && !P->TryGetBoolField(TEXT("inspect_skin_weights"), Weights)) || (P->HasField(TEXT("root_motion_samples")) && (!Number(P, TEXT("root_motion_samples"), RootSamples, 1, 64) || RootSamples != FMath::FloorToDouble(RootSamples)))) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply a mesh/skeleton, up to 64 required bone names, optional sequence, skin-weight inspection and 1..64 root-motion samples."));
     auto* O = Loaded(Path); auto* Mesh = Cast<USkeletalMesh>(O); auto* Skeleton = Mesh ? Mesh->GetSkeleton() : Cast<USkeleton>(O);
     if (!Skeleton || (O->GetClass() != USkeletalMesh::StaticClass() && O->GetClass() != USkeleton::StaticClass())) return FJevEditorBridge::Error(TEXT("unsupported_asset"), TEXT("Open a native skeletal mesh or skeleton with a skeleton assigned."));
     const auto& Ref = Mesh ? Mesh->GetRefSkeleton() : Skeleton->GetReferenceSkeleton();
@@ -102,22 +114,101 @@ TSharedRef<FJsonObject> Rig(const TSharedPtr<FJsonObject>& P)
         if (Ref.FindBoneIndex(FName(*Name)) == INDEX_NONE) Missing.Add(MakeShared<FJsonValueString>(Name));
     }
     R->SetArrayField(TEXT("bones"), Bones); R->SetBoolField(TEXT("bones_truncated"), Ref.GetNum() > 512); R->SetArrayField(TEXT("missing_required_bones"), Missing); R->SetBoolField(TEXT("required_bones_present"), Missing.IsEmpty());
+    if (Weights)
+    {
+        auto WeightResult = MakeShared<FJsonObject>(); WeightResult->SetBoolField(TEXT("available"), false); WeightResult->SetNumberField(TEXT("lod"), 0);
+        const auto* Imported = Mesh && !Mesh->IsCompiling() ? Mesh->GetImportedModel() : nullptr;
+        if (Imported && !Imported->LODModels.IsEmpty())
+        {
+            const auto& LOD = Imported->LODModels[0]; int32 Checked = 0, Unweighted = 0, InvalidBones = 0, Unnormalized = 0; bool Truncated = false, MissingData = false;
+            for (int32 SectionIndex = 0; SectionIndex < LOD.Sections.Num(); ++SectionIndex)
+            {
+                if (SectionIndex >= 256) { Truncated = true; break; }
+                const auto& Section = LOD.Sections[SectionIndex]; if (Section.NumVertices != Section.SoftVertices.Num()) MissingData = true;
+                for (const auto& Vertex : Section.SoftVertices)
+                {
+                    if (Checked >= 65536) { Truncated = true; break; }
+                    uint32 Sum = 0; bool Invalid = false;
+                    for (int32 Influence = 0; Influence < MAX_TOTAL_INFLUENCES; ++Influence)
+                    {
+                        const uint16 Weight = Vertex.InfluenceWeights[Influence]; Sum += Weight;
+                        const int32 Bone = Vertex.InfluenceBones[Influence];
+                        if (Weight && (!Section.BoneMap.IsValidIndex(Bone) || !Ref.IsValidIndex(Section.BoneMap[Bone]))) Invalid = true;
+                    }
+                    ++Checked; if (!Sum) ++Unweighted; if (Invalid) ++InvalidBones; if (FMath::Abs(static_cast<int64>(Sum) - 65535) > 1) ++Unnormalized;
+                }
+                if (Truncated) break;
+            }
+            WeightResult->SetBoolField(TEXT("available"), Checked > 0); WeightResult->SetNumberField(TEXT("checked_vertices"), Checked); WeightResult->SetNumberField(TEXT("unweighted_vertices"), Unweighted); WeightResult->SetNumberField(TEXT("invalid_bone_vertices"), InvalidBones); WeightResult->SetNumberField(TEXT("unnormalized_vertices"), Unnormalized); WeightResult->SetBoolField(TEXT("truncated"), Truncated); WeightResult->SetBoolField(TEXT("missing_section_data"), MissingData);
+            WeightResult->SetBoolField(TEXT("all_checked_weights_valid"), Checked > 0 && !Unweighted && !InvalidBones && !Unnormalized); WeightResult->SetBoolField(TEXT("complete_lod_checked"), Checked > 0 && !Truncated && !MissingData);
+        }
+        WeightResult->SetStringField(TEXT("scope"), TEXT("At most 65,536 imported LOD0 vertices and 256 sections; normalized uint16 weights and section bone-map references. Does not evaluate deformed geometry, seams, alternative skin-weight profiles or retarget quality.")); R->SetObjectField(TEXT("skin_weights"), WeightResult);
+    }
     if (!AnimationPath.IsEmpty())
     {
         auto* Sequence = Cast<UAnimSequence>(Loaded(AnimationPath));
         if (!Sequence || Sequence->GetClass() != UAnimSequence::StaticClass()) return FJevEditorBridge::Error(TEXT("asset_not_loaded"), TEXT("Open the native animation sequence first."));
         R->SetStringField(TEXT("animation_path"), AnimationPath); R->SetStringField(TEXT("animation_skeleton_path"), GetPathNameSafe(Sequence->GetSkeleton())); R->SetBoolField(TEXT("exact_skeleton_match"), Skeleton == Sequence->GetSkeleton());
         R->SetBoolField(TEXT("root_motion_enabled"), Sequence->bEnableRootMotion); R->SetNumberField(TEXT("duration_seconds"), Sequence->GetPlayLength());
+        const bool Ready = FAssetCompilingManager::Get().GetNumRemainingAssets() == 0 && Sequence->GetSkeleton() && Sequence->GetSkeleton()->GetReferenceSkeleton().GetNum() > 0 && Sequence->GetPlayLength() > 0 && Sequence->GetPlayLength() <= 3600;
+        R->SetBoolField(TEXT("root_motion_extraction_available"), Ready);
+        if (Ready)
+        {
+            TArray<TSharedPtr<FJsonValue>> Motion; bool Finite = true; FAnimExtractContext Context(0, true); Context.bExtractWithRootMotionProvider = false;
+            const FTransform Full = Sequence->ExtractRootMotionFromRange(0, Sequence->GetPlayLength(), Context);
+            for (int32 Index = 0; Index < static_cast<int32>(RootSamples); ++Index)
+            {
+                const double Begin = Sequence->GetPlayLength() * Index / RootSamples, End = Sequence->GetPlayLength() * (Index + 1) / RootSamples;
+                const FTransform Extracted = Sequence->ExtractRootMotionFromRange(Begin, End, Context); auto Row = MakeShared<FJsonObject>(); const bool Valid = !Extracted.ContainsNaN(); Finite &= Valid;
+                Row->SetNumberField(TEXT("start_seconds"), Begin); Row->SetNumberField(TEXT("end_seconds"), End); Row->SetBoolField(TEXT("finite"), Valid);
+                if (Valid) { Row->SetArrayField(TEXT("translation_cm"), Vector(Extracted.GetTranslation())); Row->SetNumberField(TEXT("rotation_degrees"), FMath::RadiansToDegrees(Extracted.GetRotation().GetAngle())); }
+                Motion.Add(MakeShared<FJsonValueObject>(Row));
+            }
+            R->SetArrayField(TEXT("root_motion_intervals"), Motion); R->SetBoolField(TEXT("root_motion_finite"), Finite && !Full.ContainsNaN());
+            if (!Full.ContainsNaN()) { R->SetArrayField(TEXT("root_motion_total_translation_cm"), Vector(Full.GetTranslation())); R->SetNumberField(TEXT("root_motion_total_rotation_degrees"), FMath::RadiansToDegrees(Full.GetRotation().GetAngle())); }
+        }
     }
-    R->SetStringField(TEXT("scope"), TEXT("Stored bone hierarchy, exact skeleton identity, requested bone presence and root-motion flag. A different skeleton may work through an approved retargeter; playback, extracted motion and retarget quality require separate acceptance.")); return Success(R);
+    R->SetStringField(TEXT("scope"), TEXT("Stored hierarchy, skeleton identity, optional bounded imported skin-weight checks and native root-track extraction. Extraction does not tick actors, evaluate notifies, advance animation graphs or apply root motion to a character. Playback, retargeting and visual deformation require separate gameplay acceptance.")); return Success(R);
 }
 
 TSharedRef<FJsonObject> Widgets(const TSharedPtr<FJsonObject>& P)
 {
-    FString Path;
-    if (!Only(P, {TEXT("kind"), TEXT("target_path")}) || !Text(P, TEXT("target_path"), Path)) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply an exact Widget Blueprint path."));
+    FString Path, RuntimePath;
+    if (!Only(P, {TEXT("kind"), TEXT("target_path"), TEXT("runtime_instance_path")}) || !Text(P, TEXT("target_path"), Path) || (P->HasField(TEXT("runtime_instance_path")) && !Text(P, TEXT("runtime_instance_path"), RuntimePath))) return FJevEditorBridge::Error(TEXT("bad_request"), TEXT("Supply an exact Widget Blueprint and optional existing runtime instance path."));
     auto* BP = Cast<UWidgetBlueprint>(Loaded(Path));
     if (!BP || BP->GetClass() != UWidgetBlueprint::StaticClass() || !BP->WidgetTree) return FJevEditorBridge::Error(TEXT("asset_not_loaded"), TEXT("Open a native Widget Blueprint with a widget tree."));
+    if (!RuntimePath.IsEmpty())
+    {
+        auto* Instance = FindObject<UUserWidget>(nullptr, *RuntimePath); UWorld* World = GEditor ? GEditor->PlayWorld.Get() : nullptr;
+        if (!IsValid(Instance) || Instance->GetPathName() != RuntimePath || !World || BP->ParentClass != UUserWidget::StaticClass() || Instance->GetWorld() != World || !World->HasBegunPlay() || Instance->GetClass() != BP->GeneratedClass || !Instance->IsInViewport() || !Instance->WidgetTree || !Instance->GetCachedWidget().IsValid()) return FJevEditorBridge::Error(TEXT("runtime_widget_unavailable"), TEXT("Supply an existing on-screen instance of this exact Widget Blueprint directly based on native UserWidget in the active PIE world. Inspection never creates or ticks widgets."));
+        auto R = MakeShared<FJsonObject>(); R->SetStringField(TEXT("asset_path"), Path); R->SetStringField(TEXT("runtime_instance_path"), RuntimePath); R->SetBoolField(TEXT("runtime_instantiated"), true); R->SetBoolField(TEXT("runtime_created_by_inspection"), false); R->SetStringField(TEXT("runtime_world_path"), World->GetPathName());
+        FVector2D ViewportSize = FVector2D::ZeroVector; if (World->GetGameViewport()) World->GetGameViewport()->GetViewportSize(ViewportSize);
+        R->SetArrayField(TEXT("viewport_size_pixels"), {MakeShared<FJsonValueNumber>(ViewportSize.X), MakeShared<FJsonValueNumber>(ViewportSize.Y)});
+        R->SetNumberField(TEXT("root_accumulated_layout_scale"), Instance->GetCachedWidget()->GetCachedGeometry().GetAccumulatedLayoutTransform().GetScale());
+        R->SetNumberField(TEXT("slate_application_scale"), FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetApplicationScale() : 1);
+        const auto Focused = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetKeyboardFocusedWidget() : TSharedPtr<SWidget>();
+        TArray<UWidget*> RuntimeQueue; if (Instance->WidgetTree->RootWidget) RuntimeQueue.Add(Instance->WidgetTree->RootWidget); TSet<UWidget*> Seen; TArray<TSharedPtr<FJsonValue>> Rows; bool Truncated = false;
+        for (int32 Index = 0; Index < RuntimeQueue.Num() && Index < 256; ++Index)
+        {
+            auto* Widget = RuntimeQueue[Index]; if (!IsValid(Widget) || Seen.Contains(Widget)) continue; Seen.Add(Widget);
+            auto Row = MakeShared<FJsonObject>(); Row->SetStringField(TEXT("name"), Widget->GetName().Left(128)); Row->SetStringField(TEXT("class"), Widget->GetClass()->GetPathName()); Row->SetStringField(TEXT("parent"), GetNameSafe(Widget->GetParent()).Left(128));
+            const auto Cached = Widget->GetCachedWidget(); Row->SetBoolField(TEXT("slate_cached"), Cached.IsValid());
+            if (Cached.IsValid())
+            {
+                const auto& Geometry = Cached->GetCachedGeometry(); const FVector2D Size = Geometry.GetLocalSize(); const FVector2D Desired = Cached->GetDesiredSize();
+                Row->SetArrayField(TEXT("allocated_size"), {MakeShared<FJsonValueNumber>(Size.X), MakeShared<FJsonValueNumber>(Size.Y)}); Row->SetArrayField(TEXT("desired_size"), {MakeShared<FJsonValueNumber>(Desired.X), MakeShared<FJsonValueNumber>(Desired.Y)}); Row->SetBoolField(TEXT("keyboard_focus"), Cached == Focused);
+                Row->SetBoolField(TEXT("desired_size_exceeds_allocation"), Desired.X > Size.X + 0.5 || Desired.Y > Size.Y + 0.5);
+                if (auto* Parent = Widget->GetParent(); Parent && Parent->GetCachedWidget().IsValid())
+                {
+                    const auto& ParentGeometry = Parent->GetCachedWidget()->GetCachedGeometry(); const FVector2D TopLeft = ParentGeometry.AbsoluteToLocal(Geometry.LocalToAbsolute(FVector2D::ZeroVector)); const FVector2D BottomRight = ParentGeometry.AbsoluteToLocal(Geometry.LocalToAbsolute(Size)); const FVector2D ParentSize = ParentGeometry.GetLocalSize();
+                    Row->SetArrayField(TEXT("parent_local_top_left"), {MakeShared<FJsonValueNumber>(TopLeft.X), MakeShared<FJsonValueNumber>(TopLeft.Y)}); Row->SetBoolField(TEXT("outside_parent_bounds_hint"), TopLeft.X < -0.5 || TopLeft.Y < -0.5 || BottomRight.X > ParentSize.X + 0.5 || BottomRight.Y > ParentSize.Y + 0.5);
+                }
+            }
+            Rows.Add(MakeShared<FJsonValueObject>(Row));
+            if (auto* Panel = Cast<UPanelWidget>(Widget)) for (int32 Child = 0; Child < Panel->GetChildrenCount(); ++Child) { if (RuntimeQueue.Num() >= 256) { Truncated = true; break; } RuntimeQueue.Add(Panel->GetChildAt(Child)); }
+        }
+        R->SetArrayField(TEXT("widgets"), Rows); R->SetBoolField(TEXT("truncated"), Truncated); R->SetStringField(TEXT("scope"), TEXT("Read-only cached Slate geometry and current keyboard focus from an existing active PIE instance; no bindings, widget ticks, viewport resize or focus changes are requested. Layout scale includes inherited scaling and is not isolated DPI. Desired-size and parent-bounds comparisons are hints, not pixel-visible overflow or accessibility proof. Nested UserWidget internals, named slots, transformed clipping, gamepad focus and screen readers require separate acceptance.")); return Success(R);
+    }
     const auto* EnabledProperty = FindFProperty<FBoolProperty>(UWidget::StaticClass(), TEXT("bIsEnabled"));
     const auto* VisibilityProperty = FindFProperty<FEnumProperty>(UWidget::StaticClass(), TEXT("Visibility"));
     const auto* TextProperty = FindFProperty<FTextProperty>(UTextBlock::StaticClass(), TEXT("Text"));

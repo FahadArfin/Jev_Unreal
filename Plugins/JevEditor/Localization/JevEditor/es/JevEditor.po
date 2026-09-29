@@ -1,0 +1,307 @@
+# Draft translations: human review and accessibility acceptance remain open.
+msgid ""
+msgstr ""
+"Project-Id-Version: JevEditor\n"
+"Language: es\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: JevEditorReviewPanel.AppliedStatus
+msgctxt "JevEditorReviewPanel,AppliedStatus"
+msgid "Applied receipt · historical result. Inspect and verify the current scene, including any later edits or Undo."
+msgstr "Recibo de aplicación · resultado histórico. Inspecciona y verifica la escena actual, incluidos cambios posteriores o Deshacer."
+
+#: JevEditorReviewPanel.Apply
+msgctxt "JevEditorReviewPanel,Apply"
+msgid "Apply reviewed plan once"
+msgstr "Aplicar una sola vez el plan revisado"
+
+#: JevEditorReviewPanel.ApplyHeading
+msgctxt "JevEditorReviewPanel,ApplyHeading"
+msgid "3. Apply once, then verify"
+msgstr "3. Aplicar una sola vez y verificar"
+
+#: JevEditorReviewPanel.ApplyHelp
+msgctxt "JevEditorReviewPanel,ApplyHelp"
+msgid "Apply uses the exact reviewed plan, even if preparation inputs change. Scene changes or expiry can reject it. Edits use Unreal Undo; Apply requests no save."
+msgstr "Se aplica el plan exacto revisado aunque cambien los campos. Un cambio de escena o la caducidad puede rechazarlo. Deshacer de Unreal está disponible; no se solicita guardar."
+
+#: JevEditorReviewPanel.ApplySuccess
+msgctxt "JevEditorReviewPanel,ApplySuccess"
+msgid "Applied once. The bridge requested no save. Unreal Undo is available. Inspect the applied actors now, then run MCP verification checks for your task requirements."
+msgstr "Aplicado una sola vez. El puente no solicitó guardar. Deshacer de Unreal está disponible. Inspecciona los actores modificados y ejecuta las comprobaciones MCP de tu tarea."
+
+#: JevEditorReviewPanel.ChangeFolder
+msgctxt "JevEditorReviewPanel,ChangeFolder"
+msgid "Change folder — leave empty to move to root"
+msgstr "Cambiar carpeta — deja vacío para mover a la raíz"
+
+#: JevEditorReviewPanel.ChangeLabel
+msgctxt "JevEditorReviewPanel,ChangeLabel"
+msgid "Change label — select exactly one actor"
+msgstr "Cambiar nombre — selecciona exactamente un actor"
+
+#: JevEditorReviewPanel.Connected
+msgctxt "JevEditorReviewPanel,Connected"
+msgid "Connected to this editor. Preview changes locally, review them, then apply once."
+msgstr "Conectado a este editor. Previsualiza los cambios, revísalos y aplícalos una sola vez."
+
+#: JevEditorReviewPanel.CoordinateName
+msgctxt "JevEditorReviewPanel,CoordinateName"
+msgid "Translate {0}, centimeters"
+msgstr "Desplazamiento {0}, centímetros"
+
+#: JevEditorReviewPanel.EditableActor
+msgctxt "JevEditorReviewPanel,EditableActor"
+msgid "Editable native static mesh actor."
+msgstr "Actor de malla estática nativo editable."
+
+#: JevEditorReviewPanel.EditingBlocked
+msgctxt "JevEditorReviewPanel,EditingBlocked"
+msgid "Editing blocked: {0}"
+msgstr "Edición bloqueada: {0}"
+
+#: JevEditorReviewPanel.ElapsedStatus
+msgctxt "JevEditorReviewPanel,ElapsedStatus"
+msgid "Preview expired. Inspect current state and create a new preview; nothing is retried automatically."
+msgstr "La previsualización ha caducado. Inspecciona el estado actual y crea otra; no se reintenta nada automáticamente."
+
+#: JevEditorReviewPanel.ExpiredStatus
+msgctxt "JevEditorReviewPanel,ExpiredStatus"
+msgid "Preview expired. Inspect current state and create a new preview."
+msgstr "La previsualización ha caducado. Inspecciona el estado actual y crea otra."
+
+#: JevEditorReviewPanel.FolderHelp
+msgctxt "JevEditorReviewPanel,FolderHelp"
+msgid "Relative folder path. An empty value moves actors to root when Change folder is enabled."
+msgstr "Ruta relativa. Un valor vacío mueve los actores a la raíz si Cambiar carpeta está activado."
+
+#: JevEditorReviewPanel.FolderHint
+msgctxt "JevEditorReviewPanel,FolderHint"
+msgid "Example: Environment/Props"
+msgstr "Ejemplo: Environment/Props"
+
+#: JevEditorReviewPanel.FolderName
+msgctxt "JevEditorReviewPanel,FolderName"
+msgid "New actor folder"
+msgstr "Nueva carpeta del actor"
+
+#: JevEditorReviewPanel.IncompleteReview
+msgctxt "JevEditorReviewPanel,IncompleteReview"
+msgid "Review data is incomplete or unsupported. Applying is disabled. Inspect the editor and create a supported preview."
+msgstr "Los datos están incompletos o no son compatibles. Aplicar está desactivado. Inspecciona el editor y crea una previsualización compatible."
+
+#: JevEditorReviewPanel.Inspect
+msgctxt "JevEditorReviewPanel,Inspect"
+msgid "Inspect selected actors"
+msgstr "Inspeccionar actores seleccionados"
+
+#: JevEditorReviewPanel.InspectApplied
+msgctxt "JevEditorReviewPanel,InspectApplied"
+msgid "Inspect applied actors now"
+msgstr "Inspeccionar ahora los actores modificados"
+
+#: JevEditorReviewPanel.InspectHeading
+msgctxt "JevEditorReviewPanel,InspectHeading"
+msgid "1. Inspect and prepare"
+msgstr "1. Inspeccionar y preparar"
+
+#: JevEditorReviewPanel.InspectionProject
+msgctxt "JevEditorReviewPanel,InspectionProject"
+msgid "Project: {0}"
+msgstr "Proyecto: {0}"
+
+#: JevEditorReviewPanel.KeyboardHelp
+msgctxt "JevEditorReviewPanel,KeyboardHelp"
+msgid "Tab / Shift+Tab move between controls. Review text supports selection, copying and arrow-key scrolling. Apply has no global shortcut."
+msgstr "Tab / Mayús+Tab cambian de control. Puedes seleccionar y copiar el texto y desplazarte con las flechas. Aplicar no tiene un atajo global."
+
+#: JevEditorReviewPanel.LabelHelp
+msgctxt "JevEditorReviewPanel,LabelHelp"
+msgid "New actor label, 1 to 80 characters. Enable Change label to include it in the preview."
+msgstr "Nuevo nombre de 1 a 80 caracteres. Activa Cambiar nombre para incluirlo en la previsualización."
+
+#: JevEditorReviewPanel.LabelHint
+msgctxt "JevEditorReviewPanel,LabelHint"
+msgid "Actor label (1–80 characters)"
+msgstr "Nombre del actor (1–80 caracteres)"
+
+#: JevEditorReviewPanel.LabelName
+msgctxt "JevEditorReviewPanel,LabelName"
+msgid "New actor label"
+msgstr "Nuevo nombre del actor"
+
+#: JevEditorReviewPanel.MenuTooltip
+msgctxt "JevEditorReviewPanel,MenuTooltip"
+msgid "Inspect actors, review MCP plans, and apply exact bounded changes."
+msgstr "Inspeccionar actores, revisar planes MCP y aplicar cambios exactos."
+
+#: JevEditorReviewPanel.MissingPlan
+msgctxt "JevEditorReviewPanel,MissingPlan"
+msgid "Plan unavailable"
+msgstr "Plan no disponible"
+
+#: JevEditorReviewPanel.NoPending
+msgctxt "JevEditorReviewPanel,NoPending"
+msgid "No pending plans. New MCP previews appear here automatically."
+msgstr "No hay planes pendientes. Las nuevas previsualizaciones MCP aparecen aquí automáticamente."
+
+#: JevEditorReviewPanel.NoPlanStatus
+msgctxt "JevEditorReviewPanel,NoPlanStatus"
+msgid "No plan selected. Applying is disabled."
+msgstr "Ningún plan seleccionado. Aplicar está desactivado."
+
+#: JevEditorReviewPanel.NoResult
+msgctxt "JevEditorReviewPanel,NoResult"
+msgid "Results and recovery steps appear here. Fresh inspection is separate from verification of your task requirements."
+msgstr "Aquí aparecen los resultados y los pasos de recuperación. Una inspección reciente no valida por sí sola los requisitos de la tarea."
+
+#: JevEditorReviewPanel.NoReview
+msgctxt "JevEditorReviewPanel,NoReview"
+msgid "Choose a pending plan, or preview an edit to the current selection."
+msgstr "Elige un plan pendiente o previsualiza un cambio en la selección actual."
+
+#: JevEditorReviewPanel.NoTechnical
+msgctxt "JevEditorReviewPanel,NoTechnical"
+msgid "Choose a plan to inspect its complete technical details."
+msgstr "Elige un plan para inspeccionar todos sus detalles técnicos."
+
+#: JevEditorReviewPanel.PendingAccessible
+msgctxt "JevEditorReviewPanel,PendingAccessible"
+msgid "Review plan {0}"
+msgstr "Revisar plan {0}"
+
+#: JevEditorReviewPanel.PendingButton
+msgctxt "JevEditorReviewPanel,PendingButton"
+msgid "Review {0} · {1} changes · {2}s"
+msgstr "Revisar {0} · {1} cambios · {2}s"
+
+#: JevEditorReviewPanel.PendingStatus
+msgctxt "JevEditorReviewPanel,PendingStatus"
+msgid "Pending · {0} seconds remaining. The editor checks scene state again on Apply."
+msgstr "Pendiente · quedan {0} segundos. El editor vuelve a comprobar la escena al aplicar."
+
+#: JevEditorReviewPanel.PendingTruncated
+msgctxt "JevEditorReviewPanel,PendingTruncated"
+msgid "Showing the newest 20 pending plans. Additional plans remain accessible by MCP plan ID."
+msgstr "Se muestran los 20 planes más recientes. Los demás siguen disponibles mediante su identificador MCP."
+
+#: JevEditorReviewPanel.PlanName
+msgctxt "JevEditorReviewPanel,PlanName"
+msgid "Reviewed changes, before and after"
+msgstr "Cambios revisados, antes y después"
+
+#: JevEditorReviewPanel.PreviewCreated
+msgctxt "JevEditorReviewPanel,PreviewCreated"
+msgid "Preview created without editing the scene. Read Before and After, including any copy limits, before applying this exact plan."
+msgstr "Previsualización creada sin editar la escena. Lee Antes y Después, incluidos los límites de copia, antes de aplicar este plan exacto."
+
+#: JevEditorReviewPanel.PreviewMetadata
+msgctxt "JevEditorReviewPanel,PreviewMetadata"
+msgid "Preview label / folder"
+msgstr "Previsualizar nombre / carpeta"
+
+#: JevEditorReviewPanel.PreviewTranslation
+msgctxt "JevEditorReviewPanel,PreviewTranslation"
+msgid "Preview translation"
+msgstr "Previsualizar desplazamiento"
+
+#: JevEditorReviewPanel.RefreshPlans
+msgctxt "JevEditorReviewPanel,RefreshPlans"
+msgid "Refresh pending plans"
+msgstr "Actualizar planes pendientes"
+
+#: JevEditorReviewPanel.RejectedStatus
+msgctxt "JevEditorReviewPanel,RejectedStatus"
+msgid "Plan rejected. Inspect the current scene and the reported reason before creating a new preview."
+msgstr "Plan rechazado. Inspecciona la escena actual y el motivo indicado antes de crear otra previsualización."
+
+#: JevEditorReviewPanel.ResultName
+msgctxt "JevEditorReviewPanel,ResultName"
+msgid "Action result and next step"
+msgstr "Resultado de la acción y siguiente paso"
+
+#: JevEditorReviewPanel.ReviewHeading
+msgctxt "JevEditorReviewPanel,ReviewHeading"
+msgid "2. Review exact changes"
+msgstr "2. Revisar los cambios exactos"
+
+#: JevEditorReviewPanel.RolledBackStatus
+msgctxt "JevEditorReviewPanel,RolledBackStatus"
+msgid "Native transaction rolled back. Inspect current state; external callback effects are outside the rollback guarantee."
+msgstr "La transacción nativa se revirtió. Inspecciona el estado actual; los efectos de callbacks externos quedan fuera de esta garantía."
+
+#: JevEditorReviewPanel.RootFolder
+msgctxt "JevEditorReviewPanel,RootFolder"
+msgid "(root)"
+msgstr "(raíz)"
+
+#: JevEditorReviewPanel.SelectionHint
+msgctxt "JevEditorReviewPanel,SelectionHint"
+msgid "Select actors in the World Outliner, then inspect. Only supported native static mesh actors can be edited."
+msgstr "Selecciona actores en el World Outliner e inspecciónalos. Solo se pueden editar actores de malla estática nativos compatibles."
+
+#: JevEditorReviewPanel.SelectionName
+msgctxt "JevEditorReviewPanel,SelectionName"
+msgid "Selection inspection"
+msgstr "Inspección de la selección"
+
+#: JevEditorReviewPanel.Shutdown
+msgctxt "JevEditorReviewPanel,Shutdown"
+msgid "Jev editor module is shutting down. Reopen the editor to reconnect."
+msgstr "El módulo Jev se está cerrando. Vuelve a abrir el editor para reconectar."
+
+#: JevEditorReviewPanel.TabName
+msgctxt "JevEditorReviewPanel,TabName"
+msgid "Jev Review"
+msgstr "Revisión Jev"
+
+#: JevEditorReviewPanel.TabTooltip
+msgctxt "JevEditorReviewPanel,TabTooltip"
+msgid "Inspect selection and review bounded editor plans."
+msgstr "Inspeccionar la selección y revisar planes acotados del editor."
+
+#: JevEditorReviewPanel.TechnicalHeading
+msgctxt "JevEditorReviewPanel,TechnicalHeading"
+msgid "Technical details — exact reviewed records"
+msgstr "Detalles técnicos — datos exactos revisados"
+
+#: JevEditorReviewPanel.TechnicalName
+msgctxt "JevEditorReviewPanel,TechnicalName"
+msgid "Complete reviewed technical details"
+msgstr "Detalles técnicos completos revisados"
+
+#: JevEditorReviewPanel.Title
+msgctxt "JevEditorReviewPanel,Title"
+msgid "Jev — inspect, review, apply"
+msgstr "Jev — inspeccionar, revisar, aplicar"
+
+#: JevEditorReviewPanel.Translation
+msgctxt "JevEditorReviewPanel,Translation"
+msgid "Translate selection (centimeters)"
+msgstr "Desplazar la selección (centímetros)"
+
+#: JevEditorReviewPanel.Unavailable
+msgctxt "JevEditorReviewPanel,Unavailable"
+msgid "unavailable"
+msgstr "no disponible"
+
+#: JevEditorReviewPanel.UnavailableStatus
+msgctxt "JevEditorReviewPanel,UnavailableStatus"
+msgid "Plan receipt unavailable. Applying is disabled; refresh or inspect the editor."
+msgstr "Recibo del plan no disponible. Aplicar está desactivado; actualiza o inspecciona el editor."
+
+#: JevEditorReviewPanel.UnknownStatus
+msgctxt "JevEditorReviewPanel,UnknownStatus"
+msgid "Execution outcome is uncertain or in progress. Inspect the scene and receipt before taking another action. Do not repeat Apply."
+msgstr "El resultado es incierto o está en curso. Inspecciona la escena y el recibo antes de actuar. No repitas Aplicar."
+
+#: JevEditorReviewPanel.UnsupportedStatus
+msgctxt "JevEditorReviewPanel,UnsupportedStatus"
+msgid "Unsupported receipt status. Applying is disabled; inspect the editor."
+msgstr "Estado del recibo no compatible. Aplicar está desactivado; inspecciona el editor."
+
+#: JevEditorReviewPanel.WorldBounds
+msgctxt "JevEditorReviewPanel,WorldBounds"
+msgid "World bounds size (X, Y, Z), cm: {0}"
+msgstr "Dimensiones globales (X, Y, Z), cm: {0}"

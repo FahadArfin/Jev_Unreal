@@ -105,6 +105,7 @@ bool KnownOperationFields(const FObject& Operation, const FString& Op)
         {
             for (const TCHAR* Field : {TEXT("source_instance_id"), TEXT("asset_path"), TEXT("label"), TEXT("folder"), TEXT("mesh_settings"), TEXT("material_slot_count"), TEXT("material_override_count"), TEXT("materials"), TEXT("mesh_review")}) Fields.Add(Field);
             Fields.Add(Op == TEXT("replace_mesh") ? TEXT("material_policy") : TEXT("source_actor_path"));
+            if (Op == TEXT("duplicate_mesh")) for (const TCHAR* Field : {TEXT("preserve_attachments"), TEXT("attachment_parent_source_path"), TEXT("attachment_relative_transform")}) Fields.Add(Field);
         }
     }
     for (const auto& Pair : Operation->Values) if (!Fields.Contains(FString(*Pair.Key))) return false;
@@ -429,7 +430,20 @@ FJevReviewPresentation FJevEditorReviewPresentation::Build(const TSharedPtr<FJso
                 Row(Body, LOCTEXT("StaticMesh", "Static mesh"), Literal(OldMesh), Literal(AssetPath));
                 Row(Body, LOCTEXT("Label", "Label"), Literal(String(Before, TEXT("label"))), Literal(String(Operation, TEXT("label"))));
                 TransformRows(Body, Before, Operation);
-                Line(Body, LOCTEXT("DuplicateScope", "Only the reviewed native mesh settings are copied. Script state, attachments, extra components, physics simulation, per-instance paint and baked lighting are not cloned."));
+                if (Operation->HasField(TEXT("preserve_attachments")))
+                {
+                    FObject Relative;
+                    if (!Operation->HasTypedField<EJson::Boolean>(TEXT("preserve_attachments")) || !Operation->GetBoolField(TEXT("preserve_attachments")) || !NullablePathValid(Operation, TEXT("attachment_parent_source_path")) || !Object(Operation, TEXT("attachment_relative_transform"), Relative) || !Transforms(Relative)) return Invalid();
+                    Line(Body, LOCTEXT("HierarchyCopyScope", "Copy the explicitly selected closed hierarchy. New children attach only to new copied parent roots; original actors stay unchanged."));
+                    Line(Body, FText::Format(LOCTEXT("HierarchyParent", "Copied parent source: {0}"), Operation->HasTypedField<EJson::Null>(TEXT("attachment_parent_source_path")) ? LOCTEXT("HierarchyRoot", "(root)") : NullablePath(Operation, TEXT("attachment_parent_source_path"))));
+                    Line(Body, FText::Format(LOCTEXT("HierarchyLocalPosition", "Copied relative location (cm): {0}"), VectorText(Relative, TEXT("location"))));
+                    Line(Body, LOCTEXT("HierarchyLimits", "Sockets, external attachments, nonuniform parent scales, script state, extra components, physics simulation, paint and baked lighting are unsupported."));
+                }
+                else
+                {
+                    if (Operation->HasField(TEXT("attachment_parent_source_path")) || Operation->HasField(TEXT("attachment_relative_transform"))) return Invalid();
+                    Line(Body, LOCTEXT("DuplicateScope", "Only the reviewed native mesh settings are copied. Script state, attachments, extra components, physics simulation, per-instance paint and baked lighting are not cloned."));
+                }
             }
             Row(Body, LOCTEXT("Folder", "Folder"), Folder(Before), Folder(Operation));
             Row(Body, LOCTEXT("MeshBounds", "Mesh local bounds extent (X, Y, Z), cm"), VectorText(SourceMesh, TEXT("local_bounds_extent_cm")), VectorText(ResultMesh, TEXT("local_bounds_extent_cm")));

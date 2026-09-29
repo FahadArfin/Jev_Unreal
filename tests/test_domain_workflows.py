@@ -179,7 +179,8 @@ async def test_preview_preserves_reviewed_state_and_change():
     }
     await app.call_tool("unreal_workflow_preview", {"change": change, "expected_state": STATE})
     bridge.call.assert_awaited_once_with(
-        "workflow_preview", {"change": change, "expected_state": STATE}
+        "workflow_preview",
+        {"change": {**change, "association": "global", "index": -1}, "expected_state": STATE},
     )
 
 

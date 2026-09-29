@@ -7,9 +7,18 @@
 
 A coding agent can ask Jev to choose a tool or classify diagnostics, while deterministic code validates and executes bounded Unreal editor operations. Independent community project inspired by [cnrveysel/JevUnreal](https://github.com/cnrveysel/JevUnreal).
 
-**Status: 0.8 alpha.** Python MCP server + source-built Unreal editor plugin, with **54 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
+**Status: 0.9 alpha.** Python MCP server + source-built Unreal editor plugin, with **66 MCP tools**. Initial target: Windows and Unreal 5.8.2. Python tests run on Windows/Linux; Linux/macOS Unreal builds are not certified. See [validation evidence](docs/VALIDATION.md) and [release notes](CHANGELOG.md). This is not an official Epic or TypeSafe product.
 
 ## What works
+
+New in 0.9: reviewed Blueprint math-node/link edits, material textures/switches and
+exposed layer parameters, complete approved mesh-hierarchy copies, stronger surface
+and navigation checks, real pawn traversal fixtures, sampled rig diagnostics,
+runtime widget inspection, camera render settings, optional team policies/leases,
+durable receipts and named build/cook/package jobs. A measured Blender handoff,
+connection checks, draft French/Spanish review text and beginner recipes extend
+the everyday workflow. See the [current roadmap](docs/ROADMAP.md#version-09-implementation-pass)
+for supported scopes and acceptance still needed.
 
 - Jev **Choice, Score and Noul** through OpenRouter's Decisions API or TypeSafe directly.
 - Batched questions, strict response validation, bounded in-memory cache, request limits, timeouts and a circuit breaker.
@@ -40,6 +49,9 @@ A coding agent can ask Jev to choose a tool or classify diagnostics, while deter
 - Reproducible keyword/Jev routing comparisons, separate answer keys and imported human-reviewed workflow evidence.
 - Preregistered paired workflow studies with counterbalanced trials, matched evidence hashes and explicit missing/failure accounting. See [benchmarks](docs/BENCHMARKS.md) and the [community acceptance protocol](docs/COMMUNITY_ACCEPTANCE.md).
 - Authenticated loopback bridge, project binding, state-bound previews and single-use plans.
+- Opt-in [team policies, cooperative leases, durable receipts and named jobs](docs/TEAM_WORKFLOWS.md), with explicit local configuration and bounded process/artifact lifecycles.
+- [Blender handoff](docs/DCC_HANDOFF.md) with retained editable sources, hashed files, unit/pivot/material-slot contracts and fresh Unreal readback.
+- [Beginner recipes and draft localization](docs/LOCALIZATION_RECIPES.md), plus hash-bound [acceptance reports](docs/ACCEPTANCE_REPORTS.md) that keep external human evidence explicit.
 - A sample project, adversarial tests, a real MCP/editor smoke test and a provider evaluation harness.
 
 Scene tools need **no model key**. Jev never executes an editor command, generates arbitrary code, or automatically receives project files. Only explicit decision arguments go to the configured cloud provider.
@@ -139,7 +151,7 @@ are ignored. `jev-unreal profiles list FILE` lists bindings without reading toke
 
 ## Tools
 
-The server exposes 54 tools. New project workflows require the matching
+The server exposes 66 tools. New project workflows require the matching
 native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 
 | Tool | Purpose | Cloud |
@@ -188,6 +200,28 @@ native plugin; `jev-unreal doctor` reports missing capabilities before you edit.
 | `unreal_functional_start` | Run one approved test in the existing standalone PIE session | No |
 | `unreal_functional_job` | Read native test outcome and cleanup evidence | No |
 | `unreal_functional_cancel` | Cancel the owned test without stopping the user's PIE session | No |
+| `unreal_blueprint_pin_preview` | Review a permitted math-input literal edit | No |
+| `unreal_blueprint_graph_preview` | Review approved pure math nodes and exact pin links | No |
+| `unreal_workflow_inspect` | Inspect materials, lights, camera, surface, assets, navigation, rigs or widgets | No |
+| `unreal_workflow_preview` | Review typed material/light/camera changes | No |
+| `unreal_workflow_apply` | Apply that domain plan once and check native readback | No |
+| `unreal_workflow_receipt` | Read retained domain edit results | No |
+| `unreal_surface_preview` | Measure approved surface support and preview placement | No |
+| `unreal_performance_start` | Start a bounded native measurement | No |
+| `unreal_performance_job` | Read measurement progress and available timing distributions | No |
+| `unreal_performance_cancel` | Cancel a measurement while retaining its incomplete status | No |
+| `unreal_performance_compare` | Compare compatible completed measurement receipts | No |
+| `unreal_handoff_verify` | Compare a dimension/pivot/slot contract with fresh native mesh data | No |
+| `unreal_team_status` | Read optional project policy, lease and named jobs | No |
+| `unreal_durable_receipts` | List private historical outcome metadata | No |
+| `unreal_durable_receipt` | Read one persisted outcome without replaying it | No |
+| `unreal_durable_receipt_forget` | Forget one metadata receipt | No |
+| `unreal_project_lease` | Acquire a cooperative project lease | No |
+| `unreal_project_lease_release` | Release this client's idle lease | No |
+| `unreal_named_job_preview` | Review an explicitly configured build/cook/package job | No |
+| `unreal_named_job_start` | Start that fixed local job once within authorized scope | No |
+| `unreal_named_job` | Read lifecycle and bounded artifact evidence | No |
+| `unreal_named_job_cancel` | Terminate this client's contained job process tree | No |
 
 Example `unreal_preview` arguments:
 
@@ -200,11 +234,11 @@ Example `unreal_preview` arguments:
 }
 ```
 
-Review normalized operations, then pass the returned `plan_id` to `unreal_apply`. Positions are centimeters; rotation is `[pitch,yaw,roll]` in degrees. Maximum 20 operations per plan, with at most one edit per existing actor. Edits during Play/Simulate and stale/reused plans are rejected. Existing-actor edits support exact native, unattached StaticMeshActors with no native edit blockers. Changes remain unsaved until you save in Unreal.
+Review normalized operations, then pass the returned `plan_id` to `unreal_apply`. Positions are centimeters; rotation is `[pitch,yaw,roll]` in degrees. Maximum 20 operations per plan, with at most one edit per existing actor. Edits during Play/Simulate and stale/reused plans are rejected. Ordinary existing-actor edits support exact native, unattached StaticMeshActors with no native edit blockers. The explicit complete-hierarchy copy workflow has its own attachment checks. Changes remain unsaved until you save in Unreal.
 
 For existing actors, use **inspect → snapshot → preview with measured state → apply once → fresh verify/diff → frame/capture**. A spatial preview obtains the actor bounds itself and binds the plan to that measurement's session/world/revision. Material or label/folder edits can pass the latest inspection's `expected_state` to `unreal_preview`. After apply, verify intended post-edit values against the original project/session/world identity; the old revision is expected to change. [Spatial recipes](docs/SPATIAL_WORKFLOWS.md) and [verification contracts](docs/VERIFICATION.md) explain the limits.
 
-After a timeout or cancellation, read `unreal_plan` and inspect fresh actors before deciding what to do. Unknown outcomes remain unknown; do not replay the plan. Native receipts retain up to 64 records for 15 minutes in editor memory and survive MCP reconnects. They disappear when the editor closes. If native lookup fails, the tool marks its fallback with `native_lookup_error`; that local observation is not native confirmation. The separate MCP journal holds up to 64 records/2 MiB for 15 minutes; selected-actor snapshots hold up to 32 records/2 MiB for 15 minutes. Those disappear on MCP restart. None saves a map or provides durable crash recovery. [Native review and receipts](docs/REVIEW_PANEL.md).
+After a timeout or cancellation, read `unreal_plan` and inspect fresh actors before deciding what to do. Unknown outcomes remain unknown; do not replay the plan. Native receipts retain up to 64 records for 15 minutes in editor memory and survive MCP reconnects. They disappear when the editor closes. If native lookup fails, the tool marks its fallback with `native_lookup_error`; that local observation is not native confirmation. The separate MCP journal holds up to 64 records/2 MiB for 15 minutes; selected-actor snapshots hold up to 32 records/2 MiB for 15 minutes. Those disappear on MCP restart. None saves a map. Optional [durable metadata receipts](docs/TEAM_WORKFLOWS.md) separately retain observed or uncertain outcomes across process restarts; they never replay an edit or restore a scene. [Native review and receipts](docs/REVIEW_PANEL.md).
 
 People can use **Window → Jev Review** for selection inspection, before/after
 previews and one-shot application. The same pending plans appear there and in MCP;
@@ -235,7 +269,10 @@ Apply the returned plan, inspect its `verification`, frame the resulting actor p
 
 Historical v0.2 UE 5.8.2 sandbox output from the MCP smoke test: four measured steps, applied, checked, framed and captured. This is an operation check, not a finished environment or evidence for every v0.3 feature.
 
-Read `jev://layouts` for blockout recipes, `jev://checks` for requirement examples, and `jev://catalog` for built-in routing descriptions. MCP clients that support prompts can use `verified_edit_workflow`, `blockout_workflow`, and `diagnostic_workflow`.
+Read `jev://layouts` for blockout recipes, `jev://checks` for requirement examples,
+`jev://catalog` for routing descriptions, and `jev://recipes` for beginner resources
+in English, French and Spanish. MCP prompts include `verified_edit_workflow`,
+`blockout_workflow`, `diagnostic_workflow` and `beginner_workflow`.
 
 For command-line inspection, use `uv run jev-unreal inspect "EXACT_ACTOR_PATH"`.
 `uv run jev-unreal verify checks.json` reads a bounded JSON object containing

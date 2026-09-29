@@ -46,7 +46,7 @@ async def main():
                 return payload["result"]
 
             report["tool_count"] = len((await session.list_tools()).tools)
-            assert report["tool_count"] == 54
+            assert report["tool_count"] == 66
             ready_deadline = time.monotonic() + 90
             while True:
                 ready = (await session.call_tool("unreal_status", {})).structuredContent
@@ -60,7 +60,7 @@ async def main():
                 assert time.monotonic() < ready_deadline, "Sandbox bridge readiness timed out"
                 await asyncio.sleep(1)
             assert project_identity(status["project_file"]) == project_identity(str(SANDBOX))
-            assert status["bridge_version"] == "0.8.0"
+            assert status["bridge_version"] == "0.9.0"
             report.update(engine_version=status["engine_version"], session_id=status["session_id"])
             prefix = f"JevDomain_{int(time.time())}"
             plan = await call(
@@ -72,14 +72,14 @@ async def main():
                             "op": "spawn_primitive",
                             "shape": "Cube",
                             "label": prefix + "Floor",
-                            "location": [8000, 0, -50],
+                            "location": [28000, 0, -50],
                             "scale": [20, 20, 1],
                         },
                         {
                             "op": "spawn_primitive",
                             "shape": "Cube",
                             "label": prefix + "Prop",
-                            "location": [8000, 0, 400],
+                            "location": [28000, 0, 400],
                         },
                     ],
                 },
@@ -129,7 +129,7 @@ async def main():
             camera = await call("unreal_workflow_inspect", {"query": {"kind": "camera"}})
             desired = {
                 "kind": "camera",
-                "location": [7700, 0, 190],
+                "location": [27700, 0, 190],
                 "rotation": [-25, 0, 0],
                 "fov_degrees": 60,
             }
@@ -210,7 +210,7 @@ async def main():
             metrics = (await session.call_tool("jev_status", {})).structuredContent
             report["model_requests_after"] = metrics["decisions"]["requests_sent"]
             assert report["model_requests_after"] == 0
-    destination = ROOT / "artifacts/domain-workflows-v0.8.json"
+    destination = ROOT / "artifacts/domain-workflows-v0.9.json"
     destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(

@@ -1,6 +1,6 @@
 # Architecture
 
-Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. The 0.6 alpha exposes 40 MCP tools. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
+Jev_Unreal has two components: a Python stdio MCP server and an Unreal editor-only C++ plugin. Version 0.9 extends bounded native editing and inspection with optional host-side team policy, durable historical receipts and named build jobs. Local inspection, measured editing, review and project-owned checks work without a model key. The optional Jev client uses hosted typed decisions through OpenRouter or TypeSafe.
 
 ```mermaid
 flowchart LR
@@ -16,6 +16,8 @@ flowchart LR
     MCP -->|initialize + tools/list only| Catalog[Explicit local MCP endpoints]
     Catalog -->|exact schemas + descriptions| Index[Versioned local search index]
     Index --> MCP
+    MCP -->|optional local policy and cooperating lease| State[Private SQLite historical receipts]
+    MCP -->|explicit reviewed fixed named job| Build[Configured Win64 engine process tree]
 ```
 
 There is no Jev-to-execution edge. A decision returns a candidate ID. The caller supplies operation arguments, reviews a preview, and chooses whether to execute within the user's authorization. The editor validates operations independently.
@@ -28,7 +30,7 @@ The local bridge protocol is versioned by path: `POST /jev/v1/call`, body `{acti
 
 Python reads authenticated status before every operation and compares its project with the configured binding. Preview, apply, camera framing and project-job start/cancel require an explicit project. That binding comes from `JEV_EXPECTED_PROJECT` or a selected [connection profile](CONNECTION_PROFILES.md). A profile selects the project, endpoint and token file together at MCP startup; it does not inherit a legacy token or retarget a running process. Each selected editor uses its own MCP process.
 
-Status advertises bridge version `0.8.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, mesh replacement/copying, camera presets, native history or project tools. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
+Status advertises bridge version `0.9.0` and native capabilities. Python requires the relevant capability before dispatching exact actor inspection, state-bound previews, material/metadata edits, mesh replacement/copying, camera presets, native history or project tools. Hierarchy copying additionally requires `mesh_attachment_copy`. An older plugin produces `capability_unavailable` rather than silently skipping a requested safeguard. Default current-view framing keeps the legacy request shape; explicit presets require `frame_views`. Capabilities are refreshed with each status read; they indicate support, not project permission. CLI `doctor` reports whether the inspect/edit/verify workflow's required capabilities are present.
 
 For `validation_start`, Python also puts the authenticated status's exact project,
 session, world and revision into the native request. Native code checks these before
@@ -43,7 +45,8 @@ The plugin has no runtime game module. Shipping games do not need Python, Jev cr
 `actor_details` reads 1–20 exact loaded actor paths in requested order. Its state
 includes project, session, world, current level and revision. Actor records include
 an opaque live `instance_id`, transforms, world AABBs, material assignments and
-explicit native edit blockers. Missing bounds and truncated material lists remain
+explicit native edit blockers, attachment parent identity and local attachment
+transforms. Missing bounds and truncated material lists remain
 explicit; AABBs are not collision geometry.
 
 Mesh recipes use the same exact actor selection to replace a mesh or create a
@@ -75,11 +78,16 @@ Supported existing-actor mutations are transforms, assigning an existing materia
 to an existing slot, changing actor labels/folders, and replacing a mesh under an
 explicit material policy. Controlled mesh copies create new actors from bounded
 source state. These operations require exact native StaticMeshActors without
-parent, child or child-actor attachments and without native edit blockers; copying
+parent, child or child-actor attachments and without native edit blockers. The
+separate `preserve_attachments` copy mode accepts an explicitly selected closed
+native mesh forest: complete parent/child selection, uniform parent scale,
+unchanged source rotation/scale and one shared translation offset. It creates
+only the declared copies and verifies both relative and world transforms. Copying
 has additional component/property and current-level restrictions documented in
 [mesh workflows](MESH_WORKFLOWS.md). A batch contains at most 20 operations and at
-most one operation per existing actor. No generic property writer, script executor
-or Blueprint graph editor is exposed.
+most one operation per existing actor. No generic property writer or script
+executor is exposed. The separately approved Blueprint service supports a closed
+native math-node vocabulary, described below.
 
 `PreviewTracker` retains normalized expectations and compares the native apply
 readback against requested transforms, identities and relevant metadata/material
@@ -102,17 +110,24 @@ acceptance. [Spatial contracts](SPATIAL_WORKFLOWS.md) and
 **Window → Jev Review** uses the same native inspection, previews and apply path
 as MCP. A human can inspect selected actors, review a translation or label/folder
 change, and apply the reviewed one-shot plan. MCP-created pending plans are also
-visible. The 0.6 presentation changes neither the authenticated bridge contract
-nor the 40-tool MCP catalog. It adds no execution path or permissions.
+visible. The presentation adds no independent execution path or permissions.
 
-Version 0.7 adds a separate project-approved Blueprint compile service and four MCP
-tools (44 total). Its aliases are configured locally; discovery and preview never
+The separate project-approved Blueprint compile service uses exact aliases
+configured locally; discovery and preview never
 load or compile an asset. Commit consumes a state-bound preview and invokes the
 native compiler with `SkipSave`. Engine compiler-busy flags, PIE, notified object
 changes and competing validation/functional jobs prevent entry. Compiler callbacks
 are trusted project code and can affect dependent assets/instances; receipts state
 that saving and complete side effects are unknown. This service shares no permission
 decision with Jev and offers no arbitrary graph/code/command execution.
+Additional opt-ins permit primitive input literals and creation/removal/link edits
+for five exact native math functions in ordinary K2 graphs. A bounded stored graph
+snapshot, exact object/function identity, pin types, schema acceptance and cycle
+checks protect commit. These edits use native Undo; compile failure retains the
+edit and fresh diagnostics for explicit recovery. Specialized Widget/Animation
+Blueprints support approved compilation without specialized graph mutation.
+[Blueprint contracts](BLUEPRINT_WORKFLOWS.md) separate compile success, edited
+state and untracked compiler callback effects.
 
 Source installation now keeps schema-2 write-ahead receipts and acquires an
 operating-system lease. Explicit recovery plans bind receipt, backup and current
@@ -151,7 +166,7 @@ The Python process retains these bounded stores:
 | Actor snapshots | 32 snapshots; 2 MiB serialized total; 15 minutes | Selected-actor baselines for later fresh diffs |
 
 Python object overhead is additional to serialized byte limits. Capacity pressure
-evicts records, expiration removes them, and a process restart clears every store.
+evicts records, expiration removes them, and a process restart clears these stores.
 Updating a plan record does not extend its original retention indefinitely.
 Client states distinguish previewed, applying, applied, rejected and unknown;
 transport loss, cancellation or uncertain rollback stays unknown.
@@ -167,8 +182,43 @@ A fallback is not confirmation that the editor received or completed an operatio
 
 Native receipts survive an MCP reconnect while the editor stays open, and remain
 historical after Undo or later edits. Editor restart/crash loses them. Neither
-native nor client records are durable receipts, backups, a retry queue or crash
-recovery; use fresh inspection and verification before deciding the next edit.
+native nor these process-local client records are durable receipts, backups, a
+retry queue or crash recovery. The optional SQLite history below has a separate
+lifetime and does not make native plans survive a restart. Use fresh inspection
+and verification before deciding the next edit.
+
+## Optional host-side policy, history and jobs
+
+An explicit private `JEV_RUNTIME_CONFIG` binds the exact project to a local policy
+and state directory outside its source tree. Without it, these additional features
+are disabled. The policy restricts mutation actions, operation kinds, asset roots
+and approved aliases, including implicit references in normalized previews. An
+apply needs a preview observed under the same policy and native session; local
+authorization is consumed before dispatch even if the response is lost. Native
+authentication, project policy, stale checks and one-shot plans remain independent.
+
+Clients sharing that state directory acquire an atomic SQLite lease for mutations
+and renew it while active. This coordinates cooperating clients, not unrelated
+clients or human editor changes. Durable receipts write bounded identity,
+request/result digests and lifecycle evidence before dispatch. They omit raw
+request values, provider payloads, captures, logs and credentials. Interrupted
+outcomes remain explicitly uncertain; records are historical evidence, not scene
+backups, completion proof, replay instructions or recoverable native plans.
+
+Named build/cook/package jobs are a separate Python host feature. Explicitly
+configured Win64 engine entrypoints and reviewed fixed argument templates are
+hash-bound in 120-second one-shot previews. No custom executable, arbitrary extra
+arguments or shell fallback is accepted. Owned processes start suspended, enter
+a kill-on-close Windows Job Object, then resume; cancellation and process teardown
+terminate the owned tree. Jobs retain the project lease, filter credentials from
+the child environment and monitor configured time/output-growth budgets. Disk
+monitoring is not an operating-system quota. Trusted engine/project build code
+can access the host filesystem; this is not a sandbox. Successful exit and
+observed output do not prove playable or packaged-game acceptance.
+
+These features add no Python, console, shell, filesystem or C++ execution endpoint
+to the authenticated editor bridge. Exact configuration, retention, ownership,
+budget and uncertainty contracts are in [team workflows](TEAM_WORKFLOWS.md).
 
 ## Project inspection and approved jobs
 
@@ -189,6 +239,10 @@ and distinguishes valid, invalid and not-validated results. Functional execution
 runs one approved test in an already-running single standalone PIE session;
 the adapter never starts/stops PIE or supports Simulate/multiplayer sessions.
 Only one project job can run across the two adapters at a time.
+Scene apply, including the native review panel, also refuses entry while a native
+validation, functional, Blueprint or domain job is active. This guard is wired
+inside the shared scene bridge, so a panel apply cannot bypass HTTP dispatch
+exclusion. Reads remain available under each adapter's play-mode policy.
 
 The module dispatches project tools separately from scene edits. Status, context,
 history, project inspection, rule/test listing and retained job reads remain
@@ -241,19 +295,46 @@ It neither builds Unreal nor loads credentials or controls editor processes.
 
 The [benchmark harness](BENCHMARKS.md) separates routing decisions from manually
 supplied workflow outcomes; its public synthetic sample does not measure total
-task efficiency. The [roadmap](ROADMAP.md) keeps representative usability and
-fresh-machine studies, crash-durable recovery, wider gameplay validation, real
-workflow comparisons and later Blender handoff open. Improvements in total task
+task efficiency. The [roadmap](ROADMAP.md) tracks representative usability and
+fresh-machine studies, complete scene crash recovery, wider gameplay validation
+and real workflow comparisons separately from implemented features. Improvements in total task
 time/cost must be measured against direct tool use and deterministic retrieval.
 
-## Domain workflows in 0.8
+## Domain workflows and handoffs in 0.9
 
-The catalog now has 54 tools. The native workflow service exposes typed domain
+The native workflow service exposes typed domain
 inspection, state-bound preview, one-shot apply, receipt and bounded editor timing
 jobs. It shares authenticated project identity and project-job exclusion. Global
 object notifications and exact target readback invalidate pending edits; material
-and Blueprint literal edits have explicit local policies. No arbitrary command,
-filesystem access or runtime switching is introduced. See [domain workflows](DOMAIN_WORKFLOWS.md)
+and Blueprint edits have explicit local policies. No arbitrary command,
+filesystem execution or runtime switching is introduced. See [domain workflows](DOMAIN_WORKFLOWS.md)
 for the complete supported operations, bounded inputs, native Undo behavior and
 limitations. Domain/Blueprint review is through MCP; the Slate panel continues to
-display ordinary scene plans, including surface placement.
+display ordinary scene plans, including surface placement and hierarchy copying.
+
+[Material extensions](EDITING_EXTENSIONS.md) add approved loaded textures and
+static switches plus exact existing layer/blend parameter identities. Native
+Undo records these asset changes. Camera render settings retain the same viewport
+identity and bounded baseline, but require an explicit restoration plan and do
+not freeze world time or establish deterministic rendering.
+
+[Advanced inspections](ADVANCED_INSPECTIONS.md) expose sampled terrain support,
+navigation capsule/ground probes, bounded skin weights and native root-motion
+extraction, existing on-screen PIE widget geometry/focus, and asynchronous engine
+timing counters. Reports distinguish incomplete or unavailable observations from
+successful checks. Geometry is not actual pawn movement, widget allocation is not
+accessibility proof, and published CPU/GPU counters are not frame-correlated
+profiling. [Gameplay recipes](GAMEPLAY_RECIPES.md) provide project-owned fixtures
+for separate runtime acceptance.
+
+The [Blender handoff](DCC_HANDOFF.md) path retains explicit editable sources and
+hashes in a bounded manifest, exports through an explicit local Blender utility,
+and compares imported mesh dimensions, pivot and material slots against fresh
+native inspection. Export/import are outside the authenticated bridge. These
+measurements do not establish visual, rigging, collision or licensing acceptance.
+
+[Acceptance reports](ACCEPTANCE_REPORTS.md) read explicitly named evidence and
+preserve failed, blocked and missing results. File hashes bind evidence bytes;
+they do not independently establish a real participant, clean machine or observed
+behavior. [Community acceptance](COMMUNITY_ACCEPTANCE.md) and
+[localization recipes](LOCALIZATION_RECIPES.md) describe those separate studies.

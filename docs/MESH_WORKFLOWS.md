@@ -115,7 +115,7 @@ subject to native validation and are not object identities.
 
 This is bounded construction of a new native StaticMeshActor with explicitly
 copied settings. It does not invoke Unreal's general actor duplication or copy
-arbitrary components/properties, Blueprint logic, attachments, references to other
+arbitrary components/properties, Blueprint logic, unreviewed attachments, references to other
 actors, or asset contents. Review the declared copy scope:
 
 | Copied state | Evidence |
@@ -138,6 +138,58 @@ the reported behavior, not those private fields. Actors with unsupported
 components, simulation or other unsupported configuration fail closed instead of
 producing an incomplete clone. A material or mesh reference is shared with the
 source; no new asset is created.
+
+## Copy an explicit attachment hierarchy
+
+For a closed assembly of native mesh actors, opt into `preserve_attachments`:
+
+```json
+{
+  "recipe": {
+    "kind": "duplicate",
+    "actor_paths": [
+      "/Game/Maps/Blockout.Blockout:PersistentLevel.AssemblyRoot",
+      "/Game/Maps/Blockout.Blockout:PersistentLevel.AssemblyChild"
+    ],
+    "offset_cm": [500, 0, 0],
+    "label_suffix": "_Copy",
+    "preserve_attachments": true
+  }
+}
+```
+
+List **every** parent and descendant in the assembly, up to 20 actors. The bridge
+does not discover and copy unselected children. Every member must meet the
+ordinary mesh-copy constraints, live in the current editable level, and use only
+root-component attachments to other selected members. Sockets, external parents,
+unselected children, cycles, absolute component transform flags and nonuniformly
+scaled parents are refused. Leaf meshes may have supported nonuniform scales.
+This restriction avoids pretending a sheared hierarchy can be reproduced by
+Unreal's position/rotation/scale transform representation.
+
+All members receive the same world-space offset and retain their inspected
+rotation and scale. Copy labels must be unique within the group. Each normalized
+operation identifies `attachment_parent_source_path` (null for a root) and the
+reviewed `attachment_relative_transform`. New actors attach only to newly copied
+parents, in parent-first order. Original actor relationships are preserved.
+Preview and apply compare finite relative transforms with the same numeric
+tolerances and quaternion orientation check; equivalent Euler angles and small
+rounding differences are accepted, while changed parents or poses are refused.
+
+The apply result exposes `attachment_parent_path`,
+`attachment_parent_instance_id`, `attachment_relative_transform` and
+`attachment_socket` for independent fresh readback. Never substitute labels for
+those identities. Native verification checks the entire resulting closed
+hierarchy, every copied mesh/material/settings/transform and unchanged sources.
+The operation uses one Undo transaction; a failed attempt uses the existing exact
+transaction rollback and scene-revision verification. This does not prove a
+collision-free assembly or gameplay correctness: capture and play-test it.
+
+The direct operation form is still `duplicate_mesh`, with
+`preserve_attachments: true` on **every** operation in the plan. Such plans cannot
+mix other edit kinds or ordinary detached copies. Explicit source selection,
+closed-group checks, identical offsets and complete readback apply equally to
+direct callers. The native capability is `mesh_attachment_copy`.
 
 ## Direct typed operations
 

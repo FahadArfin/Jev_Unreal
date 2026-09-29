@@ -136,6 +136,11 @@ public:
         FunctionalTools = MakeUnique<FJevFunctionalTools>();
         BlueprintTools = MakeUnique<FJevBlueprintTools>();
         WorkflowTools = MakeUnique<FJevWorkflowTools>();
+        Bridge->SetExternalMutationBlocker([this]
+        {
+            return (ProjectTools && ProjectTools->HasActiveJob()) || (FunctionalTools && FunctionalTools->HasActiveJob()) ||
+                (BlueprintTools && BlueprintTools->HasActiveJob()) || (WorkflowTools && WorkflowTools->HasActiveJob());
+        });
         ReviewPanel->SetBridge(Bridge.Get());
         TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FJevEditorModule::Tick));
         UE_LOG(LogJevEditor, Display, TEXT("Jev editor bridge listening at http://127.0.0.1:%u/jev/v1/call (authentication required)."), BridgePort);
